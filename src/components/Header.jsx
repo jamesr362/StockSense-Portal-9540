@@ -15,14 +15,14 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
   };
 
   return (
-    <header className="bg-gray-900 shadow-lg sticky top-0 z-30">
+    <header className="bg-gray-800 shadow-lg sticky top-0 z-30">
       <div className="mx-auto px-4 sm:px-6 lg:px-8">
         <div className="relative flex h-16 items-center justify-between">
           {/* Mobile menu button - Left side */}
           <div className="flex items-center lg:hidden">
             <button
               type="button"
-              className="p-2 text-gray-400 hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-md"
+              className="p-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-md"
               onClick={onMobileMenuToggle}
             >
               <span className="sr-only">Toggle navigation menu</span>
@@ -44,11 +44,11 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
             <div className="relative">
               <button
                 type="button"
-                className="flex items-center p-2 rounded-full bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex items-center p-2 rounded-full bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               >
                 <span className="sr-only">Open user menu</span>
-                <div className="h-8 w-8 rounded-full bg-gray-700 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-full bg-gray-600 flex items-center justify-center">
                   <RiUser3Line className="h-5 w-5 text-gray-300" />
                 </div>
                 {/* Business name - hidden on small screens */}
@@ -84,7 +84,7 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
                           handleLogout();
                           setIsUserMenuOpen(false);
                         }}
-                        className="flex w-full items-center px-4 py-3 text-sm text-white hover:bg-gray-700"
+                        className="flex w-full items-center px-4 py-3 text-sm text-gray-300 hover:bg-gray-700"
                       >
                         <RiLogoutBoxLine className="mr-3 h-5 w-5" />
                         Sign out
