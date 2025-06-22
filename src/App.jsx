@@ -14,40 +14,42 @@ import PlatformAdminRoute from './components/PlatformAdminRoute';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="receipt-scanner" element={<ReceiptScanner />} />
-          <Route
-            path="admin"
+    <div className="min-h-screen bg-gray-900">
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route 
+            path="/" 
             element={
-              <AdminRoute>
-                <Admin />
-              </AdminRoute>
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
             }
-          />
-          <Route
-            path="platform-admin"
-            element={
-              <PlatformAdminRoute>
-                <PlatformAdmin />
-              </PlatformAdminRoute>
-            }
-          />
-        </Route>
-      </Routes>
-    </AuthProvider>
+          >
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="receipt-scanner" element={<ReceiptScanner />} />
+            <Route 
+              path="admin" 
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              } 
+            />
+            <Route 
+              path="platform-admin" 
+              element={
+                <PlatformAdminRoute>
+                  <PlatformAdmin />
+                </PlatformAdminRoute>
+              } 
+            />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </div>
   );
 }
