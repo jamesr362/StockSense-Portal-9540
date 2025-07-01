@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { RiDashboardLine, RiStore2Line, RiCloseLine, RiAdminLine, RiGlobalLine, RiScanLine } from 'react-icons/ri';
+import { RiDashboardLine, RiStore2Line, RiCloseLine, RiAdminLine, RiGlobalLine, RiScanLine, RiFileExcelLine } from 'react-icons/ri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,7 +27,8 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
       return [
         { name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine },
         { name: 'Inventory', to: '/inventory', icon: RiStore2Line },
-        { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine }
+        { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine },
+        { name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine }
       ];
     }
   };

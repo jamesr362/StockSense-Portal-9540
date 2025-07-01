@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Inventory from './pages/Inventory';
 import ReceiptScanner from './pages/ReceiptScanner';
+import ExcelImporter from './pages/ExcelImporter';
 import Admin from './pages/Admin';
 import PlatformAdmin from './pages/PlatformAdmin';
 import { AuthProvider } from './context/AuthContext';
@@ -19,8 +20,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route 
-            path="/" 
+          <Route
+            path="/"
             element={
               <ProtectedRoute>
                 <Layout />
@@ -31,21 +32,22 @@ export default function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="receipt-scanner" element={<ReceiptScanner />} />
-            <Route 
-              path="admin" 
+            <Route path="excel-importer" element={<ExcelImporter />} />
+            <Route
+              path="admin"
               element={
                 <AdminRoute>
                   <Admin />
                 </AdminRoute>
-              } 
+              }
             />
-            <Route 
-              path="platform-admin" 
+            <Route
+              path="platform-admin"
               element={
                 <PlatformAdminRoute>
                   <PlatformAdmin />
                 </PlatformAdminRoute>
-              } 
+              }
             />
           </Route>
         </Routes>
