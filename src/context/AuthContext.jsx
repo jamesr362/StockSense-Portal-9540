@@ -100,6 +100,19 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('userEmail');
   };
 
+  const updateUserData = (newData) => {
+    const updatedUser = { ...user, ...newData };
+    setUser(updatedUser);
+    
+    // Update session
+    createSession(updatedUser);
+    
+    logSecurityEvent('USER_DATA_UPDATED', {
+      userEmail: updatedUser.email,
+      updatedFields: Object.keys(newData)
+    });
+  };
+
   // Auto-logout on window close/refresh
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -129,7 +142,7 @@ export function AuthProvider({ children }) {
   console.log('=================================');
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUserData }}>
       {children}
     </AuthContext.Provider>
   );
