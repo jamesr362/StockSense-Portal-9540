@@ -3,8 +3,7 @@ import { motion } from 'framer-motion';
 import {
   useStripe,
   useElements,
-  CardElement,
-  PaymentElement
+  CardElement
 } from '@stripe/react-stripe-js';
 import { RiLockLine, RiShieldCheckLine, RiCreditCardLine } from 'react-icons/ri';
 import { logSecurityEvent } from '../utils/security';

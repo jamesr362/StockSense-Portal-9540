@@ -1,4 +1,4 @@
-import getStripe, { STRIPE_CONFIG } from '../lib/stripe';
+import getStripe from '../lib/stripe';
 import { logSecurityEvent } from '../utils/security';
 
 // Create Stripe checkout session
@@ -172,92 +172,6 @@ export const getPaymentMethods = async (customerId) => {
     
   } catch (error) {
     console.error('Get payment methods error:', error);
-    throw error;
-  }
-};
-
-// Create setup intent for adding payment method
-export const createSetupIntent = async (customerId) => {
-  try {
-    const response = await fetch('/api/stripe/create-setup-intent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ customerId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to create setup intent');
-    }
-
-    return await response.json();
-    
-  } catch (error) {
-    console.error('Create setup intent error:', error);
-    throw error;
-  }
-};
-
-// Process one-time payment
-export const processPayment = async (amount, currency = 'gbp', metadata = {}) => {
-  try {
-    logSecurityEvent('STRIPE_PAYMENT_INITIATED', { amount, currency });
-
-    const response = await fetch('/api/stripe/process-payment', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: amount * 100, // Convert to cents
-        currency,
-        metadata,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to process payment');
-    }
-
-    const { clientSecret } = await response.json();
-    
-    const stripe = await getStripe();
-    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret);
-    
-    if (error) {
-      logSecurityEvent('STRIPE_PAYMENT_ERROR', { error: error.message });
-      throw error;
-    }
-
-    logSecurityEvent('STRIPE_PAYMENT_SUCCESS', { paymentIntentId: paymentIntent.id });
-    return paymentIntent;
-    
-  } catch (error) {
-    console.error('Process payment error:', error);
-    logSecurityEvent('STRIPE_PAYMENT_FAILED', { error: error.message });
-    throw error;
-  }
-};
-
-// Get invoice details
-export const getInvoice = async (invoiceId) => {
-  try {
-    const response = await fetch(`/api/stripe/invoice/${invoiceId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to get invoice');
-    }
-
-    return await response.json();
-    
-  } catch (error) {
-    console.error('Get invoice error:', error);
     throw error;
   }
 };

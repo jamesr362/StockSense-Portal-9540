@@ -6,17 +6,25 @@ import { validatePassword } from '../utils/security';
 export default function PasswordStrengthIndicator({ 
   password, 
   onPasswordChange, 
-  showRequirements = true,
-  placeholder = "Password"
+  showRequirements = true, 
+  placeholder = "Password" 
 }) {
   const [showPassword, setShowPassword] = useState(false);
-  const [validation, setValidation] = useState({ isValid: false, errors: [], strength: { score: 0, strength: 'Very Weak', color: 'red' } });
+  const [validation, setValidation] = useState({
+    isValid: false,
+    errors: [],
+    strength: { score: 0, strength: 'Very Weak', color: 'red' }
+  });
 
   useEffect(() => {
     if (password) {
       setValidation(validatePassword(password));
     } else {
-      setValidation({ isValid: false, errors: [], strength: { score: 0, strength: 'Very Weak', color: 'red' } });
+      setValidation({
+        isValid: false,
+        errors: [],
+        strength: { score: 0, strength: 'Very Weak', color: 'red' }
+      });
     }
   }, [password]);
 
@@ -39,7 +47,7 @@ export default function PasswordStrengthIndicator({
     { test: (pwd) => /[a-z]/.test(pwd), text: 'One lowercase letter' },
     { test: (pwd) => /[A-Z]/.test(pwd), text: 'One uppercase letter' },
     { test: (pwd) => /[0-9]/.test(pwd), text: 'One number' },
-    { test: (pwd) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd), text: 'One special character' }
+    { test: (pwd) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwd), text: 'One special character' }
   ];
 
   return (
@@ -87,7 +95,7 @@ export default function PasswordStrengthIndicator({
               validation.strength.color === 'green' ? 'text-green-400' :
               validation.strength.color === 'blue' ? 'text-blue-400' :
               validation.strength.color === 'yellow' ? 'text-yellow-400' :
-              validation.strength.color === 'orange' ? 'text-orange-400' :
+              validation.strength.color === 'orange' ? 'text-orange-400' : 
               'text-red-400'
             }`}>
               {validation.strength.strength}
@@ -105,9 +113,7 @@ export default function PasswordStrengthIndicator({
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className={`flex items-center space-x-1 ${
-                      passed ? 'text-green-400' : 'text-gray-400'
-                    }`}
+                    className={`flex items-center space-x-1 ${passed ? 'text-green-400' : 'text-gray-400'}`}
                   >
                     {passed ? (
                       <RiCheckLine className="h-3 w-3" />

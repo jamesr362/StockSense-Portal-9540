@@ -83,25 +83,6 @@ export const SUBSCRIPTION_PLANS = {
   }
 };
 
-// Payment methods configuration
-export const PAYMENT_METHODS = {
-  card: {
-    name: 'Credit/Debit Card',
-    icon: '💳',
-    description: 'Visa, Mastercard, American Express'
-  },
-  paypal: {
-    name: 'PayPal',
-    icon: '🅿️',
-    description: 'Pay with your PayPal account'
-  },
-  bank_transfer: {
-    name: 'Bank Transfer',
-    icon: '🏦',
-    description: 'Direct bank transfer (UK only)'
-  }
-};
-
 // Helper functions
 export const formatPrice = (amount, currency = 'gbp') => {
   return new Intl.NumberFormat('en-GB', {
