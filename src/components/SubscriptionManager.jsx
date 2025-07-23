@@ -6,7 +6,7 @@ import {
   RiArrowRightLine, 
   RiCheckLine, 
   RiAlertLine, 
-  RiSettingsLine, 
+  RiSettings3Line, 
   RiDownloadLine, 
   RiRefreshLine 
 } from 'react-icons/ri';
@@ -240,7 +240,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                 disabled={actionLoading}
                 className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
               >
-                <RiSettingsLine className="h-4 w-4 mr-2" />
+                <RiSettings3Line className="h-4 w-4 mr-2" />
                 Manage Billing
               </button>
 
