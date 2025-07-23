@@ -1,27 +1,20 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  RiCreditCardLine, 
+import {useState, useEffect} from 'react';
+import {motion} from 'framer-motion';
+import {
+  RiCreditCardBoxLine,
   RiCalendarLine, 
   RiArrowRightLine, 
-  RiCheckLine,
-  RiAlertLine,
-  RiSettingsLine,
-  RiDownloadLine,
+  RiCheckLine, 
+  RiAlertLine, 
+  RiSettingsLine, 
+  RiDownloadLine, 
   RiRefreshLine
 } from 'react-icons/ri';
-import { 
-  getCustomerSubscription, 
-  cancelSubscription, 
-  updateSubscription, 
-  createPortalSession,
-  getPaymentMethods,
-  getUsageData
-} from '../services/stripe';
-import { SUBSCRIPTION_PLANS, formatPrice } from '../lib/stripe';
-import { logSecurityEvent } from '../utils/security';
+import {getCustomerSubscription, cancelSubscription, updateSubscription, createPortalSession, getPaymentMethods, getUsageData} from '../services/stripe';
+import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
+import {logSecurityEvent} from '../utils/security';
 
-export default function SubscriptionManager({ customerId, onSubscriptionChange }) {
+export default function SubscriptionManager({customerId, onSubscriptionChange}) {
   const [subscription, setSubscription] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [usageData, setUsageData] = useState(null);
@@ -40,22 +33,18 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
     try {
       setLoading(true);
       setError(null);
-
       const [subData, paymentData, usageInfo] = await Promise.all([
         getCustomerSubscription(customerId),
         getPaymentMethods(customerId),
         subscription?.id ? getUsageData(subscription.id) : Promise.resolve(null)
       ]);
-
       setSubscription(subData);
       setPaymentMethods(paymentData);
       setUsageData(usageInfo);
-
-      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', { customerId });
-
+      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', {customerId});
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', { error: err.message });
+      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', {error: err.message});
     } finally {
       setLoading(false);
     }
@@ -63,15 +52,12 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
 
   const handleCancelSubscription = async () => {
     if (!subscription?.id) return;
-
     try {
       setActionLoading(true);
       await cancelSubscription(subscription.id);
-      
       // Refresh data
       await loadSubscriptionData();
       onSubscriptionChange?.();
-      
       setShowCancelConfirm(false);
     } catch (err) {
       setError(err.message);
@@ -82,15 +68,12 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
 
   const handleUpdateSubscription = async (newPriceId) => {
     if (!subscription?.id) return;
-
     try {
       setActionLoading(true);
       await updateSubscription(subscription.id, newPriceId);
-      
       // Refresh data
       await loadSubscriptionData();
       onSubscriptionChange?.();
-      
     } catch (err) {
       setError(err.message);
     } finally {
@@ -110,25 +93,18 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
   };
 
   const getSubscriptionStatus = () => {
-    if (!subscription) return { text: 'No subscription', color: 'text-gray-400' };
-    
+    if (!subscription) return {text: 'No subscription', color: 'text-gray-400'};
     switch (subscription.status) {
-      case 'active':
-        return { text: 'Active', color: 'text-green-400' };
-      case 'canceled':
-        return { text: 'Canceled', color: 'text-red-400' };
-      case 'past_due':
-        return { text: 'Past Due', color: 'text-yellow-400' };
-      case 'unpaid':
-        return { text: 'Unpaid', color: 'text-red-400' };
-      default:
-        return { text: subscription.status, color: 'text-gray-400' };
+      case 'active': return {text: 'Active', color: 'text-green-400'};
+      case 'canceled': return {text: 'Canceled', color: 'text-red-400'};
+      case 'past_due': return {text: 'Past Due', color: 'text-yellow-400'};
+      case 'unpaid': return {text: 'Unpaid', color: 'text-red-400'};
+      default: return {text: subscription.status, color: 'text-gray-400'};
     }
   };
 
   const getCurrentPlan = () => {
     if (!subscription?.price_id) return null;
-    
     return Object.values(SUBSCRIPTION_PLANS).find(
       plan => plan.priceId === subscription.price_id
     );
@@ -158,8 +134,8 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       {/* Error Message */}
       {error && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{opacity: 0, y: -10}}
+          animate={{opacity: 1, y: 0}}
           className="p-4 bg-red-900/50 border border-red-700 rounded-lg"
         >
           <div className="flex items-center">
@@ -259,7 +235,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
           </div>
         ) : (
           <div className="text-center py-8">
-            <RiCreditCardLine className="h-12 w-12 text-gray-500 mx-auto mb-4" />
+            <RiCreditCardBoxLine className="h-12 w-12 text-gray-500 mx-auto mb-4" />
             <h4 className="text-white font-medium mb-2">No Active Subscription</h4>
             <p className="text-gray-400 text-sm">
               Choose a plan to get started with premium features
@@ -311,12 +287,11 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       {/* Payment Methods */}
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <h3 className="text-lg font-semibold text-white mb-4">Payment Methods</h3>
-        
         {paymentMethods.length > 0 ? (
           <div className="space-y-3">
             {paymentMethods.map((method) => (
               <div key={method.id} className="flex items-center p-3 bg-gray-700 rounded-lg">
-                <RiCreditCardLine className="h-5 w-5 text-gray-400 mr-3" />
+                <RiCreditCardBoxLine className="h-5 w-5 text-gray-400 mr-3" />
                 <div className="flex-1">
                   <p className="text-white">
                     •••• •••• •••• {method.card.last4}
@@ -334,7 +309,6 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
         ) : (
           <p className="text-gray-400">No payment methods on file</p>
         )}
-
         <button
           onClick={handleOpenPortal}
           className="mt-4 w-full py-2 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
@@ -347,8 +321,8 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{opacity: 0, scale: 0.95}}
+            animate={{opacity: 1, scale: 1}}
             className="bg-gray-800 rounded-lg p-6 max-w-md mx-4"
           >
             <h3 className="text-lg font-semibold text-white mb-4">

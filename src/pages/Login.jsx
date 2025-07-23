@@ -1,18 +1,10 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
-import { getUserByEmail, updateUserLastLogin } from '../services/db';
-import { 
-  validateEmail, 
-  verifyPassword, 
-  checkRateLimit, 
-  recordFailedAttempt, 
-  clearFailedAttempts,
-  logSecurityEvent,
-  sanitizeInput 
-} from '../utils/security';
-import { RiAlertTriangleLine, RiEyeLine, RiEyeOffLine } from 'react-icons/ri';
+import {useState} from 'react';
+import {useNavigate, Link} from 'react-router-dom';
+import {useAuth} from '../context/AuthContext';
+import {motion} from 'framer-motion';
+import {getUserByEmail, updateUserLastLogin} from '../services/db';
+import {validateEmail, verifyPassword, checkRateLimit, recordFailedAttempt, clearFailedAttempts, logSecurityEvent, sanitizeInput} from '../utils/security';
+import {RiAlertLine, RiEyeLine, RiEyeOffLine} from 'react-icons/ri';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -23,7 +15,7 @@ export default function Login() {
   const [rateLimited, setRateLimited] = useState(false);
   const [remainingTime, setRemainingTime] = useState(0);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const {login} = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -33,11 +25,11 @@ export default function Login() {
     try {
       // Sanitize inputs
       const sanitizedEmail = sanitizeInput(email.toLowerCase().trim());
-      
+
       // Validate email format
       if (!validateEmail(sanitizedEmail)) {
         setError('Please enter a valid email address');
-        logSecurityEvent('INVALID_EMAIL_FORMAT', { email: sanitizedEmail });
+        logSecurityEvent('INVALID_EMAIL_FORMAT', {email: sanitizedEmail});
         return;
       }
 
@@ -47,7 +39,7 @@ export default function Login() {
         setRateLimited(true);
         setRemainingTime(rateCheck.remainingTime);
         setError(`Too many failed attempts. Please try again in ${rateCheck.remainingTime} minutes.`);
-        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT', { email: sanitizedEmail });
+        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT', {email: sanitizedEmail});
         return;
       }
 
@@ -56,7 +48,7 @@ export default function Login() {
       if (!user) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL', { email: sanitizedEmail });
+        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL', {email: sanitizedEmail});
         return;
       }
 
@@ -73,7 +65,7 @@ export default function Login() {
       if (!passwordValid) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD', { email: sanitizedEmail });
+        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD', {email: sanitizedEmail});
         return;
       }
 
@@ -90,29 +82,28 @@ export default function Login() {
         role: user.role
       };
 
-      logSecurityEvent('SUCCESSFUL_LOGIN', { 
+      logSecurityEvent('SUCCESSFUL_LOGIN', {
         email: sanitizedEmail,
         role: user.role,
-        businessName: user.businessName 
+        businessName: user.businessName
       });
 
       login(userData);
 
       // Navigate based on role
       if (user.role === 'platformadmin') {
-        navigate('/platform-admin', { replace: true });
+        navigate('/platform-admin', {replace: true});
       } else if (user.role === 'admin') {
-        navigate('/admin', { replace: true });
+        navigate('/admin', {replace: true});
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/dashboard', {replace: true});
       }
-
     } catch (error) {
       console.error('Login error:', error);
       setError('An error occurred during login. Please try again.');
-      logSecurityEvent('LOGIN_ERROR', { 
-        email: sanitizeInput(email), 
-        error: error.message 
+      logSecurityEvent('LOGIN_ERROR', {
+        email: sanitizeInput(email),
+        error: error.message
       });
     } finally {
       setIsLoading(false);
@@ -133,15 +124,15 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
         className="max-w-md w-full space-y-8"
       >
         <div className="text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
+            initial={{opacity: 0, scale: 0.9}}
+            animate={{opacity: 1, scale: 1}}
+            transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
             <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
@@ -157,19 +148,13 @@ export default function Login() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`rounded-md p-4 ${
-                rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'
-              }`}
+              initial={{opacity: 0, y: -10}}
+              animate={{opacity: 1, y: 0}}
+              className={`rounded-md p-4 ${rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'}`}
             >
               <div className="flex items-center">
-                <RiAlertTriangleLine className={`h-5 w-5 mr-2 ${
-                  rateLimited ? 'text-orange-400' : 'text-red-400'
-                }`} />
-                <div className={`text-sm ${
-                  rateLimited ? 'text-orange-200' : 'text-red-200'
-                }`}>
+                <RiAlertLine className={`h-5 w-5 mr-2 ${rateLimited ? 'text-orange-400' : 'text-red-400'}`} />
+                <div className={`text-sm ${rateLimited ? 'text-orange-200' : 'text-red-200'}`}>
                   {error}
                 </div>
               </div>
@@ -254,7 +239,11 @@ export default function Login() {
                 <span className="flex items-center">
                   <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Signing in...
                 </span>
