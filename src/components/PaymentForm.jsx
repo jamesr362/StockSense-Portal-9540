@@ -1,8 +1,8 @@
-import {useState} from 'react';
-import {motion} from 'framer-motion';
-import {useStripe, useElements, CardElement} from '@stripe/react-stripe-js';
-import {RiLockLine, RiShieldCheckLine, RiCreditCardFill} from 'react-icons/ri';
-import {logSecurityEvent} from '../utils/security';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js';
+import { RiLockLine, RiShieldCheckLine, RiCreditCardLine } from 'react-icons/ri';
+import { logSecurityEvent } from '../utils/security';
 
 const CARD_ELEMENT_OPTIONS = {
   style: {
@@ -60,12 +60,12 @@ export default function PaymentForm({
     setError(null);
 
     try {
-      logSecurityEvent('PAYMENT_FORM_SUBMISSION', {amount, currency});
+      logSecurityEvent('PAYMENT_FORM_SUBMISSION', { amount, currency });
 
       const cardElement = elements.getElement(CardElement);
 
       // Create payment method
-      const {error: pmError, paymentMethod} = await stripe.createPaymentMethod({
+      const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({
         type: 'card',
         card: cardElement,
         billing_details: billingDetails,
@@ -73,7 +73,7 @@ export default function PaymentForm({
 
       if (pmError) {
         setError(pmError.message);
-        logSecurityEvent('PAYMENT_METHOD_ERROR', {error: pmError.message});
+        logSecurityEvent('PAYMENT_METHOD_ERROR', { error: pmError.message });
         return;
       }
 
@@ -96,10 +96,10 @@ export default function PaymentForm({
         throw new Error('Payment processing failed');
       }
 
-      const {client_secret} = await response.json();
+      const { client_secret } = await response.json();
 
       // Confirm payment
-      const {error: confirmError, paymentIntent} = await stripe.confirmCardPayment(
+      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
         client_secret,
         {
           payment_method: paymentMethod.id,
@@ -108,15 +108,15 @@ export default function PaymentForm({
 
       if (confirmError) {
         setError(confirmError.message);
-        logSecurityEvent('PAYMENT_CONFIRMATION_ERROR', {error: confirmError.message});
+        logSecurityEvent('PAYMENT_CONFIRMATION_ERROR', { error: confirmError.message });
         return;
       }
 
-      logSecurityEvent('PAYMENT_SUCCESS', {paymentIntentId: paymentIntent.id});
+      logSecurityEvent('PAYMENT_SUCCESS', { paymentIntentId: paymentIntent.id });
       onSuccess(paymentIntent);
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('PAYMENT_PROCESSING_ERROR', {error: err.message});
+      logSecurityEvent('PAYMENT_PROCESSING_ERROR', { error: err.message });
       onError(err);
     } finally {
       setProcessing(false);
@@ -143,14 +143,14 @@ export default function PaymentForm({
 
   return (
     <motion.div
-      initial={{opacity: 0, y: 20}}
-      animate={{opacity: 1, y: 0}}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       className="max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-xl"
     >
       {/* Header */}
       <div className="text-center mb-6">
         <div className="flex items-center justify-center mb-2">
-          <RiCreditCardFill className="h-8 w-8 text-primary-400" />
+          <RiCreditCardLine className="h-8 w-8 text-primary-400" />
         </div>
         <h3 className="text-xl font-semibold text-white">Secure Payment</h3>
         <p className="text-gray-400 text-sm mt-1">
@@ -263,8 +263,8 @@ export default function PaymentForm({
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{opacity: 0, y: -10}}
-            animate={{opacity: 1, y: 0}}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="p-3 bg-red-900/50 border border-red-700 rounded-md"
           >
             <p className="text-red-300 text-sm">{error}</p>

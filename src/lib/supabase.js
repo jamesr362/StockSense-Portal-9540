@@ -5,7 +5,7 @@ try {
   // Only import Supabase if configured
   const SUPABASE_URL = 'https://<PROJECT-ID>.supabase.co';
   const SUPABASE_ANON_KEY = '<ANON_KEY>';
-
+  
   if (SUPABASE_URL !== 'https://<PROJECT-ID>.supabase.co' && SUPABASE_ANON_KEY !== '<ANON_KEY>') {
     // Dynamic import to prevent build errors when not configured
     import('@supabase/supabase-js').then(({ createClient }) => {

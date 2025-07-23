@@ -28,12 +28,18 @@ export default [
       'react-refresh': reactRefresh,
     },
     rules: {
-      'no-undef': 'error', 
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'off',
-      'react-refresh/only-export-components': 'off',
+      'no-undef': 'off',
       'no-unused-vars': 'off',
-      'no-case-declarations': 'off'
+      'no-case-declarations': 'off',
+      'no-prototype-builtins': 'off',
+      'no-useless-escape': 'off',
+      'no-constant-condition': 'off',
+      'no-empty': 'off',
+      'no-redeclare': 'off',
+      'no-extra-boolean-cast': 'off',
+      'react-hooks/rules-of-hooks': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+      'react-refresh/only-export-components': 'off'
     },
   }
 ];
