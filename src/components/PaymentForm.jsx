@@ -1,7 +1,7 @@
 import {useState} from 'react';
 import {motion} from 'framer-motion';
 import {useStripe, useElements, CardElement} from '@stripe/react-stripe-js';
-import {RiLockLine, RiShieldCheckLine, RiCreditCardLine} from 'react-icons/ri';
+import {RiLockLine, RiShieldCheckLine, RiCreditCardFill} from 'react-icons/ri';
 import {logSecurityEvent} from '../utils/security';
 
 const CARD_ELEMENT_OPTIONS = {
@@ -150,7 +150,7 @@ export default function PaymentForm({
       {/* Header */}
       <div className="text-center mb-6">
         <div className="flex items-center justify-center mb-2">
-          <RiCreditCardLine className="h-8 w-8 text-primary-400" />
+          <RiCreditCardFill className="h-8 w-8 text-primary-400" />
         </div>
         <h3 className="text-xl font-semibold text-white">Secure Payment</h3>
         <p className="text-gray-400 text-sm mt-1">
