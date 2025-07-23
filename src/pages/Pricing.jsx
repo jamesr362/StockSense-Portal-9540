@@ -20,9 +20,9 @@ export default function Pricing() {
 
   useEffect(() => {
     // Log pricing page view
-    logSecurityEvent('PRICING_PAGE_VIEW', { 
+    logSecurityEvent('PRICING_PAGE_VIEW', {
       userEmail: user?.email,
-      billingInterval 
+      billingInterval
     });
   }, [user, billingInterval]);
 
@@ -43,10 +43,10 @@ export default function Pricing() {
     setError(null);
 
     try {
-      logSecurityEvent('PLAN_SELECTION', { 
+      logSecurityEvent('PLAN_SELECTION', {
         planId: plan.id,
         userEmail: user.email,
-        billingInterval 
+        billingInterval
       });
 
       // Create checkout session
@@ -59,12 +59,11 @@ export default function Pricing() {
           billing_interval: billingInterval
         }
       );
-
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('PLAN_SELECTION_ERROR', { 
+      logSecurityEvent('PLAN_SELECTION_ERROR', {
         error: err.message,
-        planId: plan.id 
+        planId: plan.id
       });
     } finally {
       setIsLoading(false);
@@ -241,7 +240,6 @@ export default function Pricing() {
               Powerful features designed to streamline your inventory management process
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <motion.div
@@ -282,7 +280,6 @@ export default function Pricing() {
               See what our customers have to say about Trackio
             </p>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
               <motion.div
@@ -319,28 +316,32 @@ export default function Pricing() {
               Frequently Asked Questions
             </h2>
           </div>
-
           <div className="max-w-3xl mx-auto space-y-6">
             {[
               {
                 question: 'Can I change my plan at any time?',
-                answer: 'Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately, and we\'ll prorate the billing accordingly.'
+                answer:
+                  'Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately, and we\'ll prorate the billing accordingly.'
               },
               {
                 question: 'Is there a free trial?',
-                answer: 'Yes, all plans come with a 14-day free trial. No credit card required to start.'
+                answer:
+                  'Yes, all plans come with a 14-day free trial. No credit card required to start.'
               },
               {
                 question: 'What payment methods do you accept?',
-                answer: 'We accept all major credit cards, PayPal, and bank transfers for UK customers.'
+                answer:
+                  'We accept all major credit cards, PayPal, and bank transfers for UK customers.'
               },
               {
                 question: 'Is my data secure?',
-                answer: 'Absolutely. We use bank-level encryption and follow industry best practices to keep your data secure.'
+                answer:
+                  'Absolutely. We use bank-level encryption and follow industry best practices to keep your data secure.'
               },
               {
                 question: 'Can I cancel at any time?',
-                answer: 'Yes, you can cancel your subscription at any time. You\'ll continue to have access until the end of your current billing period.'
+                answer:
+                  'Yes, you can cancel your subscription at any time. You\'ll continue to have access until the end of your current billing period.'
               }
             ].map((faq, index) => (
               <motion.div
@@ -373,7 +374,11 @@ export default function Pricing() {
             Join thousands of businesses that trust Trackio to manage their inventory efficiently
           </p>
           <button
-            onClick={() => !user ? navigate('/register') : handlePlanSelect(SUBSCRIPTION_PLANS.professional)}
+            onClick={() =>
+              !user
+                ? navigate('/register')
+                : handlePlanSelect(SUBSCRIPTION_PLANS.professional)
+            }
             className="inline-flex items-center px-8 py-3 bg-white text-primary-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
           >
             {!user ? 'Start Free Trial' : 'Choose Plan'}

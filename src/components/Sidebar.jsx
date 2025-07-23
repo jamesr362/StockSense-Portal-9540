@@ -1,14 +1,14 @@
 import { NavLink } from 'react-router-dom';
-import { 
-  RiDashboardLine, 
-  RiStore2Line, 
-  RiCloseLine, 
-  RiAdminLine, 
-  RiGlobalLine, 
-  RiScanLine, 
+import {
+  RiDashboardLine,
+  RiStore2Line,
+  RiCloseLine,
+  RiAdminLine,
+  RiGlobalLine,
+  RiScanLine,
   RiFileExcelLine,
   RiSettingsLine,
-  RiCreditCardLine
+  RiMoneyDollarBoxLine
 } from 'react-icons/ri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -40,7 +40,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
         { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine },
         { name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine },
         { name: 'Settings', to: '/settings', icon: RiSettingsLine },
-        { name: 'Pricing', to: '/pricing', icon: RiCreditCardLine }
+        { name: 'Pricing', to: '/pricing', icon: RiMoneyDollarBoxLine }
       ];
     }
   };
@@ -108,13 +108,11 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`
-                }
+                className={({ isActive }) => `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-gray-900 text-white shadow-sm'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
                 onClick={handleNavClick}
               >
                 <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
@@ -173,13 +171,11 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({ isActive }) =>
-                  `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`
-                }
+                className={({ isActive }) => `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-gray-900 text-white shadow-sm'
+                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                }`}
               >
                 <item.icon className="mr-3 h-5 w-5 flex-shrink-0" />
                 <span className="truncate">{item.name}</span>

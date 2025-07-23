@@ -2,25 +2,25 @@ import { motion } from 'framer-motion';
 import { RiCheckLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
 import { formatPrice } from '../lib/stripe';
 
-export default function PricingCard({ 
-  plan, 
-  isPopular = false, 
-  onSelectPlan, 
+export default function PricingCard({
+  plan,
+  isPopular = false,
+  onSelectPlan,
   currentPlan = null,
   isLoading = false,
   buttonText = null
 }) {
   const isCurrentPlan = currentPlan === plan.id;
   const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
-  
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
-        isPopular || plan.highlighted 
-          ? 'border-2 border-primary-500 bg-gray-800' 
+        isPopular || plan.highlighted
+          ? 'border-2 border-primary-500 bg-gray-800'
           : 'border border-gray-700 bg-gray-800'
       }`}
     >
