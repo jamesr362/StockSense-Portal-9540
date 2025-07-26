@@ -1,7 +1,7 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
 import {Elements} from '@stripe/react-stripe-js';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiCreditCard2Fill} from 'react-icons/ri';
+import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiCreditCardLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import getStripe from '../lib/stripe';
 import SubscriptionManager from '../components/SubscriptionManager';
@@ -14,7 +14,7 @@ export default function Settings() {
 
   const tabs = [
     {id: 'general', name: 'General', icon: RiStore2Line},
-    {id: 'billing', name: 'Billing', icon: RiCreditCard2Fill},
+    {id: 'billing', name: 'Billing', icon: RiCreditCardLine},
     {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
     {id: 'security', name: 'Security', icon: RiLockLine},
     {id: 'team', name: 'Team', icon: RiUser3Line},

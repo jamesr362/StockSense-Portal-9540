@@ -1,7 +1,7 @@
 import {useState, useEffect} from 'react';
 import {motion} from 'framer-motion';
 import { 
-  RiCreditCard2Fill, 
+  RiCreditCardLine, 
   RiCalendarLine, 
   RiArrowRightLine, 
   RiCheckLine, 
@@ -269,7 +269,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
           </div>
         ) : (
           <div className="text-center py-8">
-            <RiCreditCard2Fill className="h-12 w-12 text-gray-500 mx-auto mb-4" />
+            <RiCreditCardLine className="h-12 w-12 text-gray-500 mx-auto mb-4" />
             <h4 className="text-white font-medium mb-2">No Active Subscription</h4>
             <p className="text-gray-400 text-sm">
               Choose a plan to get started with premium features
@@ -325,7 +325,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
           <div className="space-y-3">
             {paymentMethods.map((method) => (
               <div key={method.id} className="flex items-center p-3 bg-gray-700 rounded-lg">
-                <RiCreditCard2Fill className="h-5 w-5 text-gray-400 mr-3" />
+                <RiCreditCardLine className="h-5 w-5 text-gray-400 mr-3" />
                 <div className="flex-1">
                   <p className="text-white">
                     •••• •••• •••• {method.card.last4}
