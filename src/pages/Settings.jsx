@@ -1,20 +1,15 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
-import {Elements} from '@stripe/react-stripe-js';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiCreditCardLine} from 'react-icons/ri';
+import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
-import getStripe from '../lib/stripe';
-import SubscriptionManager from '../components/SubscriptionManager';
 import SecurityAuditLog from '../components/SecurityAuditLog';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
   const {user} = useAuth();
-  const stripePromise = getStripe();
 
   const tabs = [
     {id: 'general', name: 'General', icon: RiStore2Line},
-    {id: 'billing', name: 'Billing', icon: RiCreditCardLine},
     {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
     {id: 'security', name: 'Security', icon: RiLockLine},
     {id: 'team', name: 'Team', icon: RiUser3Line},
@@ -31,7 +26,7 @@ export default function Settings() {
           <div className="sm:flex-auto">
             <h1 className="text-2xl font-semibold text-white">Settings</h1>
             <p className="mt-2 text-sm text-gray-400">
-              Manage your account preferences and billing
+              Manage your account preferences and configuration
             </p>
           </div>
         </div>
@@ -109,24 +104,6 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
-            )}
-
-            {activeTab === 'billing' && (
-              <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
-              >
-                <Elements stripe={stripePromise}>
-                  <SubscriptionManager
-                    customerId={user?.customerId}
-                    onSubscriptionChange={() => {
-                      // Refresh user data or show success message
-                      console.log('Subscription changed');
-                    }}
-                  />
-                </Elements>
               </motion.div>
             )}
 
@@ -210,7 +187,7 @@ export default function Settings() {
                   </p>
                   <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
                     <p className="text-blue-300 text-sm">
-                      <strong>Current Plan:</strong> {user?.plan || 'Starter'} - Supports up to {user?.plan === 'professional' ? '10' : '2'} team members
+                      <strong>Current Plan:</strong> Free Plan - Supports up to 2 team members
                     </p>
                   </div>
                 </div>

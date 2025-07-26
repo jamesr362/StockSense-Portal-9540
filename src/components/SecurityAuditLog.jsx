@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { RiShieldCheckLine, RiAlertTriangleLine, RiEyeLine, RiDownloadLine, RiDeleteBin6Line } from 'react-icons/ri';
+import { RiShieldCheckLine, RiAlertLine, RiEyeLine, RiDownloadLine, RiDeleteBin6Line } from 'react-icons/ri';
 
 export default function SecurityAuditLog({ userEmail }) {
   const [securityLogs, setSecurityLogs] = useState([]);
@@ -19,9 +19,7 @@ export default function SecurityAuditLog({ userEmail }) {
     try {
       const logs = JSON.parse(localStorage.getItem('security_logs') || '[]');
       // Filter logs for current user if provided
-      const userLogs = userEmail 
-        ? logs.filter(log => log.details.userEmail === userEmail)
-        : logs;
+      const userLogs = userEmail ? logs.filter(log => log.details.userEmail === userEmail) : logs;
       setSecurityLogs(userLogs);
     } catch (error) {
       console.error('Error loading security logs:', error);
@@ -31,14 +29,12 @@ export default function SecurityAuditLog({ userEmail }) {
 
   const filterLogs = () => {
     let filtered = [...securityLogs];
-    
     if (filter !== 'all') {
       filtered = filtered.filter(log => log.event.toLowerCase().includes(filter.toLowerCase()));
     }
-    
+
     // Sort by timestamp (newest first)
     filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
     setFilteredLogs(filtered);
   };
 
@@ -64,7 +60,7 @@ export default function SecurityAuditLog({ userEmail }) {
     if (event.toLowerCase().includes('login') || event.toLowerCase().includes('auth')) {
       return <RiShieldCheckLine className="h-5 w-5 text-green-400" />;
     } else if (event.toLowerCase().includes('failed') || event.toLowerCase().includes('error')) {
-      return <RiAlertTriangleLine className="h-5 w-5 text-red-400" />;
+      return <RiAlertLine className="h-5 w-5 text-red-400" />;
     }
     return <RiEyeLine className="h-5 w-5 text-blue-400" />;
   };
@@ -106,22 +102,19 @@ export default function SecurityAuditLog({ userEmail }) {
                   onClick={exportLogs}
                   className="inline-flex items-center px-3 py-1 border border-gray-600 rounded-md text-sm font-medium text-gray-300 bg-gray-700 hover:bg-gray-600"
                 >
-                  <RiDownloadLine className="h-4 w-4 mr-1" />
-                  Export
+                  <RiDownloadLine className="h-4 w-4 mr-1" /> Export
                 </button>
                 <button
                   onClick={clearLogs}
                   className="inline-flex items-center px-3 py-1 border border-red-600 rounded-md text-sm font-medium text-red-400 bg-red-900/20 hover:bg-red-900/40"
                 >
-                  <RiDeleteBin6Line className="h-4 w-4 mr-1" />
-                  Clear
+                  <RiDeleteBin6Line className="h-4 w-4 mr-1" /> Clear
                 </button>
               </>
             )}
           </div>
         </div>
       </div>
-
       <div className="px-4 py-5 sm:p-6">
         {/* Filter Controls */}
         <div className="mb-4 flex flex-wrap gap-2">
@@ -153,10 +146,9 @@ export default function SecurityAuditLog({ userEmail }) {
               </div>
             </div>
           </div>
-          
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
-              <RiAlertTriangleLine className="h-8 w-8 text-red-400 mr-3" />
+              <RiAlertLine className="h-8 w-8 text-red-400 mr-3" />
               <div>
                 <div className="text-2xl font-bold text-white">
                   {securityLogs.filter(log => log.event.toLowerCase().includes('failed')).length}
@@ -165,7 +157,6 @@ export default function SecurityAuditLog({ userEmail }) {
               </div>
             </div>
           </div>
-          
           <div className="bg-gray-700 rounded-lg p-4">
             <div className="flex items-center">
               <RiEyeLine className="h-8 w-8 text-blue-400 mr-3" />
@@ -204,7 +195,6 @@ export default function SecurityAuditLog({ userEmail }) {
                           {formatTimestamp(log.timestamp)}
                         </span>
                       </div>
-                      
                       {log.details && (
                         <div className="mt-2 text-sm text-gray-300">
                           {log.details.userEmail && (
