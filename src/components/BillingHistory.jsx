@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { RiDownloadLine, RiEyeLine, RiCalendarLine, RiCreditCardLine } from 'react-icons/ri';
+import { RiDownloadLine, RiEyeLine, RiCalendarLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
 import { formatPrice } from '../lib/stripe';
 
 export default function BillingHistory({ customerId }) {
@@ -18,7 +18,7 @@ export default function BillingHistory({ customerId }) {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Mock billing history data
       const mockHistory = [
         {
@@ -52,7 +52,7 @@ export default function BillingHistory({ customerId }) {
           invoice_pdf: '/invoices/demo3.pdf'
         }
       ];
-      
+
       setBillingHistory(mockHistory);
     } catch (err) {
       setError(err.message);
@@ -64,7 +64,7 @@ export default function BillingHistory({ customerId }) {
   const handleDownloadInvoice = (invoice) => {
     // Mock download functionality
     console.log('Downloading invoice:', invoice.id);
-    
+
     // Create a mock invoice file
     const invoiceContent = `
 Invoice ${invoice.id}
@@ -73,8 +73,8 @@ Plan: ${invoice.plan}
 Period: ${invoice.period}
 Amount: ${formatPrice(invoice.amount / 100)}
 Status: ${invoice.status}
-    `;
-    
+`;
+
     const blob = new Blob([invoiceContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -123,7 +123,7 @@ Status: ${invoice.status}
 
         {billingHistory.length === 0 ? (
           <div className="text-center py-8">
-            <RiCreditCardLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+            <RiMoneyDollarCircleLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">No billing history</h3>
             <p className="text-gray-400">Your invoices will appear here once you have an active subscription.</p>
           </div>
@@ -141,17 +141,16 @@ Status: ${invoice.status}
                     <div className="flex items-center">
                       <RiCalendarLine className="h-5 w-5 text-gray-400 mr-2" />
                       <span className="text-white font-medium">
-                        {invoice.date.toLocaleDateString('en-GB', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric'
-                        })}
+                        {invoice.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
                       </span>
-                      <span className={`ml-3 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(invoice.status)}`}>
+                      <span
+                        className={`ml-3 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
+                          invoice.status
+                        )}`}
+                      >
                         {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                       </span>
                     </div>
-                    
                     <div className="mt-2 text-sm text-gray-400">
                       <p>{invoice.plan} - {invoice.period}</p>
                     </div>
@@ -162,9 +161,7 @@ Status: ${invoice.status}
                       <div className="text-lg font-semibold text-white">
                         {formatPrice(invoice.amount / 100)}
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {invoice.currency.toUpperCase()}
-                      </div>
+                      <div className="text-xs text-gray-400">{invoice.currency.toUpperCase()}</div>
                     </div>
 
                     <div className="flex space-x-2">
@@ -175,7 +172,6 @@ Status: ${invoice.status}
                       >
                         <RiDownloadLine className="h-4 w-4" />
                       </button>
-                      
                       <button
                         onClick={() => handleDownloadInvoice(invoice)}
                         className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"

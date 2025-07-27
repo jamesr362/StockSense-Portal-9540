@@ -1,8 +1,16 @@
-import {motion} from 'framer-motion';
-import {RiCheckLine, RiArrowRightLine, RiStarLine} from 'react-icons/ri';
-import {formatPrice} from '../lib/stripe';
+import { motion } from 'framer-motion';
+import { RiCheckLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
+import { formatPrice } from '../lib/stripe';
 
-export default function PricingCard({plan, isPopular=false, onSelectPlan, currentPlan=null, isLoading=false, buttonText=null, billingInterval='monthly'}) {
+export default function PricingCard({
+  plan,
+  isPopular = false,
+  onSelectPlan,
+  currentPlan = null,
+  isLoading = false,
+  buttonText = null,
+  billingInterval = 'monthly'
+}) {
   const isCurrentPlan = currentPlan === plan.id;
   const isFree = plan.id === 'free';
   const price = billingInterval === 'yearly' && plan.yearlyPrice ? plan.yearlyPrice : plan.price;
@@ -29,9 +37,9 @@ export default function PricingCard({plan, isPopular=false, onSelectPlan, curren
 
   return (
     <motion.div
-      initial={{opacity: 0, y: 20}}
-      animate={{opacity: 1, y: 0}}
-      transition={{duration: 0.5}}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
         isPopular || plan.highlighted
           ? 'border-2 border-primary-500 bg-gray-800 scale-105'
@@ -42,9 +50,11 @@ export default function PricingCard({plan, isPopular=false, onSelectPlan, curren
     >
       {/* Badge */}
       {plan.badge && (
-        <div className={`absolute top-0 right-0 px-3 py-1 text-xs font-bold rounded-bl-lg ${
-          'bg-primary-500 text-white'
-        }`}>
+        <div
+          className={`absolute top-0 right-0 px-3 py-1 text-xs font-bold rounded-bl-lg ${
+            'bg-primary-500 text-white'
+          }`}
+        >
           <div className="flex items-center">
             {!isFree && <RiStarLine className="h-3 w-3 mr-1" />}
             {plan.badge}
@@ -66,12 +76,14 @@ export default function PricingCard({plan, isPopular=false, onSelectPlan, curren
               </span>
             )}
           </div>
+
           {/* Savings indicator for yearly */}
           {!isFree && billingInterval === 'yearly' && plan.savings && (
             <p className="text-green-400 text-sm mt-2 font-medium">
               {plan.savings}
             </p>
           )}
+
           {/* Monthly equivalent for yearly */}
           {!isFree && billingInterval === 'yearly' && plan.yearlyPrice && (
             <p className="text-gray-400 text-sm mt-1">
@@ -88,9 +100,9 @@ export default function PricingCard({plan, isPopular=false, onSelectPlan, curren
           {plan.features.map((feature, index) => (
             <motion.div
               key={index}
-              initial={{opacity: 0, x: -20}}
-              animate={{opacity: 1, x: 0}}
-              transition={{duration: 0.3, delay: index * 0.1}}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.1 }}
               className="flex items-start"
             >
               <div className="flex-shrink-0 mr-3">
@@ -100,11 +112,13 @@ export default function PricingCard({plan, isPopular=false, onSelectPlan, curren
                   <RiCheckLine className="h-5 w-5 text-green-400" />
                 )}
               </div>
-              <p className={`text-sm leading-relaxed ${
-                isFree && (feature.includes('No ') || feature.includes('72h'))
-                  ? 'text-gray-500 line-through'
-                  : 'text-gray-300'
-              }`}>
+              <p
+                className={`text-sm leading-relaxed ${
+                  isFree && (feature.includes('No ') || feature.includes('72h'))
+                    ? 'text-gray-500 line-through'
+                    : 'text-gray-300'
+                }`}
+              >
                 {feature}
               </p>
             </motion.div>

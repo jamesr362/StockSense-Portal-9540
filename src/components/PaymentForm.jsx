@@ -34,7 +34,7 @@ export default function PaymentForm({
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
+
     if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvc) {
       setError('Please fill in all card details');
       return;
@@ -215,7 +215,6 @@ export default function PaymentForm({
         {/* Card Details */}
         <div className="space-y-4">
           <h4 className="text-sm font-medium text-white">Card Details</h4>
-          
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Card Number

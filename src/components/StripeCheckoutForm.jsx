@@ -118,6 +118,7 @@ export default function StripeCheckoutForm({
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
+      {/* Demo Notice */}
       <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-6">
         <div className="flex items-start">
           <RiInformationLine className="h-5 w-5 text-blue-400 mr-2 mt-0.5" />
@@ -135,6 +136,7 @@ export default function StripeCheckoutForm({
         </div>
       </div>
 
+      {/* Billing Details */}
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-white mb-1">
@@ -164,6 +166,7 @@ export default function StripeCheckoutForm({
           />
         </div>
 
+        {/* Card Details */}
         <div>
           <label className="block text-sm font-medium text-white mb-1">
             Card Number
@@ -208,6 +211,7 @@ export default function StripeCheckoutForm({
         </div>
       </div>
 
+      {/* Error Message */}
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -218,11 +222,13 @@ export default function StripeCheckoutForm({
         </motion.div>
       )}
 
+      {/* Security Notice */}
       <div className="flex items-center text-xs text-gray-400 mb-4">
         <RiLockLine className="h-4 w-4 mr-1" />
         <span>Your payment information is encrypted and secure</span>
       </div>
 
+      {/* Action Buttons */}
       <div className="flex space-x-4">
         <button
           type="button"
@@ -242,7 +248,9 @@ export default function StripeCheckoutForm({
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
               Processing...
             </div>
-          ) : buttonText}
+          ) : (
+            buttonText
+          )}
         </button>
       </div>
     </motion.form>

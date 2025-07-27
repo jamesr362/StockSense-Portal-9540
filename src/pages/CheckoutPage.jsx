@@ -26,7 +26,7 @@ export default function CheckoutPage() {
 
   const handlePaymentSuccess = (result) => {
     setIsProcessing(true);
-    
+
     logSecurityEvent('SUBSCRIPTION_CREATED', {
       planId,
       billingInterval,
@@ -55,7 +55,7 @@ export default function CheckoutPage() {
   const handlePaymentError = (error) => {
     setPaymentError(error.message || 'Payment failed. Please try again.');
     setIsProcessing(false);
-    
+
     logSecurityEvent('SUBSCRIPTION_ERROR', {
       planId,
       billingInterval,
@@ -71,6 +71,7 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
+        {/* Back button */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -96,7 +97,7 @@ export default function CheckoutPage() {
               className="bg-gray-800 rounded-lg p-6 shadow-lg"
             >
               <h3 className="text-lg font-medium text-white mb-6">Order Summary</h3>
-              
+
               <div className="border-b border-gray-700 pb-4 mb-4">
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-400">Plan</span>

@@ -1,8 +1,8 @@
-import {useEffect, useState} from 'react';
-import {motion} from 'framer-motion';
-import {useSearchParams, useNavigate} from 'react-router-dom';
-import {RiCheckLine, RiArrowRightLine} from 'react-icons/ri';
-import {logSecurityEvent} from '../utils/security';
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { RiCheckLine, RiArrowRightLine } from 'react-icons/ri';
+import { logSecurityEvent } from '../utils/security';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -12,11 +12,13 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     const sessionId = searchParams.get('session_id');
+    
     if (sessionId) {
       // Retrieve session details
       fetchSessionDetails(sessionId);
+      
       // Log successful payment
-      logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', {sessionId});
+      logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', { sessionId });
     } else {
       navigate('/pricing');
     }
@@ -24,12 +26,27 @@ export default function PaymentSuccess() {
 
   const fetchSessionDetails = async (sessionId) => {
     try {
+      // In demo mode, return mock data
+      if (process.env.NODE_ENV !== 'production') {
+        setTimeout(() => {
+          setSessionDetails({
+            plan_name: 'Professional Plan',
+            amount_total: 1200, // £12.00 in pence
+            currency: 'gbp'
+          });
+          setLoading(false);
+        }, 1000);
+        return;
+      }
+
+      // Production implementation
       const response = await fetch(`/api/stripe/session/${sessionId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       });
+
       if (response.ok) {
         const details = await response.json();
         setSessionDetails(details);
@@ -56,16 +73,16 @@ export default function PaymentSuccess() {
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{opacity: 0, scale: 0.95}}
-        animate={{opacity: 1, scale: 1}}
-        transition={{duration: 0.5}}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
         className="max-w-md w-full bg-gray-800 rounded-lg shadow-xl p-8 text-center"
       >
         {/* Success Icon */}
         <motion.div
-          initial={{scale: 0}}
-          animate={{scale: 1}}
-          transition={{delay: 0.2, type: 'spring', stiffness: 200}}
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
           className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6"
         >
           <RiCheckLine className="h-8 w-8 text-white" />
@@ -73,9 +90,9 @@ export default function PaymentSuccess() {
 
         {/* Title */}
         <motion.h1
-          initial={{opacity: 0, y: 20}}
-          animate={{opacity: 1, y: 0}}
-          transition={{delay: 0.3}}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
           className="text-2xl font-bold text-white mb-4"
         >
           Payment Successful!
@@ -83,9 +100,9 @@ export default function PaymentSuccess() {
 
         {/* Description */}
         <motion.p
-          initial={{opacity: 0, y: 20}}
-          animate={{opacity: 1, y: 0}}
-          transition={{delay: 0.4}}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
           className="text-gray-300 mb-6"
         >
           Thank you for your purchase. Your subscription has been activated successfully.
@@ -94,9 +111,9 @@ export default function PaymentSuccess() {
         {/* Session Details */}
         {sessionDetails && (
           <motion.div
-            initial={{opacity: 0, y: 20}}
-            animate={{opacity: 1, y: 0}}
-            transition={{delay: 0.5}}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
             className="bg-gray-700 rounded-lg p-4 mb-6 text-left"
           >
             <h3 className="text-white font-semibold mb-2">Order Details</h3>
@@ -124,9 +141,9 @@ export default function PaymentSuccess() {
 
         {/* Next Steps */}
         <motion.div
-          initial={{opacity: 0, y: 20}}
-          animate={{opacity: 1, y: 0}}
-          transition={{delay: 0.6}}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
           className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6"
         >
           <h3 className="text-blue-400 font-semibold mb-2">What's Next?</h3>
@@ -140,9 +157,9 @@ export default function PaymentSuccess() {
 
         {/* Action Buttons */}
         <motion.div
-          initial={{opacity: 0, y: 20}}
-          animate={{opacity: 1, y: 0}}
-          transition={{delay: 0.7}}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
           className="space-y-3"
         >
           <button
@@ -162,14 +179,17 @@ export default function PaymentSuccess() {
 
         {/* Support Info */}
         <motion.div
-          initial={{opacity: 0}}
-          animate={{opacity: 1}}
-          transition={{delay: 0.8}}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
           className="mt-8 pt-6 border-t border-gray-700"
         >
           <p className="text-gray-400 text-sm">
             Need help? Contact our support team at{' '}
-            <a href="mailto:support@trackio.com" className="text-primary-400 hover:text-primary-300">
+            <a
+              href="mailto:support@trackio.com"
+              className="text-primary-400 hover:text-primary-300"
+            >
               support@trackio.com
             </a>
           </p>

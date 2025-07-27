@@ -1,24 +1,44 @@
-// Subscription configuration without Stripe
+// Stripe configuration and helper functions
+let stripePromise = null;
+
 export const STRIPE_CONFIG = {
   currency: 'gbp',
   country: 'GB',
   locale: 'en-GB'
 };
 
-// Updated subscription plans without Stripe integration
+// Load Stripe only when needed
+export const getStripe = () => {
+  if (!stripePromise) {
+    // In production, use your actual Stripe publishable key
+    const publishableKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_demo';
+    
+    if (publishableKey !== 'pk_test_demo') {
+      stripePromise = import('@stripe/stripe-js').then(({ loadStripe }) => 
+        loadStripe(publishableKey)
+      );
+    } else {
+      // Demo mode - return null for mock functionality
+      stripePromise = Promise.resolve(null);
+    }
+  }
+  return stripePromise;
+};
+
+// Updated subscription plans with Stripe price IDs
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
     name: 'Free Trial',
     price: 0,
     priceId: null,
-    description: 'Too basic to live on',
+    description: 'Perfect for getting started',
     features: [
-      'Up to 10 inventory items only',
+      'Up to 10 inventory items',
       '3 receipt scans per month',
       '1 Excel import (lifetime)',
-      'Manual entry only',
-      'No exports or reports'
+      'Basic manual entry',
+      'Email support'
     ],
     limits: {
       inventoryItems: 10,
@@ -37,12 +57,15 @@ export const SUBSCRIPTION_PLANS = {
     yearlyPrice: 120, // 2 months free
     priceId: 'price_pro_monthly',
     yearlyPriceId: 'price_pro_yearly',
-    description: 'Your bread & butter',
+    description: 'For growing businesses',
     features: [
       'Up to 2,500 inventory items',
       'Unlimited manual entries',
-      '50-100 receipt scans/month',
-      '10 Excel imports/month'
+      '100 receipt scans/month',
+      '10 Excel imports/month',
+      'Advanced analytics',
+      'Export capabilities',
+      'Priority support'
     ],
     limits: {
       inventoryItems: 2500,
@@ -52,7 +75,8 @@ export const SUBSCRIPTION_PLANS = {
       features: [
         'unlimited_manual_entry',
         'exports',
-        'basic_reports'
+        'basic_reports',
+        'analytics'
       ]
     },
     highlighted: true,
@@ -67,12 +91,16 @@ export const SUBSCRIPTION_PLANS = {
     yearlyPrice: 250, // 2 months free
     priceId: 'price_power_monthly',
     yearlyPriceId: 'price_power_yearly',
-    description: 'Unlimited everything',
+    description: 'For large operations',
     features: [
       'Unlimited inventory items',
-      'Unlimited manual entries',
       'Unlimited receipt scans',
-      'Unlimited Excel imports'
+      'Unlimited Excel imports',
+      'Unlimited team members',
+      'Advanced analytics',
+      'Custom reports',
+      'Priority support',
+      'API access'
     ],
     limits: {
       inventoryItems: -1, // Unlimited
@@ -83,7 +111,8 @@ export const SUBSCRIPTION_PLANS = {
         'unlimited_everything',
         'advanced_analytics',
         'priority_support',
-        'custom_reports'
+        'custom_reports',
+        'api_access'
       ]
     },
     ctaText: 'Go Unlimited',
@@ -108,7 +137,7 @@ export const getPlanById = (planId) => {
 
 export const getUserPlanLimits = (planId) => {
   const plan = getPlanById(planId);
-  return plan ? plan.limits : SUBSCRIPTION_PLANS.free.limits; // Default to free limits
+  return plan ? plan.limits : SUBSCRIPTION_PLANS.free.limits;
 };
 
 export const canUserAccessFeature = (userPlan, feature) => {
@@ -227,3 +256,5 @@ export const canPerformAction = (userPlan, action) => {
       return true;
   }
 };
+
+export default getStripe;
