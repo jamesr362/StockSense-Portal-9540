@@ -1,27 +1,11 @@
-import {loadStripe} from '@stripe/stripe-js';
-
-// Replace with your actual Stripe publishable key
-const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_publishable_key_here';
-
-// Initialize Stripe
-let stripePromise;
-const getStripe = () => {
-  if (!stripePromise) {
-    stripePromise = loadStripe(STRIPE_PUBLISHABLE_KEY);
-  }
-  return stripePromise;
-};
-
-export default getStripe;
-
-// Stripe configuration
+// Subscription configuration without Stripe
 export const STRIPE_CONFIG = {
   currency: 'gbp',
   country: 'GB',
   locale: 'en-GB'
 };
 
-// Updated subscription plans with detailed limits
+// Updated subscription plans without Stripe integration
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -135,6 +119,7 @@ export const canUserAccessFeature = (userPlan, feature) => {
 export const isWithinLimit = (userPlan, limitType, currentCount) => {
   const limits = getUserPlanLimits(userPlan);
   if (!limits) return false;
+  
   const limit = limits[limitType];
   if (limit === -1) return true; // unlimited
   return currentCount < limit;
@@ -148,7 +133,7 @@ export const hasRestriction = (userPlan, restriction) => {
 // Usage tracking helpers
 export const getUsageStats = (userPlan) => {
   const limits = getUserPlanLimits(userPlan);
-
+  
   // Get current usage from localStorage with proper error handling
   const getCurrentUsage = (key, defaultValue = 0) => {
     try {

@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Elements } from '@stripe/react-stripe-js';
-import getStripe from '../lib/stripe';
 import { RiShieldCheckLine, RiArrowLeftLine } from 'react-icons/ri';
 import StripeCheckoutForm from '../components/StripeCheckoutForm';
 import { useAuth } from '../context/AuthContext';
@@ -16,25 +14,25 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, updateUserData } = useAuth();
-  const stripePromise = getStripe();
-  
+
   // Get plan details from URL parameters
   const queryParams = new URLSearchParams(location.search);
   const planId = queryParams.get('plan') || 'pro';
   const billingInterval = queryParams.get('billing') || 'monthly';
-  
+
   // Get plan details
   const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.pro;
   const price = billingInterval === 'yearly' ? plan.yearlyPrice : plan.price;
 
   const handlePaymentSuccess = (result) => {
     setIsProcessing(true);
-    logSecurityEvent('SUBSCRIPTION_CREATED', { 
+    
+    logSecurityEvent('SUBSCRIPTION_CREATED', {
       planId,
       billingInterval,
       userEmail: user?.email
     });
-    
+
     // Update user data with subscription information
     updateUserData({
       subscriptionPlan: planId,
@@ -43,11 +41,11 @@ export default function CheckoutPage() {
       customerId: result.customerId,
       subscriptionId: result.subscriptionId
     });
-    
+
     // Show success message and redirect
     setPaymentSuccess(true);
     setIsProcessing(false);
-    
+
     // Redirect to success page after a delay
     setTimeout(() => {
       navigate('/payment-success?session_id=mock_session_123');
@@ -57,7 +55,8 @@ export default function CheckoutPage() {
   const handlePaymentError = (error) => {
     setPaymentError(error.message || 'Payment failed. Please try again.');
     setIsProcessing(false);
-    logSecurityEvent('SUBSCRIPTION_ERROR', { 
+    
+    logSecurityEvent('SUBSCRIPTION_ERROR', {
       planId,
       billingInterval,
       error: error.message,
@@ -66,7 +65,7 @@ export default function CheckoutPage() {
   };
 
   const handleCancel = () => {
-    navigate(`/subscription`);
+    navigate('/subscription');
   };
 
   return (
@@ -86,7 +85,7 @@ export default function CheckoutPage() {
             Back to plans
           </button>
         </motion.div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Order summary */}
           <div className="md:col-span-1">
@@ -109,10 +108,12 @@ export default function CheckoutPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Price</span>
-                  <span className="text-white font-medium">{formatPrice(price)}/{billingInterval === 'yearly' ? 'year' : 'month'}</span>
+                  <span className="text-white font-medium">
+                    {formatPrice(price)}/{billingInterval === 'yearly' ? 'year' : 'month'}
+                  </span>
                 </div>
               </div>
-              
+
               {billingInterval === 'yearly' && (
                 <div className="bg-green-900/20 border border-green-700 rounded-lg p-3 mb-4">
                   <div className="flex items-center text-green-400 text-sm">
@@ -121,7 +122,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               )}
-              
+
               <div className="border-t border-gray-700 pt-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300">Total</span>
@@ -137,7 +138,7 @@ export default function CheckoutPage() {
               </div>
             </motion.div>
           </div>
-          
+
           {/* Payment form */}
           <div className="md:col-span-2">
             <motion.div
@@ -147,7 +148,7 @@ export default function CheckoutPage() {
               className="bg-gray-800 rounded-lg p-6 shadow-lg"
             >
               <h2 className="text-xl font-semibold text-white mb-6">Payment Information</h2>
-              
+
               {paymentSuccess ? (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -164,19 +165,17 @@ export default function CheckoutPage() {
                   <div className="animate-pulse">Redirecting to your dashboard...</div>
                 </motion.div>
               ) : (
-                <Elements stripe={stripePromise}>
-                  <StripeCheckoutForm
-                    amount={price}
-                    planId={planId}
-                    billingInterval={billingInterval}
-                    onSuccess={handlePaymentSuccess}
-                    onError={handlePaymentError}
-                    onCancel={handleCancel}
-                    buttonText={`Subscribe ${formatPrice(price)}/${billingInterval === 'yearly' ? 'year' : 'month'}`}
-                  />
-                </Elements>
+                <StripeCheckoutForm
+                  amount={price}
+                  planId={planId}
+                  billingInterval={billingInterval}
+                  onSuccess={handlePaymentSuccess}
+                  onError={handlePaymentError}
+                  onCancel={handleCancel}
+                  buttonText={`Subscribe ${formatPrice(price)}/${billingInterval === 'yearly' ? 'year' : 'month'}`}
+                />
               )}
-              
+
               {paymentError && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}

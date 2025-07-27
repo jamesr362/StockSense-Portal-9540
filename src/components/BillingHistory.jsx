@@ -1,9 +1,9 @@
-import {useState, useEffect} from 'react';
-import {motion} from 'framer-motion';
-import {RiDownloadLine, RiEyeLine, RiCalendarLine, RiCreditCardLine} from 'react-icons/ri';
-import {formatPrice} from '../lib/stripe';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { RiDownloadLine, RiEyeLine, RiCalendarLine, RiCreditCardLine } from 'react-icons/ri';
+import { formatPrice } from '../lib/stripe';
 
-export default function BillingHistory({customerId}) {
+export default function BillingHistory({ customerId }) {
   const [billingHistory, setBillingHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -62,14 +62,26 @@ export default function BillingHistory({customerId}) {
   };
 
   const handleDownloadInvoice = (invoice) => {
-    // In a real app, this would download the actual invoice
+    // Mock download functionality
     console.log('Downloading invoice:', invoice.id);
     
-    // Mock download
+    // Create a mock invoice file
+    const invoiceContent = `
+Invoice ${invoice.id}
+Date: ${invoice.date.toLocaleDateString()}
+Plan: ${invoice.plan}
+Period: ${invoice.period}
+Amount: ${formatPrice(invoice.amount / 100)}
+Status: ${invoice.status}
+    `;
+    
+    const blob = new Blob([invoiceContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = `data:text/plain;charset=utf-8,Invoice ${invoice.id}`;
+    link.href = url;
     link.download = `invoice-${invoice.id}.txt`;
     link.click();
+    URL.revokeObjectURL(url);
   };
 
   const getStatusColor = (status) => {
@@ -120,8 +132,8 @@ export default function BillingHistory({customerId}) {
             {billingHistory.map((invoice) => (
               <motion.div
                 key={invoice.id}
-                initial={{opacity: 0, y: 10}}
-                animate={{opacity: 1, y: 0}}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors"
               >
                 <div className="flex items-center justify-between">
@@ -164,15 +176,13 @@ export default function BillingHistory({customerId}) {
                         <RiDownloadLine className="h-4 w-4" />
                       </button>
                       
-                      {invoice.invoice_pdf && (
-                        <button
-                          onClick={() => window.open(invoice.invoice_pdf, '_blank')}
-                          className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
-                          title="View Invoice"
-                        >
-                          <RiEyeLine className="h-4 w-4" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDownloadInvoice(invoice)}
+                        className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
+                        title="View Invoice"
+                      >
+                        <RiEyeLine className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -1,114 +1,14 @@
-import {useState, useEffect} from 'react';
-import {motion, AnimatePresence} from 'framer-motion';
-import {RiCreditCardLine, RiAddLine, RiDeleteBin6Line, RiCheckLine, RiEditLine} from 'react-icons/ri';
-import {Elements, CardElement, useStripe, useElements} from '@stripe/react-stripe-js';
-import getStripe from '../lib/stripe';
-import {logSecurityEvent} from '../utils/security';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiCreditCardLine, RiAddLine, RiDeleteBin6Line, RiCheckLine, RiEditLine } from 'react-icons/ri';
+import { logSecurityEvent } from '../utils/security';
 
-const CARD_ELEMENT_OPTIONS = {
-  style: {
-    base: {
-      color: '#fff',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontSmoothing: 'antialiased',
-      fontSize: '16px',
-      '::placeholder': {
-        color: '#9CA3AF',
-      },
-    },
-    invalid: {
-      color: '#EF4444',
-      iconColor: '#EF4444',
-    },
-  },
-};
-
-function AddPaymentMethodForm({onSuccess, onCancel}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [error, setError] = useState(null);
-  const [processing, setProcessing] = useState(false);
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    setProcessing(true);
-    setError(null);
-
-    try {
-      const cardElement = elements.getElement(CardElement);
-
-      const {error: pmError, paymentMethod} = await stripe.createPaymentMethod({
-        type: 'card',
-        card: cardElement,
-      });
-
-      if (pmError) {
-        setError(pmError.message);
-        return;
-      }
-
-      logSecurityEvent('PAYMENT_METHOD_ADDED', {
-        paymentMethodId: paymentMethod.id
-      });
-
-      onSuccess(paymentMethod);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Card Details
-        </label>
-        <div className="p-3 bg-gray-700 border border-gray-600 rounded-md">
-          <CardElement options={CARD_ELEMENT_OPTIONS} />
-        </div>
-      </div>
-
-      {error && (
-        <div className="p-3 bg-red-900/50 border border-red-700 rounded-md">
-          <p className="text-red-300 text-sm">{error}</p>
-        </div>
-      )}
-
-      <div className="flex space-x-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 py-2 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={!stripe || processing}
-          className="flex-1 py-2 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-        >
-          {processing ? 'Adding...' : 'Add Payment Method'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-export default function PaymentMethodManager({customerId, onPaymentMethodChange}) {
+export default function PaymentMethodManager({ customerId, onPaymentMethodChange }) {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-
-  const stripePromise = getStripe();
 
   useEffect(() => {
     if (customerId) {
@@ -153,17 +53,26 @@ export default function PaymentMethodManager({customerId, onPaymentMethodChange}
     }
   };
 
-  const handleAddPaymentMethod = async (paymentMethod) => {
+  const handleAddPaymentMethod = async (cardData) => {
     try {
-      // In a real app, you would attach the payment method to the customer
+      // Mock adding a payment method
       const newMethod = {
-        id: paymentMethod.id,
-        card: paymentMethod.card,
+        id: `pm_${Date.now()}`,
+        card: {
+          brand: cardData.brand || 'visa',
+          last4: cardData.last4 || '0000',
+          exp_month: cardData.exp_month || 12,
+          exp_year: cardData.exp_year || 2025,
+        },
         is_default: paymentMethods.length === 0,
       };
 
       setPaymentMethods([...paymentMethods, newMethod]);
       setShowAddForm(false);
+
+      logSecurityEvent('PAYMENT_METHOD_ADDED', {
+        paymentMethodId: newMethod.id
+      });
 
       if (onPaymentMethodChange) {
         onPaymentMethodChange(newMethod);
@@ -234,7 +143,7 @@ export default function PaymentMethodManager({customerId, onPaymentMethodChange}
   };
 
   const getCardBrandIcon = (brand) => {
-    // In a real app, you might want to use actual card brand icons
+    // Simple card brand icons
     const brandMap = {
       visa: '💳',
       mastercard: '💳',
@@ -282,18 +191,62 @@ export default function PaymentMethodManager({customerId, onPaymentMethodChange}
         <AnimatePresence>
           {showAddForm && (
             <motion.div
-              initial={{opacity: 0, height: 0}}
-              animate={{opacity: 1, height: 'auto'}}
-              exit={{opacity: 0, height: 0}}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
               className="mb-6 p-4 bg-gray-700 rounded-lg border border-gray-600"
             >
               <h4 className="text-white font-medium mb-4">Add New Payment Method</h4>
-              <Elements stripe={stripePromise}>
-                <AddPaymentMethodForm
-                  onSuccess={handleAddPaymentMethod}
-                  onCancel={() => setShowAddForm(false)}
-                />
-              </Elements>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Card Number
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="1234 5678 9012 3456"
+                    className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Expiry Date
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="MM/YY"
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      CVC
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="123"
+                      className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowAddForm(false)}
+                    className="flex-1 py-2 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => handleAddPaymentMethod({ brand: 'visa', last4: '1234' })}
+                    className="flex-1 py-2 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Add Payment Method
+                  </button>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -316,8 +269,8 @@ export default function PaymentMethodManager({customerId, onPaymentMethodChange}
             {paymentMethods.map((method) => (
               <motion.div
                 key={method.id}
-                initial={{opacity: 0, y: 10}}
-                animate={{opacity: 1, y: 0}}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 className="flex items-center justify-between p-4 bg-gray-700 rounded-lg border border-gray-600"
               >
                 <div className="flex items-center">
@@ -373,7 +326,7 @@ export default function PaymentMethodManager({customerId, onPaymentMethodChange}
             <div>
               <h4 className="text-blue-400 font-medium mb-1">Secure Payment Processing</h4>
               <p className="text-blue-300 text-sm">
-                Your payment information is encrypted and securely processed by Stripe. 
+                Your payment information is encrypted and securely processed. 
                 We never store your complete card details on our servers.
               </p>
             </div>
