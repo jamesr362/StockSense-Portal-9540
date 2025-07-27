@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { RiBarChartLine, RiTrendingUpLine, RiAlertLine, RiArrowRightLine } from 'react-icons/ri';
+import { RiBarChartLine, RiLineChartLine, RiAlertLine, RiArrowRightLine } from 'react-icons/ri';
 import { getUsageStats, SUBSCRIPTION_PLANS } from '../lib/stripe';
 import { useNavigate } from 'react-router-dom';
 
@@ -36,14 +36,14 @@ export default function SubscriptionUsageWidget({ userPlan = 'free' }) {
     {
       key: 'receiptScans',
       label: 'Receipt Scans',
-      icon: RiTrendingUpLine,
+      icon: RiLineChartLine,
       period: 'this month',
       ...usage.receiptScans
     },
     {
       key: 'excelImports',
       label: 'Excel Imports',
-      icon: RiTrendingUpLine,
+      icon: RiLineChartLine,
       period: 'this month',
       ...usage.excelImports
     }
@@ -141,7 +141,7 @@ export default function SubscriptionUsageWidget({ userPlan = 'free' }) {
       {userPlan !== 'free' && (
         <div className="mt-4 p-3 bg-green-900/20 border border-green-700 rounded-lg">
           <div className="flex items-center text-green-400 text-sm">
-            <RiTrendingUpLine className="h-4 w-4 mr-2" />
+            <RiLineChartLine className="h-4 w-4 mr-2" />
             <span>
               {userPlan === 'power'
                 ? 'Unlimited everything with Power plan!'
