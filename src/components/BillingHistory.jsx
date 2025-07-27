@@ -18,7 +18,7 @@ export default function BillingHistory({ customerId }) {
     try {
       setLoading(true);
       setError(null);
-
+      
       // Mock billing history data
       const mockHistory = [
         {
@@ -64,7 +64,7 @@ export default function BillingHistory({ customerId }) {
   const handleDownloadInvoice = (invoice) => {
     // Mock download functionality
     console.log('Downloading invoice:', invoice.id);
-
+    
     // Create a mock invoice file
     const invoiceContent = `
 Invoice ${invoice.id}
@@ -86,14 +86,10 @@ Status: ${invoice.status}
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'failed':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'failed': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -113,14 +109,13 @@ Status: ${invoice.status}
           Your recent invoices and payment history
         </p>
       </div>
-
       <div className="px-4 py-5 sm:p-6">
         {error && (
           <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
             <p className="text-red-300 text-sm">{error}</p>
           </div>
         )}
-
+        
         {billingHistory.length === 0 ? (
           <div className="text-center py-8">
             <RiMoneyDollarCircleLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
@@ -143,11 +138,7 @@ Status: ${invoice.status}
                       <span className="text-white font-medium">
                         {invoice.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
                       </span>
-                      <span
-                        className={`ml-3 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(
-                          invoice.status
-                        )}`}
-                      >
+                      <span className={`ml-3 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(invoice.status)}`}>
                         {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                       </span>
                     </div>
@@ -155,15 +146,15 @@ Status: ${invoice.status}
                       <p>{invoice.plan} - {invoice.period}</p>
                     </div>
                   </div>
-
                   <div className="flex items-center space-x-4">
                     <div className="text-right">
                       <div className="text-lg font-semibold text-white">
                         {formatPrice(invoice.amount / 100)}
                       </div>
-                      <div className="text-xs text-gray-400">{invoice.currency.toUpperCase()}</div>
+                      <div className="text-xs text-gray-400">
+                        {invoice.currency.toUpperCase()}
+                      </div>
                     </div>
-
                     <div className="flex space-x-2">
                       <button
                         onClick={() => handleDownloadInvoice(invoice)}
@@ -186,7 +177,7 @@ Status: ${invoice.status}
             ))}
           </div>
         )}
-
+        
         <div className="mt-6 text-center">
           <p className="text-gray-400 text-sm">
             Need help with billing? Contact our support team at{' '}

@@ -34,7 +34,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
     try {
       setLoading(true);
       setError(null);
-
+      
       // Mock subscription data
       const mockSubscription = {
         id: 'sub_demo',
@@ -48,12 +48,18 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
         cancel_at_period_end: false,
         canceled_at: null,
       };
-
+      
       setSubscription(mockSubscription);
-      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', { customerId });
+      
+      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', {
+        customerId
+      });
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', { error: err.message });
+      
+      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', {
+        error: err.message
+      });
     } finally {
       setLoading(false);
     }
@@ -61,13 +67,16 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
 
   const handleCancelSubscription = async () => {
     if (!subscription?.id) return;
-
+    
     try {
       setActionLoading(true);
       
       // Mock cancellation API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      logSecurityEvent('SUBSCRIPTION_CANCELLED', { subscriptionId: subscription.id });
+      
+      logSecurityEvent('SUBSCRIPTION_CANCELLED', {
+        subscriptionId: subscription.id
+      });
       
       // Update subscription status
       setSubscription({
@@ -84,7 +93,10 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       setShowCancelConfirm(false);
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('SUBSCRIPTION_CANCEL_ERROR', { error: err.message });
+      
+      logSecurityEvent('SUBSCRIPTION_CANCEL_ERROR', {
+        error: err.message
+      });
     } finally {
       setActionLoading(false);
     }
@@ -96,7 +108,10 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       
       // Mock reactivation API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      logSecurityEvent('SUBSCRIPTION_REACTIVATED', { subscriptionId: subscription.id });
+      
+      logSecurityEvent('SUBSCRIPTION_REACTIVATED', {
+        subscriptionId: subscription.id
+      });
       
       setSubscription({
         ...subscription,
@@ -126,18 +141,12 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
     }
     
     switch (subscription.status) {
-      case 'active':
-        return { text: 'Active', color: 'text-green-400' };
-      case 'canceled':
-        return { text: 'Canceled', color: 'text-red-400' };
-      case 'past_due':
-        return { text: 'Past Due', color: 'text-yellow-400' };
-      case 'unpaid':
-        return { text: 'Unpaid', color: 'text-red-400' };
-      case 'trialing':
-        return { text: 'Trial', color: 'text-blue-400' };
-      default:
-        return { text: subscription.status, color: 'text-gray-400' };
+      case 'active': return { text: 'Active', color: 'text-green-400' };
+      case 'canceled': return { text: 'Canceled', color: 'text-red-400' };
+      case 'past_due': return { text: 'Past Due', color: 'text-yellow-400' };
+      case 'unpaid': return { text: 'Unpaid', color: 'text-red-400' };
+      case 'trialing': return { text: 'Trial', color: 'text-blue-400' };
+      default: return { text: subscription.status, color: 'text-gray-400' };
     }
   };
 
@@ -221,7 +230,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                   <RiRefreshLine className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
               </div>
-
+              
               {subscription ? (
                 <div className="space-y-4">
                   {/* Plan Info */}
@@ -247,7 +256,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                       </p>
                     </div>
                   </div>
-
+                  
                   {/* Cancellation Warning */}
                   {subscription.cancel_at_period_end && (
                     <div className="p-4 bg-yellow-900/20 border border-yellow-700 rounded-lg">
@@ -262,7 +271,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                       </div>
                     </div>
                   )}
-
+                  
                   {/* Action Buttons */}
                   <div className="flex flex-wrap gap-3">
                     <button
@@ -273,7 +282,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                       <RiSettings3Line className="h-4 w-4 mr-2" />
                       Change Plan
                     </button>
-
+                    
                     {subscription.cancel_at_period_end ? (
                       <button
                         onClick={handleReactivateSubscription}

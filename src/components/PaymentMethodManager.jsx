@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiCreditCardLine, RiAddLine, RiDeleteBin6Line, RiCheckLine, RiEditLine } from 'react-icons/ri';
+import { RiMoneyDollarCircleLine, RiAddLine, RiDeleteBin6Line, RiCheckLine, RiEditLine } from 'react-icons/ri';
 import { logSecurityEvent } from '../utils/security';
 
 export default function PaymentMethodManager({ customerId, onPaymentMethodChange }) {
@@ -20,7 +20,7 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
     try {
       setLoading(true);
       setError(null);
-
+      
       // Mock payment methods data
       const mockMethods = [
         {
@@ -44,7 +44,7 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
           is_default: false,
         }
       ];
-
+      
       setPaymentMethods(mockMethods);
     } catch (err) {
       setError(err.message);
@@ -66,14 +66,14 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
         },
         is_default: paymentMethods.length === 0,
       };
-
+      
       setPaymentMethods([...paymentMethods, newMethod]);
       setShowAddForm(false);
-
+      
       logSecurityEvent('PAYMENT_METHOD_ADDED', {
         paymentMethodId: newMethod.id
       });
-
+      
       if (onPaymentMethodChange) {
         onPaymentMethodChange(newMethod);
       }
@@ -85,19 +85,19 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
   const handleSetDefault = async (paymentMethodId) => {
     try {
       setActionLoading(true);
-
+      
       // Update default payment method
       const updatedMethods = paymentMethods.map(pm => ({
         ...pm,
         is_default: pm.id === paymentMethodId
       }));
-
+      
       setPaymentMethods(updatedMethods);
-
+      
       logSecurityEvent('PAYMENT_METHOD_SET_DEFAULT', {
         paymentMethodId
       });
-
+      
       if (onPaymentMethodChange) {
         onPaymentMethodChange(updatedMethods.find(pm => pm.is_default));
       }
@@ -112,10 +112,10 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
     if (!window.confirm('Are you sure you want to delete this payment method?')) {
       return;
     }
-
+    
     try {
       setActionLoading(true);
-
+      
       const updatedMethods = paymentMethods.filter(pm => pm.id !== paymentMethodId);
       
       // If we deleted the default method, make the first remaining method default
@@ -125,13 +125,13 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
           updatedMethods[0].is_default = true;
         }
       }
-
+      
       setPaymentMethods(updatedMethods);
-
+      
       logSecurityEvent('PAYMENT_METHOD_DELETED', {
         paymentMethodId
       });
-
+      
       if (onPaymentMethodChange) {
         onPaymentMethodChange(updatedMethods.find(pm => pm.is_default) || null);
       }
@@ -150,6 +150,7 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
       amex: '💳',
       discover: '💳',
     };
+    
     return brandMap[brand] || '💳';
   };
 
@@ -180,14 +181,13 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
           </button>
         </div>
       </div>
-
       <div className="px-4 py-5 sm:p-6">
         {error && (
           <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
             <p className="text-red-300 text-sm">{error}</p>
           </div>
         )}
-
+        
         <AnimatePresence>
           {showAddForm && (
             <motion.div
@@ -208,7 +208,6 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
                     className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -231,7 +230,6 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
                     />
                   </div>
                 </div>
-
                 <div className="flex space-x-3">
                   <button
                     onClick={() => setShowAddForm(false)}
@@ -250,10 +248,10 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
             </motion.div>
           )}
         </AnimatePresence>
-
+        
         {paymentMethods.length === 0 ? (
           <div className="text-center py-8">
-            <RiCreditCardLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+            <RiMoneyDollarCircleLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">No payment methods</h3>
             <p className="text-gray-400 mb-4">Add a payment method to manage your subscription</p>
             <button
@@ -294,7 +292,6 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
                     </p>
                   </div>
                 </div>
-
                 <div className="flex items-center space-x-2">
                   {!method.is_default && (
                     <button
@@ -305,7 +302,6 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
                       Set Default
                     </button>
                   )}
-                  
                   <button
                     onClick={() => handleDeletePaymentMethod(method.id)}
                     disabled={actionLoading || (paymentMethods.length === 1)}
@@ -319,15 +315,14 @@ export default function PaymentMethodManager({ customerId, onPaymentMethodChange
             ))}
           </div>
         )}
-
+        
         <div className="mt-6 p-4 bg-blue-900/20 border border-blue-700 rounded-lg">
           <div className="flex items-start">
-            <RiCreditCardLine className="h-5 w-5 text-blue-400 mr-3 mt-0.5" />
+            <RiMoneyDollarCircleLine className="h-5 w-5 text-blue-400 mr-3 mt-0.5" />
             <div>
               <h4 className="text-blue-400 font-medium mb-1">Secure Payment Processing</h4>
               <p className="text-blue-300 text-sm">
-                Your payment information is encrypted and securely processed. 
-                We never store your complete card details on our servers.
+                Your payment information is encrypted and securely processed. We never store your complete card details on our servers.
               </p>
             </div>
           </div>

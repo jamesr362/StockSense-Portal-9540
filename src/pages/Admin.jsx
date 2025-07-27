@@ -27,6 +27,7 @@ export default function Admin() {
 
   const loadUsers = async () => {
     if (user?.role !== 'admin') return;
+
     try {
       setIsLoading(true);
       setError(null);
@@ -225,13 +226,9 @@ export default function Admin() {
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Role:</span>
-                              <span
-                                className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  userData.role === 'admin'
-                                    ? 'bg-purple-100 text-purple-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}
-                              >
+                              <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                userData.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
                                 {userData.role === 'admin' ? (
                                   <RiAdminLine className="mr-1 h-3 w-3" />
                                 ) : (
@@ -243,9 +240,7 @@ export default function Admin() {
                             <div className="flex justify-between">
                               <span className="text-gray-400">Created:</span>
                               <span className="text-white">
-                                {userData.createdAt
-                                  ? new Date(userData.createdAt).toLocaleDateString()
-                                  : 'N/A'}
+                                {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : 'N/A'}
                               </span>
                             </div>
                             {userData.email === user.email && (
@@ -265,29 +260,19 @@ export default function Admin() {
                       <table className="min-w-full divide-y divide-gray-700">
                         <thead className="bg-gray-800">
                           <tr>
-                            <th
-                              className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white sm:pl-6 min-w-[150px]"
-                            >
+                            <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white sm:pl-6 min-w-[150px]">
                               Business Name
                             </th>
-                            <th
-                              className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[200px]"
-                            >
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[200px]">
                               Email
                             </th>
-                            <th
-                              className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]"
-                            >
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
                               Role
                             </th>
-                            <th
-                              className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]"
-                            >
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
                               Created At
                             </th>
-                            <th
-                              className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]"
-                            >
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
                               Actions
                             </th>
                           </tr>
@@ -311,13 +296,9 @@ export default function Admin() {
                                 </div>
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                    userData.role === 'admin'
-                                      ? 'bg-purple-100 text-purple-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}
-                                >
+                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                  userData.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
                                   {userData.role === 'admin' ? (
                                     <RiAdminLine className="mr-1 h-3 w-3" />
                                   ) : (
@@ -327,9 +308,7 @@ export default function Admin() {
                                 </span>
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300">
-                                {userData.createdAt
-                                  ? new Date(userData.createdAt).toLocaleDateString()
-                                  : 'N/A'}
+                                {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : 'N/A'}
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm">
                                 <div className="flex space-x-2">
@@ -360,92 +339,92 @@ export default function Admin() {
                       </table>
                     </div>
                   </div>
-
-                  {/* Statistics */}
-                  <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.1 }}
-                      className="bg-gray-800 overflow-hidden rounded-lg shadow"
-                    >
-                      <div className="p-5">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0">
-                            <RiUserLine className="h-6 w-6 text-gray-400" />
-                          </div>
-                          <div className="ml-5 w-0 flex-1">
-                            <dl>
-                              <dt className="text-sm font-medium text-gray-400 truncate">
-                                Total Users
-                              </dt>
-                              <dd className="flex items-baseline">
-                                <div className="text-2xl font-semibold text-white">
-                                  {users.length}
-                                </div>
-                              </dd>
-                            </dl>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                      className="bg-gray-800 overflow-hidden rounded-lg shadow"
-                    >
-                      <div className="p-5">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0">
-                            <RiAdminLine className="h-6 w-6 text-purple-400" />
-                          </div>
-                          <div className="ml-5 w-0 flex-1">
-                            <dl>
-                              <dt className="text-sm font-medium text-gray-400 truncate">
-                                Admins
-                              </dt>
-                              <dd className="flex items-baseline">
-                                <div className="text-2xl font-semibold text-white">
-                                  {users.filter(u => u.role === 'admin').length}
-                                </div>
-                              </dd>
-                            </dl>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.3 }}
-                      className="bg-gray-800 overflow-hidden rounded-lg shadow"
-                    >
-                      <div className="p-5">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0">
-                            <RiUserLine className="h-6 w-6 text-blue-400" />
-                          </div>
-                          <div className="ml-5 w-0 flex-1">
-                            <dl>
-                              <dt className="text-sm font-medium text-gray-400 truncate">
-                                Regular Users
-                              </dt>
-                              <dd className="flex items-baseline">
-                                <div className="text-2xl font-semibold text-white">
-                                  {users.filter(u => u.role === 'user').length}
-                                </div>
-                              </dd>
-                            </dl>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  </div>
                 </>
               )}
+
+              {/* Statistics */}
+              <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-3">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.1 }}
+                  className="bg-gray-800 overflow-hidden rounded-lg shadow"
+                >
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <RiUserLine className="h-6 w-6 text-gray-400" />
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-400 truncate">
+                            Total Users
+                          </dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-white">
+                              {users.length}
+                            </div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                  className="bg-gray-800 overflow-hidden rounded-lg shadow"
+                >
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <RiAdminLine className="h-6 w-6 text-purple-400" />
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-400 truncate">
+                            Admins
+                          </dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-white">
+                              {users.filter(u => u.role === 'admin').length}
+                            </div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                  className="bg-gray-800 overflow-hidden rounded-lg shadow"
+                >
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <RiUserLine className="h-6 w-6 text-blue-400" />
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-400 truncate">
+                            Regular Users
+                          </dt>
+                          <dd className="flex items-baseline">
+                            <div className="text-2xl font-semibold text-white">
+                              {users.filter(u => u.role === 'user').length}
+                            </div>
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
             </motion.div>
           )}
 
@@ -472,6 +451,7 @@ export default function Admin() {
                       <li>• Search and filter inventory</li>
                     </ul>
                   </div>
+
                   <div className="border border-gray-700 rounded-lg p-4">
                     <div className="flex items-center mb-3">
                       <RiAdminLine className="h-5 w-5 text-purple-400 mr-2" />
@@ -515,6 +495,7 @@ export default function Admin() {
                         </div>
                       </div>
                     </div>
+
                     <div className="bg-gray-700 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
@@ -527,6 +508,7 @@ export default function Admin() {
                         </div>
                       </div>
                     </div>
+
                     <div className="bg-gray-700 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
