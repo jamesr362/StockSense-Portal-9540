@@ -10,8 +10,8 @@ export const createCheckoutSession = async (priceId, customerId = null, metadata
     // For demo purposes, we'll simulate a checkout session
     console.log('Demo: Creating checkout session for:', { priceId, customerId, metadata });
     
-    // Simulate redirect to pricing page (in real app, this would redirect to Stripe)
-    window.location.href = '/pricing';
+    // Simulate redirect to checkout page (in real app, this would redirect to Stripe)
+    window.location.href = `/checkout?plan=${metadata.plan_id || 'pro'}&billing=${metadata.billing_interval || 'monthly'}`;
     
     logSecurityEvent('STRIPE_CHECKOUT_SUCCESS', { priceId });
   } catch (error) {

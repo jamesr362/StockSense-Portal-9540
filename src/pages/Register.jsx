@@ -1,61 +1,54 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { createUser } from '../services/db';
-import { useAuth } from '../context/AuthContext';
+import {useState} from 'react';
+import {Link,useNavigate} from 'react-router-dom';
+import {motion} from 'framer-motion';
+import {createUser} from '../services/db';
+import {useAuth} from '../context/AuthContext';
 import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
-import {
-  validateEmail,
-  validatePassword,
-  validateBusinessName,
-  sanitizeInput,
-  logSecurityEvent,
-  hashPassword
-} from '../utils/security';
+import {validateEmail,validatePassword,validateBusinessName,sanitizeInput,logSecurityEvent,hashPassword} from '../utils/security';
 
 export default function Register() {
-  const [formData, setFormData] = useState({
+  const [formData,setFormData]=useState({
     businessName: '',
     email: '',
     password: '',
     confirmPassword: '',
   });
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
-  const navigate = useNavigate();
-  const { login } = useAuth();
+  const [error,setError]=useState('');
+  const [isLoading,setIsLoading]=useState(false);
+  const [validationErrors,setValidationErrors]=useState({});
+  const navigate=useNavigate();
+  const {login}=useAuth();
 
-  const validateForm = () => {
-    const errors = {};
+  const validateForm=()=> {
+    const errors={};
 
     // Business name validation
-    const businessValidation = validateBusinessName(formData.businessName);
+    const businessValidation=validateBusinessName(formData.businessName);
     if (!businessValidation.isValid) {
-      errors.businessName = businessValidation.error;
+      errors.businessName=businessValidation.error;
     }
 
     // Email validation
     if (!validateEmail(formData.email)) {
-      errors.email = 'Please enter a valid email address';
+      errors.email='Please enter a valid email address';
     }
 
     // Password validation
-    const passwordValidation = validatePassword(formData.password);
+    const passwordValidation=validatePassword(formData.password);
     if (!passwordValidation.isValid) {
-      errors.password = passwordValidation.errors[0]; // Show first error
+      errors.password=passwordValidation.errors[0];// Show first error
     }
 
     // Confirm password validation
-    if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
+    if (formData.password !==formData.confirmPassword) {
+      errors.confirmPassword='Passwords do not match';
     }
 
     setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+    return Object.keys(errors).length===0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit=async (e)=> {
     e.preventDefault();
     setError('');
     setIsLoading(true);
@@ -68,37 +61,37 @@ export default function Register() {
       }
 
       // Sanitize inputs
-      const sanitizedData = {
+      const sanitizedData={
         businessName: sanitizeInput(formData.businessName.trim()),
         email: sanitizeInput(formData.email.toLowerCase().trim()),
         password: formData.password // Don't sanitize password as it may contain special chars
       };
 
       // Hash password
-      const hashedPassword = hashPassword(sanitizedData.password);
+      const hashedPassword=hashPassword(sanitizedData.password);
 
-      const userData = {
+      const userData={
         email: sanitizedData.email,
         businessName: sanitizedData.businessName,
         password: hashedPassword.hash,
         salt: hashedPassword.salt,
       };
 
-      logSecurityEvent('REGISTRATION_ATTEMPT', { 
+      logSecurityEvent('REGISTRATION_ATTEMPT',{
         email: sanitizedData.email,
-        businessName: sanitizedData.businessName 
+        businessName: sanitizedData.businessName
       });
 
-      const newUser = await createUser(userData);
+      const newUser=await createUser(userData);
 
-      logSecurityEvent('SUCCESSFUL_REGISTRATION', { 
+      logSecurityEvent('SUCCESSFUL_REGISTRATION',{
         email: newUser.email,
         businessName: newUser.businessName,
-        role: newUser.role 
+        role: newUser.role
       });
 
       // Log the user in with their role
-      const loginData = {
+      const loginData={
         email: newUser.email,
         businessName: newUser.businessName,
         role: newUser.role
@@ -107,64 +100,73 @@ export default function Register() {
       login(loginData);
 
       // Navigate based on user role
-      if (newUser.role === 'admin') {
+      if (newUser.role==='admin') {
         navigate('/admin');
       } else {
         navigate('/dashboard');
       }
-
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Registration error:',error);
       setError(error.message || 'Failed to create account. Please try again.');
-      logSecurityEvent('REGISTRATION_ERROR', { 
+      logSecurityEvent('REGISTRATION_ERROR',{
         email: sanitizeInput(formData.email),
-        error: error.message 
+        error: error.message
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    
-    // Apply input length limits
-    let processedValue = value;
-    if (name === 'businessName' && value.length > 100) return;
-    if (name === 'email' && value.length > 254) return;
-    if (name === 'password' && value.length > 128) return;
-    if (name === 'confirmPassword' && value.length > 128) return;
+  const handleChange=(e)=> {
+    const {name,value}=e.target;
 
-    setFormData((prev) => ({
+    // Apply input length limits
+    let processedValue=value;
+    if (name==='businessName' && value.length > 100) return;
+    if (name==='email' && value.length > 254) return;
+    if (name==='password' && value.length > 128) return;
+    if (name==='confirmPassword' && value.length > 128) return;
+
+    setFormData((prev)=> ({
       ...prev,
       [name]: processedValue,
     }));
 
     // Clear specific validation error when user starts typing
     if (validationErrors[name]) {
-      setValidationErrors(prev => ({ ...prev, [name]: '' }));
+      setValidationErrors(prev=> ({
+        ...prev,
+        [name]: ''
+      }));
     }
   };
 
-  const handlePasswordChange = (password) => {
-    setFormData(prev => ({ ...prev, password }));
+  const handlePasswordChange=(password)=> {
+    setFormData(prev=> ({
+      ...prev,
+      password
+    }));
+
     if (validationErrors.password) {
-      setValidationErrors(prev => ({ ...prev, password: '' }));
+      setValidationErrors(prev=> ({
+        ...prev,
+        password: ''
+      }));
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{opacity: 0,y: 20}}
+        animate={{opacity: 1,y: 0}}
         className="max-w-md w-full space-y-8"
       >
         <div className="text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
+            initial={{opacity: 0,scale: 0.9}}
+            animate={{opacity: 1,scale: 1}}
+            transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
             <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
@@ -180,8 +182,8 @@ export default function Register() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0,y: -10}}
+              animate={{opacity: 1,y: 0}}
               className="rounded-md bg-red-900/50 p-4"
             >
               <div className="text-sm text-red-200">{error}</div>
@@ -268,19 +270,6 @@ export default function Register() {
               {validationErrors.confirmPassword && (
                 <p className="mt-1 text-sm text-red-400">{validationErrors.confirmPassword}</p>
               )}
-            </div>
-          </div>
-
-          {/* Security Features Notice */}
-          <div className="bg-gray-800 rounded-md p-3 border border-gray-700">
-            <div className="text-xs text-gray-400">
-              <p className="mb-1">🔒 Your account will be protected with:</p>
-              <ul className="list-disc list-inside space-y-0.5 ml-2">
-                <li>Strong password encryption (PBKDF2)</li>
-                <li>Secure session management</li>
-                <li>Rate limiting protection</li>
-                <li>Comprehensive audit logging</li>
-              </ul>
             </div>
           </div>
 

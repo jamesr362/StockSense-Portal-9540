@@ -1,35 +1,53 @@
-import { motion } from 'framer-motion';
-import { RiCheckLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
-import { formatPrice } from '../lib/stripe';
+import {motion} from 'framer-motion';
+import {RiCheckLine, RiArrowRightLine, RiStarLine} from 'react-icons/ri';
+import {formatPrice} from '../lib/stripe';
 
-export default function PricingCard({
-  plan,
-  isPopular = false,
-  onSelectPlan,
-  currentPlan = null,
-  isLoading = false,
-  buttonText = null
-}) {
+export default function PricingCard({plan, isPopular=false, onSelectPlan, currentPlan=null, isLoading=false, buttonText=null, billingInterval='monthly'}) {
   const isCurrentPlan = currentPlan === plan.id;
-  const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
+  const isFree = plan.id === 'free';
+  const price = billingInterval === 'yearly' && plan.yearlyPrice ? plan.yearlyPrice : plan.price;
+
+  const getButtonText = () => {
+    if (buttonText) return buttonText;
+    if (isCurrentPlan) return 'Current Plan';
+    if (isFree) return plan.ctaText || 'Start Free Trial';
+    return plan.ctaText || 'Upgrade Now';
+  };
+
+  const getButtonStyle = () => {
+    if (isCurrentPlan) {
+      return 'bg-gray-700 text-gray-400 cursor-not-allowed';
+    }
+    if (isFree) {
+      return 'bg-gray-600 text-white hover:bg-gray-700';
+    }
+    if (isPopular || plan.highlighted) {
+      return 'bg-primary-600 text-white hover:bg-primary-700 shadow-lg hover:shadow-xl';
+    }
+    return 'bg-primary-600 text-white hover:bg-primary-700';
+  };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      initial={{opacity: 0, y: 20}}
+      animate={{opacity: 1, y: 0}}
+      transition={{duration: 0.5}}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
         isPopular || plan.highlighted
-          ? 'border-2 border-primary-500 bg-gray-800'
+          ? 'border-2 border-primary-500 bg-gray-800 scale-105'
+          : isFree
+          ? 'border border-gray-600 bg-gray-800'
           : 'border border-gray-700 bg-gray-800'
       }`}
     >
-      {/* Popular badge */}
-      {(isPopular || plan.highlighted) && (
-        <div className="absolute top-0 right-0 bg-primary-500 text-white px-3 py-1 text-sm font-medium rounded-bl-lg">
+      {/* Badge */}
+      {plan.badge && (
+        <div className={`absolute top-0 right-0 px-3 py-1 text-xs font-bold rounded-bl-lg ${
+          'bg-primary-500 text-white'
+        }`}>
           <div className="flex items-center">
-            <RiStarLine className="h-4 w-4 mr-1" />
-            Most Popular
+            {!isFree && <RiStarLine className="h-3 w-3 mr-1" />}
+            {plan.badge}
           </div>
         </div>
       )}
@@ -40,48 +58,64 @@ export default function PricingCard({
           <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
           <div className="flex items-baseline justify-center">
             <span className="text-4xl font-extrabold text-white">
-              {plan.price === 'Custom' ? 'Custom' : formatPrice(plan.price)}
+              {isFree ? 'Free' : formatPrice(price)}
             </span>
-            {plan.price !== 'Custom' && (
-              <span className="text-xl font-semibold text-gray-400 ml-1">/month</span>
+            {!isFree && (
+              <span className="text-xl font-semibold text-gray-400 ml-1">
+                /{billingInterval === 'yearly' ? 'year' : 'month'}
+              </span>
             )}
           </div>
-          {plan.price !== 'Custom' && (
-            <p className="text-gray-400 mt-2">
-              {formatPrice(plan.price * 12 * 0.9)}/year (Save 10%)
+          {/* Savings indicator for yearly */}
+          {!isFree && billingInterval === 'yearly' && plan.savings && (
+            <p className="text-green-400 text-sm mt-2 font-medium">
+              {plan.savings}
+            </p>
+          )}
+          {/* Monthly equivalent for yearly */}
+          {!isFree && billingInterval === 'yearly' && plan.yearlyPrice && (
+            <p className="text-gray-400 text-sm mt-1">
+              {formatPrice(plan.yearlyPrice / 12)}/month billed annually
             </p>
           )}
         </div>
+
+        {/* Description */}
+        <p className="text-gray-400 text-center mb-6">{plan.description}</p>
 
         {/* Features list */}
         <div className="space-y-4 mb-8">
           {plan.features.map((feature, index) => (
             <motion.div
               key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
+              initial={{opacity: 0, x: -20}}
+              animate={{opacity: 1, x: 0}}
+              transition={{duration: 0.3, delay: index * 0.1}}
               className="flex items-start"
             >
               <div className="flex-shrink-0 mr-3">
-                <RiCheckLine className="h-5 w-5 text-green-400" />
+                {isFree && (feature.includes('only') || feature.includes('3 ') || feature.includes('1 ')) ? (
+                  <RiStarLine className="h-5 w-5 text-yellow-400" />
+                ) : (
+                  <RiCheckLine className="h-5 w-5 text-green-400" />
+                )}
               </div>
-              <p className="text-gray-300 text-sm leading-relaxed">{feature}</p>
+              <p className={`text-sm leading-relaxed ${
+                isFree && (feature.includes('No ') || feature.includes('72h'))
+                  ? 'text-gray-500 line-through'
+                  : 'text-gray-300'
+              }`}>
+                {feature}
+              </p>
             </motion.div>
           ))}
         </div>
 
         {/* CTA Button */}
         <button
-          onClick={() => onSelectPlan(plan)}
+          onClick={() => onSelectPlan(plan, billingInterval)}
           disabled={isCurrentPlan || isLoading}
-          className={`w-full py-3 px-6 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center ${
-            isCurrentPlan
-              ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-              : isPopular || plan.highlighted
-              ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-lg hover:shadow-xl'
-              : 'bg-gray-700 text-white hover:bg-gray-600'
-          }`}
+          className={`w-full py-3 px-6 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center ${getButtonStyle()}`}
         >
           {isLoading ? (
             <div className="flex items-center">
@@ -90,18 +124,11 @@ export default function PricingCard({
             </div>
           ) : (
             <>
-              {buttonText || defaultButtonText}
+              {getButtonText()}
               {!isCurrentPlan && <RiArrowRightLine className="h-4 w-4 ml-2" />}
             </>
           )}
         </button>
-
-        {/* Additional info */}
-        {plan.id === 'enterprise' && (
-          <p className="text-center text-gray-400 text-xs mt-4">
-            Contact sales for custom pricing
-          </p>
-        )}
       </div>
     </motion.div>
   );

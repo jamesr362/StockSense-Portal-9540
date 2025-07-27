@@ -1,8 +1,9 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line} from 'react-icons/ri';
+import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiPriceTag3Line} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import SecurityAuditLog from '../components/SecurityAuditLog';
+import SubscriptionManager from '../components/SubscriptionManager';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -12,6 +13,7 @@ export default function Settings() {
     {id: 'general', name: 'General', icon: RiStore2Line},
     {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
     {id: 'security', name: 'Security', icon: RiLockLine},
+    {id: 'billing', name: 'Subscription & Billing', icon: RiPriceTag3Line},
     {id: 'team', name: 'Team', icon: RiUser3Line},
   ];
 
@@ -78,6 +80,7 @@ export default function Settings() {
                         />
                       </div>
                     </div>
+
                     <div className="sm:col-span-3">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-300">
                         Email
@@ -93,6 +96,7 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+
                   <div className="pt-5">
                     <div className="flex justify-end">
                       <button
@@ -137,6 +141,7 @@ export default function Settings() {
                         </p>
                       </div>
                     </div>
+
                     <div className="flex items-start">
                       <div className="flex items-center h-5">
                         <input
@@ -171,6 +176,20 @@ export default function Settings() {
               </motion.div>
             )}
 
+            {activeTab === 'billing' && (
+              <motion.div
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
+                className="space-y-6"
+              >
+                <SubscriptionManager
+                  customerId="cus_mock123"
+                  onSubscriptionChange={(data) => console.log('Subscription changed:', data)}
+                />
+              </motion.div>
+            )}
+
             {activeTab === 'team' && (
               <motion.div
                 initial={{opacity: 0}}
@@ -187,7 +206,13 @@ export default function Settings() {
                   </p>
                   <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
                     <p className="text-blue-300 text-sm">
-                      <strong>Current Plan:</strong> Free Plan - Supports up to 2 team members
+                      <strong>Current Plan:</strong> {user?.subscriptionPlan || 'Free'} Plan - Supports up to{' '}
+                      {user?.subscriptionPlan === 'power' 
+                        ? 'unlimited' 
+                        : user?.subscriptionPlan === 'pro' 
+                        ? '3' 
+                        : '1'
+                      } team members
                     </p>
                   </div>
                 </div>

@@ -1,4 +1,4 @@
-import { loadStripe } from '@stripe/stripe-js';
+import {loadStripe} from '@stripe/stripe-js';
 
 // Replace with your actual Stripe publishable key
 const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_publishable_key_here';
@@ -21,65 +21,90 @@ export const STRIPE_CONFIG = {
   locale: 'en-GB'
 };
 
-// Subscription plans configuration
+// Updated subscription plans with detailed limits
 export const SUBSCRIPTION_PLANS = {
-  starter: {
-    id: 'starter',
-    name: 'Starter',
-    price: 29,
-    priceId: 'price_starter_monthly', // Replace with actual Stripe price ID
+  free: {
+    id: 'free',
+    name: 'Free Trial',
+    price: 0,
+    priceId: null,
+    description: 'Too basic to live on',
     features: [
-      'Up to 500 inventory items',
-      'Basic stock alerts',
-      '2 team members',
-      'Email support',
-      'Mobile app access'
+      'Up to 10 inventory items only',
+      '3 receipt scans per month',
+      '1 Excel import (lifetime)',
+      'Manual entry only',
+      'No exports or reports'
     ],
     limits: {
-      inventoryItems: 500,
-      teamMembers: 2,
-      features: ['basic_alerts', 'email_support', 'mobile_access']
-    }
+      inventoryItems: 10,
+      receiptScans: 3,
+      excelImports: 1,
+      teamMembers: 1,
+      features: ['manual_entry'],
+      restrictions: ['no_exports', 'no_reports', 'no_analytics']
+    },
+    ctaText: 'Start Free Trial'
   },
-  professional: {
-    id: 'professional',
+  pro: {
+    id: 'pro',
     name: 'Professional',
-    price: 79,
-    priceId: 'price_professional_monthly', // Replace with actual Stripe price ID
+    price: 12,
+    yearlyPrice: 120, // 2 months free
+    priceId: 'price_pro_monthly',
+    yearlyPriceId: 'price_pro_yearly',
+    description: 'Your bread & butter',
+    features: [
+      'Up to 2,500 inventory items',
+      'Unlimited manual entries',
+      '50-100 receipt scans/month',
+      '10 Excel imports/month'
+    ],
+    limits: {
+      inventoryItems: 2500,
+      receiptScans: 100,
+      excelImports: 10,
+      teamMembers: 3,
+      features: [
+        'unlimited_manual_entry',
+        'exports',
+        'basic_reports'
+      ]
+    },
+    highlighted: true,
+    ctaText: 'Upgrade Now',
+    badge: 'MOST POPULAR',
+    savings: 'Save £24/year'
+  },
+  power: {
+    id: 'power',
+    name: 'Power',
+    price: 25,
+    yearlyPrice: 250, // 2 months free
+    priceId: 'price_power_monthly',
+    yearlyPriceId: 'price_power_yearly',
+    description: 'Unlimited everything',
     features: [
       'Unlimited inventory items',
-      'Advanced analytics',
-      '10 team members',
-      'Priority support',
-      'Multiple locations',
-      'Custom categories',
-      'Batch operations'
+      'Unlimited manual entries',
+      'Unlimited receipt scans',
+      'Unlimited Excel imports'
     ],
     limits: {
-      inventoryItems: -1, // unlimited
-      teamMembers: 10,
-      features: ['advanced_analytics', 'priority_support', 'multiple_locations', 'custom_categories', 'batch_operations']
+      inventoryItems: -1, // Unlimited
+      receiptScans: -1, // Unlimited
+      excelImports: -1, // Unlimited
+      teamMembers: -1, // Unlimited
+      features: [
+        'unlimited_everything',
+        'advanced_analytics',
+        'priority_support',
+        'custom_reports'
+      ]
     },
-    highlighted: true
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 199,
-    priceId: 'price_enterprise_monthly', // Replace with actual Stripe price ID
-    features: [
-      'All Professional features',
-      'Unlimited team members',
-      'Dedicated account manager',
-      'Custom API access',
-      'Advanced security features',
-      'Custom integrations'
-    ],
-    limits: {
-      inventoryItems: -1, // unlimited
-      teamMembers: -1, // unlimited
-      features: ['all_professional', 'unlimited_team', 'dedicated_manager', 'custom_api', 'advanced_security', 'custom_integrations']
-    }
+    ctaText: 'Go Unlimited',
+    badge: 'UNLIMITED',
+    savings: 'Save £50/year'
   }
 };
 
@@ -99,7 +124,7 @@ export const getPlanById = (planId) => {
 
 export const getUserPlanLimits = (planId) => {
   const plan = getPlanById(planId);
-  return plan ? plan.limits : null;
+  return plan ? plan.limits : SUBSCRIPTION_PLANS.free.limits; // Default to free limits
 };
 
 export const canUserAccessFeature = (userPlan, feature) => {
@@ -110,9 +135,110 @@ export const canUserAccessFeature = (userPlan, feature) => {
 export const isWithinLimit = (userPlan, limitType, currentCount) => {
   const limits = getUserPlanLimits(userPlan);
   if (!limits) return false;
-  
   const limit = limits[limitType];
   if (limit === -1) return true; // unlimited
-  
   return currentCount < limit;
+};
+
+export const hasRestriction = (userPlan, restriction) => {
+  const limits = getUserPlanLimits(userPlan);
+  return limits?.restrictions?.includes(restriction) || false;
+};
+
+// Usage tracking helpers
+export const getUsageStats = (userPlan) => {
+  const limits = getUserPlanLimits(userPlan);
+
+  // Get current usage from localStorage with proper error handling
+  const getCurrentUsage = (key, defaultValue = 0) => {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? parseInt(value, 10) : defaultValue;
+    } catch (error) {
+      console.error(`Error reading ${key} from localStorage:`, error);
+      return defaultValue;
+    }
+  };
+
+  const currentUsage = {
+    inventoryItems: getCurrentUsage('usage_inventory_items', 0),
+    receiptScans: getCurrentUsage('usage_receipt_scans_month', 0),
+    excelImports: getCurrentUsage('usage_excel_imports_month', 0)
+  };
+
+  // Calculate percentages safely
+  const calculatePercentage = (current, limit) => {
+    if (limit === -1) return 0; // unlimited
+    if (limit === 0) return 100; // no limit means 100%
+    return Math.min((current / limit) * 100, 100);
+  };
+
+  return {
+    inventoryItems: {
+      current: currentUsage.inventoryItems,
+      limit: limits.inventoryItems,
+      percentage: calculatePercentage(currentUsage.inventoryItems, limits.inventoryItems)
+    },
+    receiptScans: {
+      current: currentUsage.receiptScans,
+      limit: limits.receiptScans,
+      percentage: calculatePercentage(currentUsage.receiptScans, limits.receiptScans)
+    },
+    excelImports: {
+      current: currentUsage.excelImports,
+      limit: limits.excelImports,
+      percentage: calculatePercentage(currentUsage.excelImports, limits.excelImports)
+    }
+  };
+};
+
+// Track usage with error handling
+export const trackUsage = (type, increment = 1) => {
+  try {
+    const key = `usage_${type}`;
+    const current = parseInt(localStorage.getItem(key) || '0', 10);
+    const newValue = current + increment;
+    localStorage.setItem(key, newValue.toString());
+    return newValue;
+  } catch (error) {
+    console.error(`Error tracking usage for ${type}:`, error);
+    return 0;
+  }
+};
+
+// Reset monthly usage (call this at the beginning of each month)
+export const resetMonthlyUsage = () => {
+  try {
+    localStorage.removeItem('usage_receipt_scans_month');
+    localStorage.removeItem('usage_excel_imports_month');
+  } catch (error) {
+    console.error('Error resetting monthly usage:', error);
+  }
+};
+
+// Function to check if a user is at or over their limit
+export const isAtOrOverLimit = (userPlan, limitType) => {
+  const usage = getUsageStats(userPlan);
+  if (!usage[limitType]) return false;
+  return usage[limitType].percentage >= 100;
+};
+
+// Check if user can perform a specific action based on their plan
+export const canPerformAction = (userPlan, action) => {
+  switch (action) {
+    case 'add_inventory_item':
+      return !isAtOrOverLimit(userPlan, 'inventoryItems');
+    case 'scan_receipt':
+      return !isAtOrOverLimit(userPlan, 'receiptScans');
+    case 'import_excel':
+      return !isAtOrOverLimit(userPlan, 'excelImports');
+    case 'export_data':
+      return !hasRestriction(userPlan, 'no_exports');
+    case 'view_reports':
+      return !hasRestriction(userPlan, 'no_reports');
+    case 'view_analytics':
+      return !hasRestriction(userPlan, 'no_analytics');
+    default:
+      return true;
+  }
 };

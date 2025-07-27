@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { RiScanLine, RiHistoryLine, RiDownloadLine, RiEyeLine, RiCheckLine, RiAlertLine } from 'react-icons/ri';
+import { RiScanLine, RiHistoryLine, RiDownloadLine, RiEyeLine, RiCheckLine, RiAlertLine, RiArrowRightLine } from 'react-icons/ri';
+import { useNavigate } from 'react-router-dom';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import { getInventoryItems, addInventoryItem } from '../services/db';
 import { useAuth } from '../context/AuthContext';
+import { trackUsage, canPerformAction, isAtOrOverLimit } from '../lib/stripe';
 
 export default function ReceiptScanner() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -17,8 +19,11 @@ export default function ReceiptScanner() {
     successfulScans: 0,
     lastScan: null
   });
+  const [limitReached, setLimitReached] = useState(false);
   
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const userPlan = user?.subscriptionPlan || 'free';
 
   // Load scan history from localStorage
   useEffect(() => {
@@ -34,11 +39,25 @@ export default function ReceiptScanner() {
         console.error('Error loading scan history:', error);
       }
     };
+    
+    const checkScanLimits = async () => {
+      try {
+        // Check if user has reached their receipt scan limit
+        if (isAtOrOverLimit(userPlan, 'receiptScans')) {
+          setLimitReached(true);
+        } else {
+          setLimitReached(false);
+        }
+      } catch (error) {
+        console.error('Error checking scan limits:', error);
+      }
+    };
 
     if (user?.email) {
       loadScanHistory();
+      checkScanLimits();
     }
-  }, [user?.email]);
+  }, [user?.email, userPlan]);
 
   const updateStats = (history) => {
     const totalScans = history.length;
@@ -78,31 +97,63 @@ export default function ReceiptScanner() {
 
   const handleScannedItems = async (scannedItems, receiptImage = null) => {
     if (!user?.email || !scannedItems.length) return;
+    
+    // Check if user can scan receipts based on their plan
+    if (!canPerformAction(userPlan, 'scan_receipt')) {
+      setError('You have reached your receipt scan limit. Please upgrade your plan to scan more receipts.');
+      return;
+    }
 
     try {
       setError(null);
       setIsLoading(true);
+      
       let addedCount = 0;
+      let failedCount = 0;
+      
+      // Check if adding these items would exceed the inventory limit
+      const currentItems = await getInventoryItems(user.email);
+      const itemLimit = userPlan === 'free' ? 10 : (userPlan === 'pro' ? 2500 : -1);
+      let remainingSlots = itemLimit === -1 ? Infinity : itemLimit - currentItems.length;
 
-      // Add each scanned item to inventory
+      // Add each scanned item to inventory, respecting the limit
       for (const item of scannedItems) {
-        try {
-          await addInventoryItem(item, user.email);
-          addedCount++;
-        } catch (itemError) {
-          console.error('Error adding scanned item:', itemError);
+        if (remainingSlots > 0 || itemLimit === -1) {
+          try {
+            await addInventoryItem(item, user.email);
+            addedCount++;
+            if (itemLimit !== -1) remainingSlots--;
+          } catch (itemError) {
+            console.error('Error adding scanned item:', itemError);
+            failedCount++;
+          }
+        } else {
+          failedCount++;
         }
       }
 
+      // Track receipt scan usage
+      trackUsage('receipt_scans_month', 1);
+      
       // Save to scan history
       saveScanToHistory(scannedItems, receiptImage);
-
+      
       if (addedCount > 0) {
-        setSuccessMessage(`Successfully scanned and added ${addedCount} items to inventory!`);
+        let message = `Successfully scanned and added ${addedCount} items to inventory!`;
+        if (failedCount > 0) {
+          message += ` (${failedCount} items couldn't be added due to your plan limits)`;
+        }
+        setSuccessMessage(message);
         setTimeout(() => setSuccessMessage(''), 5000);
       } else {
-        setError('Failed to add items from receipt scan');
+        setError('Failed to add items from receipt scan due to plan limits. Please upgrade your plan.');
       }
+      
+      // Update limit status
+      if (isAtOrOverLimit(userPlan, 'receiptScans')) {
+        setLimitReached(true);
+      }
+      
     } catch (error) {
       console.error('Error processing scanned items:', error);
       setError('Failed to process scanned items');
@@ -127,9 +178,8 @@ export default function ReceiptScanner() {
   const exportHistory = () => {
     const dataStr = JSON.stringify(scanHistory, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
     const exportFileDefaultName = `receipt-scan-history-${new Date().toISOString().split('T')[0]}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -154,6 +204,27 @@ export default function ReceiptScanner() {
       maximumFractionDigits: 2
     }).format(value || 0);
   };
+  
+  const getScanLimitInfo = () => {
+    if (userPlan === 'free') {
+      return {
+        limit: 3,
+        text: 'Free plan allows 3 receipt scans per month'
+      };
+    } else if (userPlan === 'pro') {
+      return {
+        limit: 100,
+        text: 'Professional plan allows 100 receipt scans per month'
+      };
+    } else {
+      return {
+        limit: -1,
+        text: 'Power plan includes unlimited receipt scans'
+      };
+    }
+  };
+
+  const scanLimitInfo = getScanLimitInfo();
 
   return (
     <div>
@@ -177,8 +248,7 @@ export default function ReceiptScanner() {
                   onClick={exportHistory}
                   className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
                 >
-                  <RiDownloadLine className="mr-2 h-4 w-4" />
-                  Export History
+                  <RiDownloadLine className="mr-2 h-4 w-4" /> Export History
                 </button>
                 <button
                   onClick={clearHistory}
@@ -190,7 +260,7 @@ export default function ReceiptScanner() {
             )}
             <button
               onClick={() => setIsScannerOpen(true)}
-              disabled={isLoading}
+              disabled={isLoading || limitReached}
               className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
             >
               <RiScanLine className="mr-2 h-4 w-4" />
@@ -198,6 +268,32 @@ export default function ReceiptScanner() {
             </button>
           </div>
         </div>
+
+        {/* Plan Limit Warning */}
+        {limitReached && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 rounded-md bg-red-900/50 p-4"
+          >
+            <div className="flex items-start">
+              <RiAlertLine className="h-5 w-5 text-red-400 mr-2 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-red-200">
+                  You've reached your receipt scan limit of {userPlan === 'free' ? '3' : '100'} scans per month.
+                </p>
+                <div className="mt-2">
+                  <button 
+                    onClick={() => navigate('/subscription')}
+                    className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
+                  >
+                    Upgrade Plan <RiArrowRightLine className="ml-1 h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Success Message */}
         {successMessage && (
@@ -226,6 +322,30 @@ export default function ReceiptScanner() {
             </div>
           </motion.div>
         )}
+
+        {/* Plan Info Banner */}
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-3 bg-gray-800 rounded-lg border border-gray-700"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <RiScanLine className="h-5 w-5 text-primary-400 mr-2" />
+              <span className="text-sm text-gray-300">
+                {scanLimitInfo.text}
+              </span>
+            </div>
+            {userPlan !== 'power' && (
+              <button 
+                onClick={() => navigate('/subscription')}
+                className="text-xs text-primary-400 hover:text-primary-300 underline"
+              >
+                Upgrade for more scans
+              </button>
+            )}
+          </div>
+        </motion.div>
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -351,7 +471,6 @@ export default function ReceiptScanner() {
               <RiHistoryLine className="h-6 w-6 text-gray-400" />
             </div>
           </div>
-
           <div className="px-4 py-5 sm:p-6">
             {scanHistory.length === 0 ? (
               <div className="text-center py-12">
@@ -362,11 +481,25 @@ export default function ReceiptScanner() {
                 </p>
                 <button
                   onClick={() => setIsScannerOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  disabled={limitReached}
+                  className={`inline-flex items-center px-4 py-2 text-white rounded-lg ${limitReached ? 'bg-gray-600 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
                 >
-                  <RiScanLine className="mr-2 h-4 w-4" />
-                  Scan Your First Receipt
+                  <RiScanLine className="mr-2 h-4 w-4" /> Scan Your First Receipt
                 </button>
+                
+                {limitReached && (
+                  <div className="mt-4 p-4 bg-gray-700 rounded-lg max-w-md mx-auto">
+                    <p className="text-gray-300 mb-3">
+                      You've reached the {userPlan === 'free' ? '3' : '100'} receipt scans per month limit of your {userPlan} plan.
+                    </p>
+                    <button 
+                      onClick={() => navigate('/subscription')}
+                      className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    >
+                      Upgrade Your Plan <RiArrowRightLine className="ml-1 h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -403,7 +536,6 @@ export default function ReceiptScanner() {
                         </button>
                       )}
                     </div>
-
                     {scan.items.length > 0 && (
                       <div className="bg-gray-700 rounded-md p-3">
                         <h4 className="text-sm font-medium text-white mb-2">Extracted Items:</h4>

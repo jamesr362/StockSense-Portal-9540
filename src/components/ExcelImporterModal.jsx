@@ -1,10 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { RiFileExcelLine, RiCloseLine, RiUploadLine, RiDownloadLine, RiCheckLine, RiAlertLine, RiEditLine, RiDeleteBin6Line, RiInformationLine } from 'react-icons/ri';
+import {useState, useRef, useCallback} from 'react';
+import {motion, AnimatePresence} from 'framer-motion';
+import {RiFileExcelLine, RiCloseLine, RiUploadLine, RiCheckLine, RiAlertLine, RiInformationLine, RiEditLine, RiDeleteBin6Line, RiDownloadLine, RiSettings3Line} from 'react-icons/ri';
 import * as XLSX from 'xlsx';
-import { validateFile, sanitizeInput, validateInventoryItem, logSecurityEvent } from '../utils/security';
+import {validateFile, sanitizeInput, validateInventoryItem, logSecurityEvent} from '../utils/security';
 
-export default function ExcelImporterModal({ isOpen, onClose, onItemsImported }) {
+export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -25,6 +25,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
   });
   const [previewData, setPreviewData] = useState([]);
   const [currentStep, setCurrentStep] = useState('upload');
+  const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileUpload = async (event) => {
@@ -35,7 +36,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     const fileValidation = validateFile(file);
     if (!fileValidation.isValid) {
       setErrorMessage(fileValidation.errors.join(', '));
-      logSecurityEvent('FILE_UPLOAD_REJECTED', { 
+      logSecurityEvent('FILE_UPLOAD_REJECTED', {
         reason: fileValidation.errors.join(', '),
         fileName: file.name,
         fileSize: file.size,
@@ -52,7 +53,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     try {
       setUploadedFile(file);
       setProcessProgress(30);
-
+      
       logSecurityEvent('FILE_UPLOAD_STARTED', {
         fileName: file.name,
         fileSize: file.size,
@@ -62,21 +63,23 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
       // Read and parse file
       const data = await readExcelFile(file);
       setProcessProgress(60);
-
+      
       if (!data || data.length === 0) {
         throw new Error('The file appears to be empty or contains no readable data.');
       }
-
+      
       setParsedData(data);
       setPreviewData(data.slice(0, 10));
       setProcessProgress(100);
       setCurrentStep('mapping');
 
+      // Try to auto-detect column mappings
+      autoDetectColumnMapping(data[0]);
+      
       logSecurityEvent('FILE_UPLOAD_SUCCESS', {
         fileName: file.name,
         rowCount: data.length
       });
-
     } catch (error) {
       console.error('File upload error:', error);
       setErrorMessage(error.message || 'Failed to process file. Please try again.');
@@ -91,30 +94,60 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     }
   };
 
+  // Auto-detect column mappings based on header names
+  const autoDetectColumnMapping = (headers) => {
+    if (!headers || !Array.isArray(headers)) return;
+    
+    const newMapping = {...columnMapping};
+    const headerMap = {
+      // Name mappings
+      name: ['name', 'item name', 'product name', 'item', 'product', 'title', 'item title'],
+      // Category mappings
+      category: ['category', 'type', 'item type', 'product type', 'group', 'department'],
+      // Quantity mappings
+      quantity: ['quantity', 'qty', 'amount', 'count', 'stock', 'inventory', 'on hand'],
+      // Price mappings
+      unitPrice: ['price', 'unit price', 'cost', 'rate', 'value', 'item price', 'unit cost', 'price per unit'],
+      // Description mappings
+      description: ['description', 'desc', 'details', 'notes', 'info', 'specifications', 'specs'],
+      // Status mappings
+      status: ['status', 'state', 'condition', 'availability'],
+      // Date mappings
+      dateAdded: ['date', 'date added', 'created date', 'purchase date', 'entry date', 'added on']
+    };
+
+    // Try to match headers with our expected fields
+    headers.forEach((header, index) => {
+      if (header) {
+        const headerStr = String(header).toLowerCase().trim();
+        
+        // Check each field mapping
+        Object.entries(headerMap).forEach(([field, possibleMatches]) => {
+          if (possibleMatches.includes(headerStr)) {
+            newMapping[field] = header;
+          }
+        });
+      }
+    });
+    
+    setColumnMapping(newMapping);
+  };
+
   const readExcelFile = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          
+          const workbook = XLSX.read(data, {type: 'array'});
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-            header: 1,
-            defval: '',
-            blankrows: false 
-          });
-          
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval: '', blankrows: false});
           resolve(jsonData);
         } catch (error) {
           reject(new Error('Failed to parse file. Please ensure it\'s a valid spreadsheet.'));
         }
       };
-      
       reader.onerror = () => reject(new Error('Failed to read file.'));
       reader.readAsArrayBuffer(file);
     });
@@ -122,25 +155,26 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
 
   const handleColumnMapping = () => {
     if (!parsedData.length) return;
-
+    
     const requiredColumns = ['name', 'quantity', 'unitPrice'];
     const missingRequired = requiredColumns.filter(col => !columnMapping[col]);
+    
     if (missingRequired.length > 0) {
-      setErrorMessage(`Please map the following required columns: ${missingRequired.join(', ')}`);
+      setErrorMessage(`Please map the following required fields: ${missingRequired.map(field => field === 'unitPrice' ? 'Unit Price' : field.charAt(0).toUpperCase() + field.slice(1)).join(', ')}`);
       return;
     }
-
+    
     setIsProcessing(true);
     setProcessProgress(20);
-
+    
     try {
       const headers = parsedData[0];
       const dataRows = parsedData.slice(1);
       const items = [];
       const errors = [];
-
+      
       dataRows.forEach((row, index) => {
-        const rowNumber = index + 2;
+        const rowNumber = index + 2; // +2 because index starts at 0 and we skip header row
         
         try {
           const item = mapRowToItem(row, headers, rowNumber);
@@ -165,7 +199,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
         
         setProcessProgress(20 + (index / dataRows.length) * 60);
       });
-
+      
       setMappedItems(items);
       setValidationErrors(errors);
       setProcessProgress(100);
@@ -182,12 +216,13 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
         setErrorMessage('No valid items could be extracted from the file.');
         setImportStatus('error');
       }
-
     } catch (error) {
       console.error('Mapping error:', error);
       setErrorMessage('Failed to process the mapped data.');
       setImportStatus('error');
-      logSecurityEvent('DATA_MAPPING_ERROR', { error: error.message });
+      logSecurityEvent('DATA_MAPPING_ERROR', {
+        error: error.message
+      });
     } finally {
       setIsProcessing(false);
       setProcessProgress(0);
@@ -204,21 +239,21 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     const name = sanitizeInput(String(getValue('name')).trim());
     const quantity = getValue('quantity');
     const unitPrice = getValue('unitPrice');
-
+    
     if (!name) {
       throw new Error(`Row ${rowNumber}: Item name is required`);
     }
-
+    
     const parsedQuantity = parseInt(quantity);
     if (isNaN(parsedQuantity) || parsedQuantity < 0) {
       throw new Error(`Row ${rowNumber}: Invalid quantity "${quantity}"`);
     }
-
+    
     const parsedPrice = parseFloat(String(unitPrice).replace(/[£$€¥₹,]/g, ''));
     if (isNaN(parsedPrice) || parsedPrice < 0) {
       throw new Error(`Row ${rowNumber}: Invalid unit price "${unitPrice}"`);
     }
-
+    
     const category = sanitizeInput(getValue('category') || 'Other');
     const description = sanitizeInput(getValue('description') || `Imported from ${uploadedFile?.name || 'spreadsheet'} on ${new Date().toLocaleDateString()}`);
     
@@ -232,12 +267,13 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     } else {
       status = 'In Stock';
     }
-
+    
     // Date handling with validation
     let dateAdded = getValue('dateAdded');
     if (dateAdded) {
       try {
         if (typeof dateAdded === 'number') {
+          // Convert Excel date number to JS date
           const excelDate = new Date((dateAdded - 25569) * 86400 * 1000);
           dateAdded = excelDate.toISOString().split('T')[0];
         } else {
@@ -254,7 +290,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
     } else {
       dateAdded = new Date().toISOString().split('T')[0];
     }
-
+    
     return {
       name,
       category,
@@ -299,31 +335,31 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
       setErrorMessage('No items to import.');
       return;
     }
-
+    
     // Final validation before import
     const validItems = [];
     const finalErrors = [];
-
+    
     mappedItems.forEach((item, index) => {
       const validation = validateInventoryItem(item);
       if (validation.isValid) {
-        const { sourceRow, ...cleanItem } = item;
+        const {sourceRow, ...cleanItem} = item;
         validItems.push(cleanItem);
       } else {
         finalErrors.push(`Item ${index + 1}: ${validation.errors.join(', ')}`);
       }
     });
-
+    
     if (finalErrors.length > 0) {
       setErrorMessage(`Validation errors: ${finalErrors.join('; ')}`);
       return;
     }
-
+    
     logSecurityEvent('DATA_IMPORT_CONFIRMED', {
       itemCount: validItems.length,
       fileName: uploadedFile?.name
     });
-
+    
     onItemsImported(validItems, uploadedFile?.name);
     handleClose();
   };
@@ -336,7 +372,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
       ['Coffee Beans', 'Food & Beverages', '25', '12.50', 'Premium arabica beans', 'Limited Stock', '2024-01-12'],
       ['Wireless Mouse', 'Electronics', '0', '29.99', 'Bluetooth wireless mouse', 'Out of Stock', '2024-01-08']
     ];
-
+    
     const ws = XLSX.utils.aoa_to_sheet(sampleData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventory Template');
@@ -427,17 +463,16 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
             <div className="border-b border-gray-700 p-4">
               <div className="flex items-center justify-between">
                 {['upload', 'mapping', 'preview', 'confirm'].map((step, index) => {
-                  const stepNames = ['Secure Upload', 'Column Mapping', 'Data Validation', 'Confirm Import'];
+                  const stepNames = ['Secure Upload', 'Match Columns', 'Data Validation', 'Confirm Import'];
                   const isActive = currentStep === step;
                   const isCompleted = ['upload', 'mapping', 'preview', 'confirm'].indexOf(currentStep) > index;
-                  
                   return (
                     <div key={step} className="flex items-center">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                        isCompleted ? 'bg-green-600 text-white' : 
-                        isActive ? 'bg-primary-600 text-white' : 
-                        'bg-gray-600 text-gray-300'
-                      }`}>
+                      <div
+                        className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                          isCompleted ? 'bg-green-600 text-white' : isActive ? 'bg-primary-600 text-white' : 'bg-gray-600 text-gray-300'
+                        }`}
+                      >
                         {isCompleted ? <RiCheckLine className="h-4 w-4" /> : index + 1}
                       </div>
                       <span className={`ml-2 text-sm ${isActive ? 'text-white' : 'text-gray-400'}`}>
@@ -570,14 +605,14 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
               {currentStep === 'mapping' && (
                 <div className="space-y-6">
                   <div className="text-center">
-                    <h4 className="text-xl font-medium text-white mb-2">Map Your Columns</h4>
-                    <p className="text-gray-400">Match your spreadsheet columns to our secure inventory fields</p>
+                    <h4 className="text-xl font-medium text-white mb-2">Match Your Spreadsheet Columns</h4>
+                    <p className="text-gray-400">Tell us which column in your file contains each type of information</p>
                   </div>
 
                   {/* Preview of uploaded data */}
                   {previewData.length > 0 && (
                     <div className="bg-gray-700 rounded-lg p-4">
-                      <h5 className="text-white font-medium mb-3">Preview of your data:</h5>
+                      <h5 className="text-white font-medium mb-3">Preview of your spreadsheet data:</h5>
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead>
@@ -594,7 +629,8 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                               <tr key={rowIndex} className="border-b border-gray-600">
                                 {row.map((cell, cellIndex) => (
                                   <td key={cellIndex} className="py-2 px-3 text-gray-300">
-                                    {sanitizeInput(String(cell)).substring(0, 50)}{sanitizeInput(String(cell)).length > 50 ? '...' : ''}
+                                    {sanitizeInput(String(cell)).substring(0, 50)}
+                                    {sanitizeInput(String(cell)).length > 50 ? '...' : ''}
                                   </td>
                                 ))}
                               </tr>
@@ -605,34 +641,52 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                     </div>
                   )}
 
-                  {/* Column Mapping */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {Object.entries({
-                      name: { label: 'Item Name', required: true },
-                      quantity: { label: 'Quantity', required: true },
-                      unitPrice: { label: 'Unit Price', required: true },
-                      category: { label: 'Category', required: false },
-                      description: { label: 'Description', required: false },
-                      status: { label: 'Status', required: false },
-                      dateAdded: { label: 'Date Added', required: false }
-                    }).map(([key, config]) => (
-                      <div key={key}>
-                        <label className="block text-sm font-medium text-white mb-2">
-                          {config.label}
-                          {config.required && <span className="text-red-400 ml-1">*</span>}
-                        </label>
-                        <select
-                          value={columnMapping[key]}
-                          onChange={(e) => setColumnMapping(prev => ({ ...prev, [key]: e.target.value }))}
-                          className="w-full rounded-md border-gray-600 bg-gray-700 text-white text-sm p-2"
-                        >
-                          <option value="">-- Select Column --</option>
-                          {getAvailableColumns().map((column, index) => (
-                            <option key={index} value={column}>{sanitizeInput(String(column))}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
+                  {/* Column Mapping - Improved UI */}
+                  <div className="bg-gray-700 rounded-lg p-5">
+                    <h5 className="text-white font-medium mb-4">Match Columns to Import Fields</h5>
+                    <p className="text-gray-300 text-sm mb-4">
+                      We've tried to automatically match your columns. Please check and adjust if needed.
+                      <span className="text-red-400 ml-1">*</span> indicates required fields.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {Object.entries({
+                        name: { label: 'Item Name', required: true, description: 'The name of your product or item' },
+                        quantity: { label: 'Quantity', required: true, description: 'Number of items in stock' },
+                        unitPrice: { label: 'Unit Price', required: true, description: 'Price per item (in £)' },
+                        category: { label: 'Category', required: false, description: 'Type or group of the item' },
+                        description: { label: 'Description', required: false, description: 'Details about the item' },
+                        status: { label: 'Status', required: false, description: 'In Stock, Limited Stock, or Out of Stock' },
+                        dateAdded: { label: 'Date Added', required: false, description: 'When the item was added' }
+                      }).map(([key, config]) => (
+                        <div key={key} className="bg-gray-800 p-4 rounded-lg">
+                          <label className="block text-sm font-medium mb-2">
+                            <span className="text-white">{config.label}</span>
+                            {config.required && <span className="text-red-400 ml-1">*</span>}
+                            <p className="text-gray-400 text-xs mt-1">{config.description}</p>
+                          </label>
+                          <div className="relative">
+                            <select
+                              value={columnMapping[key]}
+                              onChange={(e) => setColumnMapping(prev => ({...prev, [key]: e.target.value}))}
+                              className={`w-full rounded-md border-gray-600 bg-gray-700 text-white text-sm p-2 pr-8 ${
+                                config.required && !columnMapping[key] ? 'border-red-500' : ''
+                              }`}
+                            >
+                              <option value="">-- Select a column from your file --</option>
+                              {getAvailableColumns().map((column, index) => (
+                                <option key={index} value={column}>{sanitizeInput(String(column))}</option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex justify-between">
@@ -647,7 +701,7 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                       disabled={isProcessing || !columnMapping.name || !columnMapping.quantity || !columnMapping.unitPrice}
                       className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                     >
-                      {isProcessing ? 'Processing...' : 'Validate & Map Data'}
+                      {isProcessing ? 'Processing...' : 'Continue to Review Data'}
                     </button>
                   </div>
                 </div>
@@ -658,8 +712,8 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="text-xl font-medium text-white mb-2">Data Validation & Preview</h4>
-                      <p className="text-gray-400">Review and edit your items after security validation</p>
+                      <h4 className="text-xl font-medium text-white mb-2">Review Your Data</h4>
+                      <p className="text-gray-400">Check that your items look correct before importing</p>
                     </div>
                     <button
                       onClick={() => setEditingItems(!editingItems)}
@@ -674,28 +728,28 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-gray-700 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-green-400">{mappedItems.length}</div>
-                      <div className="text-gray-300 text-sm">Validated Items</div>
+                      <div className="text-gray-300 text-sm">Items Ready to Import</div>
                     </div>
                     <div className="bg-gray-700 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-red-400">{validationErrors.length}</div>
-                      <div className="text-gray-300 text-sm">Security Errors</div>
+                      <div className="text-gray-300 text-sm">Rows with Errors</div>
                     </div>
                     <div className="bg-gray-700 rounded-lg p-4 text-center">
                       <div className="text-2xl font-bold text-primary-400">
                         {formatCurrency(mappedItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
                       </div>
-                      <div className="text-gray-300 text-sm">Total Value</div>
+                      <div className="text-gray-300 text-sm">Total Inventory Value</div>
                     </div>
                   </div>
 
                   {/* Validation Errors */}
                   {validationErrors.length > 0 && (
                     <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                      <h5 className="text-red-400 font-medium mb-2">Security Validation Errors:</h5>
+                      <h5 className="text-red-400 font-medium mb-2">Rows with Problems:</h5>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {validationErrors.map((error, index) => (
                           <p key={index} className="text-red-300 text-sm">
-                            {error.message}
+                            Row {error.row}: {error.message}
                           </p>
                         ))}
                       </div>
@@ -783,14 +837,14 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                       onClick={() => setCurrentStep('mapping')}
                       className="px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700"
                     >
-                      Back to Mapping
+                      Back to Column Matching
                     </button>
                     <button
                       onClick={() => setCurrentStep('confirm')}
                       disabled={mappedItems.length === 0}
                       className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
                     >
-                      Proceed to Secure Import
+                      Continue to Import
                     </button>
                   </div>
                 </div>
@@ -801,9 +855,9 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                 <div className="space-y-6 text-center">
                   <div>
                     <RiCheckLine className="mx-auto h-16 w-16 text-green-400 mb-4" />
-                    <h4 className="text-xl font-medium text-white mb-2">Ready for Secure Import</h4>
+                    <h4 className="text-xl font-medium text-white mb-2">Ready to Import</h4>
                     <p className="text-gray-400">
-                      {mappedItems.length} validated items will be securely added to your inventory
+                      {mappedItems.length} items will be added to your inventory
                     </p>
                   </div>
 
@@ -840,13 +894,13 @@ export default function ExcelImporterModal({ isOpen, onClose, onItemsImported })
                       onClick={() => setCurrentStep('preview')}
                       className="px-6 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700"
                     >
-                      Back to Preview
+                      Back to Review
                     </button>
                     <button
                       onClick={handleConfirmImport}
                       className="px-8 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
                     >
-                      Securely Import {mappedItems.length} Items
+                      Import {mappedItems.length} Items
                     </button>
                   </div>
                 </div>
