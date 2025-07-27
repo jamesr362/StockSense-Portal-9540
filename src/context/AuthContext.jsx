@@ -30,7 +30,6 @@ export function AuthProvider({children}) {
   const initializeAuth = async () => {
     try {
       console.log('===AuthContext Debug===');
-      
       // Check for valid session first
       const session = validateSession();
       if (session && session.user) {
@@ -71,21 +70,21 @@ export function AuthProvider({children}) {
     console.log('Login called with:', userData);
     console.log('Setting user role:', userData.role);
     console.log('========================');
-    
+
     // Add default subscription plan if not provided
     const userWithPlan = {
       ...userData,
       subscriptionPlan: userData.subscriptionPlan || 'free', // Default to free plan
       subscriptionStatus: userData.subscriptionStatus || 'active'
     };
-    
+
     // Create secure session
     createSession(userWithPlan);
     setUser(userWithPlan);
-    
+
     // Keep legacy localStorage for backward compatibility
     localStorage.setItem('userEmail', userWithPlan.email);
-    
+
     logSecurityEvent('SESSION_CREATED', {
       userEmail: userWithPlan.email,
       role: userWithPlan.role,
