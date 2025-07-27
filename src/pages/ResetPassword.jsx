@@ -16,7 +16,7 @@ export default function ResetPassword() {
   const [validationErrors, setValidationErrors] = useState({});
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
+  
   const token = searchParams.get('token');
   const email = searchParams.get('email');
 
@@ -44,18 +44,18 @@ export default function ResetPassword() {
 
   const validateForm = () => {
     const errors = {};
-
+    
     // Password validation
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.isValid) {
       errors.password = passwordValidation.errors[0]; // Show first error
     }
-
+    
     // Confirm password validation
     if (password !== confirmPassword) {
       errors.confirmPassword = 'Passwords do not match';
     }
-
+    
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -63,25 +63,25 @@ export default function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
+    
     // Validate form
     if (!validateForm()) {
       setError('Please correct the errors below');
       return;
     }
-
+    
     setIsLoading(true);
-
+    
     try {
       // Reset password
       await resetPassword(token, email, password);
-
+      
       // Log the event
       logSecurityEvent('PASSWORD_RESET_SUCCESS', { email });
-
+      
       // Show success message
       setSuccess(true);
-
+      
       // Redirect to login after 3 seconds
       setTimeout(() => {
         navigate('/login');
@@ -89,7 +89,10 @@ export default function ResetPassword() {
     } catch (error) {
       console.error('Password reset error:', error);
       setError(error.message || 'An error occurred. Please try again.');
-      logSecurityEvent('PASSWORD_RESET_ERROR', { email, error: error.message });
+      logSecurityEvent('PASSWORD_RESET_ERROR', { 
+        email,
+        error: error.message
+      });
     } finally {
       setIsLoading(false);
     }

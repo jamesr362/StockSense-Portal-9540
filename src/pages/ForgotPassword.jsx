@@ -15,30 +15,30 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
+    
     try {
       // Sanitize input
       const sanitizedEmail = sanitizeInput(email.toLowerCase().trim());
-
+      
       // Validate email format
       if (!validateEmail(sanitizedEmail)) {
         setError('Please enter a valid email address');
         logSecurityEvent('INVALID_EMAIL_FORMAT', { email: sanitizedEmail });
         return;
       }
-
+      
       // Request password reset
       await requestPasswordReset(sanitizedEmail);
-
+      
       // Log the event
       logSecurityEvent('PASSWORD_RESET_REQUESTED', { email: sanitizedEmail });
-
+      
       // Show success message
       setSuccess(true);
     } catch (error) {
       console.error('Password reset request error:', error);
       setError(error.message || 'An error occurred. Please try again later.');
-      logSecurityEvent('PASSWORD_RESET_REQUEST_ERROR', {
+      logSecurityEvent('PASSWORD_RESET_REQUEST_ERROR', { 
         email: sanitizeInput(email),
         error: error.message
       });
