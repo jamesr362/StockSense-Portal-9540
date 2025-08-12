@@ -1,20 +1,18 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import {Routes, Route, Navigate} from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
 import Inventory from './pages/Inventory';
 import ReceiptScanner from './pages/ReceiptScanner';
 import ExcelImporter from './pages/ExcelImporter';
 import Admin from './pages/Admin';
 import PlatformAdmin from './pages/PlatformAdmin';
 import Settings from './pages/Settings';
-import SubscriptionPage from './pages/SubscriptionPage';
-import CheckoutPage from './pages/CheckoutPage';
+import SubscriptionManagement from './pages/SubscriptionManagement';
+import Pricing from './pages/Pricing';
 import PaymentSuccess from './pages/PaymentSuccess';
-import { AuthProvider } from './context/AuthContext';
+import {AuthProvider} from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
@@ -26,20 +24,42 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="receipt-scanner" element={<ReceiptScanner />} />
             <Route path="excel-importer" element={<ExcelImporter />} />
             <Route path="settings/*" element={<Settings />} />
-            <Route path="subscription" element={<SubscriptionPage />} />
-            <Route path="payment-success" element={<PaymentSuccess />} />
-            <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
-            <Route path="platform-admin" element={<PlatformAdminRoute><PlatformAdmin /></PlatformAdminRoute>} />
+            <Route path="subscription" element={<SubscriptionManagement />} />
+            
+            <Route
+              path="admin"
+              element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              }
+            />
+            
+            <Route
+              path="platform-admin"
+              element={
+                <PlatformAdminRoute>
+                  <PlatformAdmin />
+                </PlatformAdminRoute>
+              }
+            />
           </Route>
         </Routes>
       </AuthProvider>

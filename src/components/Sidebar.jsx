@@ -1,20 +1,10 @@
-import { NavLink } from 'react-router-dom';
-import { 
-  RiDashboardLine, 
-  RiStore2Line, 
-  RiCloseLine, 
-  RiAdminLine, 
-  RiGlobalLine, 
-  RiScanLine, 
-  RiFileExcelLine, 
-  RiSettingsLine, 
-  RiPriceTag3Line 
-} from 'react-icons/ri';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
+import {NavLink} from 'react-router-dom';
+import {RiDashboardLine, RiStore2Line, RiCloseLine, RiAdminLine, RiGlobalLine, RiScanLine, RiFileExcelLine, RiSettingsLine, RiMoneyDollarCircleLine} from 'react-icons/ri';
+import {motion, AnimatePresence} from 'framer-motion';
+import {useAuth} from '../context/AuthContext';
 
-export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
-  const { user } = useAuth();
+export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
+  const {user} = useAuth();
 
   console.log('===Sidebar Debug===');
   console.log('Current user:', user);
@@ -27,32 +17,20 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
   const getNavigation = () => {
     if (user?.role === 'platformadmin') {
       return [
-        { name: 'Platform Admin', to: '/platform-admin', icon: RiGlobalLine },
-        { name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine },
-        { name: 'Inventory', to: '/inventory', icon: RiStore2Line },
-        { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine },
-        { name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine },
-        { name: 'Subscription', to: '/subscription', icon: RiPriceTag3Line },
-        { name: 'Settings', to: '/settings', icon: RiSettingsLine }
+        {name: 'Platform Admin', to: '/platform-admin', icon: RiGlobalLine}
       ];
     } else if (user?.role === 'admin') {
       return [
-        { name: 'Admin Panel', to: '/admin', icon: RiAdminLine },
-        { name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine },
-        { name: 'Inventory', to: '/inventory', icon: RiStore2Line },
-        { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine },
-        { name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine },
-        { name: 'Subscription', to: '/subscription', icon: RiPriceTag3Line },
-        { name: 'Settings', to: '/settings', icon: RiSettingsLine }
+        {name: 'Admin Panel', to: '/admin', icon: RiAdminLine}
       ];
     } else {
       return [
-        { name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine },
-        { name: 'Inventory', to: '/inventory', icon: RiStore2Line },
-        { name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine },
-        { name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine },
-        { name: 'Subscription', to: '/subscription', icon: RiPriceTag3Line },
-        { name: 'Settings', to: '/settings', icon: RiSettingsLine }
+        {name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine},
+        {name: 'Inventory', to: '/inventory', icon: RiStore2Line},
+        {name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine},
+        {name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine},
+        {name: 'Pricing', to: '/pricing', icon: RiMoneyDollarCircleLine},
+        {name: 'Settings', to: '/settings', icon: RiSettingsLine}
       ];
     }
   };
@@ -90,10 +68,10 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
     <AnimatePresence>
       {isMobileMenuOpen && (
         <motion.div
-          initial={{ x: -280 }}
-          animate={{ x: 0 }}
-          exit={{ x: -280 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          initial={{x: -280}}
+          animate={{x: 0}}
+          exit={{x: -280}}
+          transition={{type: "spring", stiffness: 300, damping: 30}}
           className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-gray-800 shadow-xl lg:translate-x-0 lg:static lg:inset-0"
         >
           {/* Mobile close button */}
@@ -120,7 +98,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({ isActive }) =>
+                className={({isActive}) =>
                   `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-gray-900 text-white shadow-sm'
@@ -185,7 +163,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({ isActive }) =>
+                className={({isActive}) =>
                   `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-gray-900 text-white shadow-sm'

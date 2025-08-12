@@ -1,45 +1,12 @@
-// Supabase database functions with safe imports
-let supabase = null;
-
-// Initialize Supabase only if available
-const initSupabase = async () => {
-  try {
-    const SUPABASE_URL = 'https://<PROJECT-ID>.supabase.co';
-    const SUPABASE_ANON_KEY = '<ANON_KEY>';
-
-    if (SUPABASE_URL !== 'https://<PROJECT-ID>.supabase.co' && SUPABASE_ANON_KEY !== '<ANON_KEY>') {
-      const { createClient } = await import('@supabase/supabase-js');
-      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true
-        }
-      });
-      return true;
-    }
-    return false;
-  } catch (error) {
-    console.warn('Supabase initialization failed:', error);
-    return false;
-  }
-};
+// Supabase database functions with safe imports 
+import { supabase } from '../lib/supabase';
 
 export const supabaseAvailable = () => {
   return supabase !== null;
 };
 
-// Initialize on first use
-let initPromise = null;
-const ensureSupabase = async () => {
-  if (!initPromise) {
-    initPromise = initSupabase();
-  }
-  return await initPromise;
-};
-
 // Users table operations
 export const createUserSupabase = async (userData) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -48,7 +15,6 @@ export const createUserSupabase = async (userData) => {
     // Determine user role based on email
     let role = 'user';
     const email = userData.email.toLowerCase();
-    
     if (email === 'platformadmin@trackio.com') {
       role = 'platformadmin';
     } else if (email.endsWith('@admin')) {
@@ -77,6 +43,9 @@ export const createUserSupabase = async (userData) => {
       throw error;
     }
 
+    // Create a default subscription for new users
+    await createDefaultSubscription(email);
+
     return {
       email: data.email,
       businessName: data.business_name,
@@ -90,8 +59,38 @@ export const createUserSupabase = async (userData) => {
   }
 };
 
+// Create a default Professional subscription for new users
+export const createDefaultSubscription = async (userEmail) => {
+  if (!supabaseAvailable()) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .insert([
+        {
+          user_email: userEmail,
+          stripe_customer_id: `cus_${Math.random().toString(36).substring(2, 15)}`,
+          stripe_subscription_id: `sub_${Math.random().toString(36).substring(2, 15)}`,
+          plan_id: 'price_1RtpsuEw1FLYKy8hvxTrRpwe', // Professional plan
+          status: 'active',
+          current_period_start: new Date().toISOString(),
+          current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString(), // 30 days from now
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ]);
+
+    if (error) {
+      console.error('Error creating default subscription:', error);
+    }
+  } catch (error) {
+    console.error('Error creating default subscription:', error);
+  }
+};
+
 export const getUserByEmailSupabase = async (email) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -125,7 +124,6 @@ export const getUserByEmailSupabase = async (email) => {
 };
 
 export const getAllUsersSupabase = async () => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -133,7 +131,7 @@ export const getAllUsersSupabase = async () => {
   try {
     const { data, error } = await supabase
       .from('users_tb2k4x9p1m')
-      .select('email, business_name, role, created_at, last_login')
+      .select('email,business_name,role,created_at,last_login')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -152,7 +150,6 @@ export const getAllUsersSupabase = async () => {
 };
 
 export const deleteUserSupabase = async (email) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -162,6 +159,15 @@ export const deleteUserSupabase = async (email) => {
   }
 
   try {
+    // Delete subscriptions first
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .delete()
+      .eq('user_email', email.toLowerCase());
+
+    if (subscriptionError) throw subscriptionError;
+
+    // Delete inventory items
     const { error: inventoryError } = await supabase
       .from('inventory_tb2k4x9p1m')
       .delete()
@@ -169,6 +175,7 @@ export const deleteUserSupabase = async (email) => {
 
     if (inventoryError) throw inventoryError;
 
+    // Delete user
     const { error: userError } = await supabase
       .from('users_tb2k4x9p1m')
       .delete()
@@ -184,7 +191,6 @@ export const deleteUserSupabase = async (email) => {
 };
 
 export const updateUserRoleSupabase = async (email, newRole) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -204,7 +210,7 @@ export const updateUserRoleSupabase = async (email, newRole) => {
   try {
     const { data, error } = await supabase
       .from('users_tb2k4x9p1m')
-      .update({ 
+      .update({
         role: newRole,
         updated_at: new Date().toISOString()
       })
@@ -228,7 +234,6 @@ export const updateUserRoleSupabase = async (email, newRole) => {
 };
 
 export const updateUserLastLoginSupabase = async (email) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     return;
   }
@@ -247,7 +252,6 @@ export const updateUserLastLoginSupabase = async (email) => {
 
 // Inventory table operations
 export const getInventoryItemsSupabase = async (userEmail) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -280,7 +284,6 @@ export const getInventoryItemsSupabase = async (userEmail) => {
 };
 
 export const addInventoryItemSupabase = async (itemData, userEmail) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -326,7 +329,6 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
 };
 
 export const updateInventoryItemSupabase = async (itemData, userEmail) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -370,7 +372,6 @@ export const updateInventoryItemSupabase = async (itemData, userEmail) => {
 };
 
 export const deleteInventoryItemSupabase = async (itemId, userEmail) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -392,7 +393,6 @@ export const deleteInventoryItemSupabase = async (itemId, userEmail) => {
 };
 
 export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -430,8 +430,82 @@ export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
   }
 };
 
+// Subscription operations
+export const getUserSubscriptionSupabase = async (userEmail) => {
+  if (!supabaseAvailable()) {
+    throw new Error('Supabase not available');
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*')
+      .eq('user_email', userEmail.toLowerCase())
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      stripeCustomerId: data.stripe_customer_id,
+      stripeSubscriptionId: data.stripe_subscription_id,
+      planId: data.plan_id,
+      status: data.status,
+      currentPeriodStart: data.current_period_start,
+      currentPeriodEnd: data.current_period_end,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  } catch (error) {
+    console.error('Error getting subscription from Supabase:', error);
+    throw error;
+  }
+};
+
+export const updateUserSubscriptionSupabase = async (userEmail, subscriptionData) => {
+  if (!supabaseAvailable()) {
+    throw new Error('Supabase not available');
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .update({
+        plan_id: subscriptionData.planId,
+        status: subscriptionData.status,
+        stripe_subscription_id: subscriptionData.stripeSubscriptionId,
+        current_period_end: subscriptionData.currentPeriodEnd,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_email', userEmail.toLowerCase())
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      id: data.id,
+      stripeCustomerId: data.stripe_customer_id,
+      stripeSubscriptionId: data.stripe_subscription_id,
+      planId: data.plan_id,
+      status: data.status,
+      currentPeriodStart: data.current_period_start,
+      currentPeriodEnd: data.current_period_end,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  } catch (error) {
+    console.error('Error updating subscription in Supabase:', error);
+    throw error;
+  }
+};
+
 export const getPlatformStatsSupabase = async () => {
-  await ensureSupabase();
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
@@ -439,7 +513,7 @@ export const getPlatformStatsSupabase = async () => {
   try {
     const { data: users, error: usersError } = await supabase
       .from('users_tb2k4x9p1m')
-      .select('email, business_name, role, created_at, last_login');
+      .select('email,business_name,role,created_at,last_login');
 
     if (usersError) throw usersError;
 
@@ -448,6 +522,12 @@ export const getPlatformStatsSupabase = async () => {
       .select('id');
 
     if (inventoryError) throw inventoryError;
+    
+    const { data: subscriptions, error: subscriptionsError } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*');
+      
+    if (subscriptionsError) throw subscriptionsError;
 
     const stats = {
       totalUsers: users.length,
@@ -455,6 +535,7 @@ export const getPlatformStatsSupabase = async () => {
       totalRegularUsers: users.filter(u => u.role === 'user').length,
       totalPlatformAdmins: users.filter(u => u.role === 'platformadmin').length,
       totalInventoryItems: inventoryItems.length,
+      totalActiveSubscriptions: subscriptions.filter(s => s.status === 'active').length,
       recentUsers: users
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         .slice(0, 5)

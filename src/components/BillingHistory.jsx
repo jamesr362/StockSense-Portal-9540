@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { RiDownloadLine, RiEyeLine, RiCalendarLine, RiMoneyDollarCircleLine } from 'react-icons/ri';
+import { 
+  RiDownloadLine, 
+  RiEyeLine, 
+  RiCalendarLine,
+  RiCreditCardLine 
+} from 'react-icons/ri';
 import { formatPrice } from '../lib/stripe';
 
 export default function BillingHistory({ customerId }) {
   const [billingHistory, setBillingHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     if (customerId) {
@@ -17,80 +22,76 @@ export default function BillingHistory({ customerId }) {
   const loadBillingHistory = async () => {
     try {
       setLoading(true);
-      setError(null);
       
-      // Mock billing history data
+      // Simulate API call with a delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Mock billing history - replace with actual Stripe API call
       const mockHistory = [
         {
-          id: 'in_demo1',
-          date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          amount: 1200,
-          currency: 'gbp',
+          id: 'in_1234567890',
+          date: '2024-01-15',
+          description: 'Professional Plan - Monthly',
+          amount: 35.00,
           status: 'paid',
-          plan: 'Professional Plan',
-          period: 'Jan 1 - Jan 31, 2024',
-          invoice_pdf: '/invoices/demo1.pdf'
+          invoice_pdf: 'https://pay.stripe.com/invoice/...',
+          period_start: '2024-01-15',
+          period_end: '2024-02-15'
         },
         {
-          id: 'in_demo2',
-          date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-          amount: 1200,
-          currency: 'gbp',
+          id: 'in_0987654321',
+          date: '2023-12-15',
+          description: 'Professional Plan - Monthly',
+          amount: 35.00,
           status: 'paid',
-          plan: 'Professional Plan',
-          period: 'Dec 1 - Dec 31, 2023',
-          invoice_pdf: '/invoices/demo2.pdf'
+          invoice_pdf: 'https://pay.stripe.com/invoice/...',
+          period_start: '2023-12-15',
+          period_end: '2024-01-15'
         },
         {
-          id: 'in_demo3',
-          date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
-          amount: 1200,
-          currency: 'gbp',
+          id: 'in_1122334455',
+          date: '2023-11-15',
+          description: 'Basic Plan - Monthly',
+          amount: 15.00,
           status: 'paid',
-          plan: 'Professional Plan',
-          period: 'Nov 1 - Nov 30, 2023',
-          invoice_pdf: '/invoices/demo3.pdf'
+          invoice_pdf: 'https://pay.stripe.com/invoice/...',
+          period_start: '2023-11-15',
+          period_end: '2023-12-15'
         }
       ];
-
+      
       setBillingHistory(mockHistory);
-    } catch (err) {
-      setError(err.message);
+    } catch (error) {
+      console.error('Error loading billing history:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownloadInvoice = (invoice) => {
-    // Mock download functionality
-    console.log('Downloading invoice:', invoice.id);
-    
-    // Create a mock invoice file
-    const invoiceContent = `
-Invoice ${invoice.id}
-Date: ${invoice.date.toLocaleDateString()}
-Plan: ${invoice.plan}
-Period: ${invoice.period}
-Amount: ${formatPrice(invoice.amount / 100)}
-Status: ${invoice.status}
-`;
-
-    const blob = new Blob([invoiceContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `invoice-${invoice.id}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const filteredHistory = billingHistory.filter(invoice => {
+    if (filter === 'all') return true;
+    return invoice.status === filter;
+  });
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'paid':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'failed':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
   };
 
   if (loading) {
@@ -104,27 +105,51 @@ Status: ${invoice.status}
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg">
       <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-        <h3 className="text-lg leading-6 font-medium text-white">Billing History</h3>
-        <p className="mt-1 max-w-2xl text-sm text-gray-400">
-          Your recent invoices and payment history
-        </p>
-      </div>
-      <div className="px-4 py-5 sm:p-6">
-        {error && (
-          <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-md">
-            <p className="text-red-300 text-sm">{error}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg leading-6 font-medium text-white">Billing History</h3>
+            <p className="mt-1 max-w-2xl text-sm text-gray-400">
+              View and download your invoices and payment history
+            </p>
           </div>
-        )}
-        
-        {billingHistory.length === 0 ? (
+          <RiCreditCardLine className="h-6 w-6 text-gray-400" />
+        </div>
+      </div>
+
+      {/* Filter Controls */}
+      <div className="px-4 py-3 border-b border-gray-700">
+        <div className="flex space-x-2">
+          {['all', 'paid', 'pending', 'failed'].map((status) => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                filter === status
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              {status.charAt(0).toUpperCase() + status.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 py-5 sm:p-6">
+        {filteredHistory.length === 0 ? (
           <div className="text-center py-8">
-            <RiMoneyDollarCircleLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+            <RiCalendarLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">No billing history</h3>
-            <p className="text-gray-400">Your invoices will appear here once you have an active subscription.</p>
+            <p className="text-gray-400">
+              {filter === 'all' 
+                ? 'Your billing history will appear here once you have transactions'
+                : `No ${filter} transactions found`
+              }
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
-            {billingHistory.map((invoice) => (
+            {filteredHistory.map((invoice) => (
               <motion.div
                 key={invoice.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -133,59 +158,50 @@ Status: ${invoice.status}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center">
-                      <RiCalendarLine className="h-5 w-5 text-gray-400 mr-2" />
-                      <span className="text-white font-medium">
-                        {invoice.date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
-                      </span>
-                      <span className={`ml-3 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getStatusColor(invoice.status)}`}>
-                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-white font-medium">{invoice.description}</h4>
+                      <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(invoice.status)}`}>
+                        {invoice.status}
                       </span>
                     </div>
-                    <div className="mt-2 text-sm text-gray-400">
-                      <p>{invoice.plan} - {invoice.period}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-400">
+                      <div>
+                        <span className="text-gray-500">Date:</span>
+                        <span className="text-white ml-1">{formatDate(invoice.date)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Amount:</span>
+                        <span className="text-white ml-1">{formatPrice(invoice.amount)}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Period:</span>
+                        <span className="text-white ml-1">
+                          {formatDate(invoice.period_start)} - {formatDate(invoice.period_end)}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-right">
-                      <div className="text-lg font-semibold text-white">
-                        {formatPrice(invoice.amount / 100)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {invoice.currency.toUpperCase()}
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleDownloadInvoice(invoice)}
-                        className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
-                        title="Download Invoice"
-                      >
-                        <RiDownloadLine className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDownloadInvoice(invoice)}
-                        className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
-                        title="View Invoice"
-                      >
-                        <RiEyeLine className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <div className="flex items-center space-x-2 ml-4">
+                    <button
+                      onClick={() => window.open(invoice.invoice_pdf, '_blank')}
+                      className="text-gray-400 hover:text-gray-300 p-2 rounded-md hover:bg-gray-700"
+                      title="View invoice"
+                    >
+                      <RiEyeLine className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => window.open(invoice.invoice_pdf, '_blank')}
+                      className="text-gray-400 hover:text-gray-300 p-2 rounded-md hover:bg-gray-700"
+                      title="Download invoice"
+                    >
+                      <RiDownloadLine className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </motion.div>
             ))}
           </div>
         )}
-        
-        <div className="mt-6 text-center">
-          <p className="text-gray-400 text-sm">
-            Need help with billing? Contact our support team at{' '}
-            <a href="mailto:billing@trackio.com" className="text-primary-400 hover:text-primary-300">
-              billing@trackio.com
-            </a>
-          </p>
-        </div>
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiPriceTag3Line} from 'react-icons/ri';
+import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiCreditCardLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import SecurityAuditLog from '../components/SecurityAuditLog';
-import SubscriptionManager from '../components/SubscriptionManager';
+import SubscriptionManagement from './SubscriptionManagement';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
@@ -11,18 +11,18 @@ export default function Settings() {
 
   const tabs = [
     {id: 'general', name: 'General', icon: RiStore2Line},
+    {id: 'subscription', name: 'Subscription', icon: RiCreditCardLine},
     {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
     {id: 'security', name: 'Security', icon: RiLockLine},
-    {id: 'billing', name: 'Subscription & Billing', icon: RiPriceTag3Line},
     {id: 'team', name: 'Team', icon: RiUser3Line},
   ];
 
   return (
     <div>
       <motion.div
-        initial={{opacity: 0, y: 20}}
-        animate={{opacity: 1, y: 0}}
-        transition={{duration: 0.5}}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
       >
         <div className="sm:flex sm:items-center mb-8">
           <div className="sm:flex-auto">
@@ -56,9 +56,9 @@ export default function Settings() {
           <div className="mt-8">
             {activeTab === 'general' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -111,11 +111,21 @@ export default function Settings() {
               </motion.div>
             )}
 
+            {activeTab === 'subscription' && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <SubscriptionManagement />
+              </motion.div>
+            )}
+
             {activeTab === 'notifications' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -167,34 +177,20 @@ export default function Settings() {
 
             {activeTab === 'security' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
                 <SecurityAuditLog userEmail={user?.email} />
               </motion.div>
             )}
 
-            {activeTab === 'billing' && (
-              <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
-                className="space-y-6"
-              >
-                <SubscriptionManager
-                  customerId="cus_mock123"
-                  onSubscriptionChange={(data) => console.log('Subscription changed:', data)}
-                />
-              </motion.div>
-            )}
-
             {activeTab === 'team' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -206,13 +202,7 @@ export default function Settings() {
                   </p>
                   <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
                     <p className="text-blue-300 text-sm">
-                      <strong>Current Plan:</strong> {user?.subscriptionPlan || 'Free'} Plan - Supports up to{' '}
-                      {user?.subscriptionPlan === 'power' 
-                        ? 'unlimited' 
-                        : user?.subscriptionPlan === 'pro' 
-                        ? '3' 
-                        : '1'
-                      } team members
+                      <strong>Current Plan:</strong> Professional Plan - Supports up to 10 team members
                     </p>
                   </div>
                 </div>

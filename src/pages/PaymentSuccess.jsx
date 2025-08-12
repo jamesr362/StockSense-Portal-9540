@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { RiCheckLine, RiArrowRightLine } from 'react-icons/ri';
 import { logSecurityEvent } from '../utils/security';
+import { SUBSCRIPTION_PLANS } from '../lib/stripe';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -12,11 +13,9 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     const sessionId = searchParams.get('session_id');
-    
     if (sessionId) {
       // Retrieve session details
       fetchSessionDetails(sessionId);
-      
       // Log successful payment
       logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', { sessionId });
     } else {
@@ -26,40 +25,44 @@ export default function PaymentSuccess() {
 
   const fetchSessionDetails = async (sessionId) => {
     try {
-      // In demo mode, return mock data
-      if (process.env.NODE_ENV !== 'production') {
-        setTimeout(() => {
-          setSessionDetails({
-            plan_name: 'Professional Plan',
-            amount_total: 1200, // £12.00 in pence
-            currency: 'gbp'
-          });
-          setLoading(false);
-        }, 1000);
-        return;
-      }
-
-      // Production implementation
-      const response = await fetch(`/api/stripe/session/${sessionId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const details = await response.json();
-        setSessionDetails(details);
-      }
+      // Since we don't have a real backend API, we'll mock the session details
+      // In a real app, you would fetch these details from your server
+      const mockDetails = {
+        plan_name: 'Professional',
+        price_id: 'price_1RtpsuEw1FLYKy8hvxTrRpwe',
+        amount_total: 7900, // $79.00 in cents
+        currency: 'gbp',
+        customer_email: 'customer@example.com',
+        subscription_id: 'sub_' + Math.random().toString(36).substring(2, 15)
+      };
+      
+      setSessionDetails(mockDetails);
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching session details:', error);
-    } finally {
       setLoading(false);
     }
   };
 
   const handleContinue = () => {
     navigate('/dashboard');
+  };
+
+  // Find plan details based on session
+  const getPlanDetails = () => {
+    if (!sessionDetails?.price_id) return null;
+    
+    return Object.values(SUBSCRIPTION_PLANS).find(
+      plan => plan.priceId === sessionDetails.price_id
+    ) || {
+      name: sessionDetails.plan_name || 'Professional',
+      features: [
+        'Unlimited inventory items',
+        'Advanced analytics',
+        '10 team members',
+        'Priority support'
+      ]
+    };
   };
 
   if (loading) {
@@ -69,6 +72,8 @@ export default function PaymentSuccess() {
       </div>
     );
   }
+
+  const planDetails = getPlanDetails();
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
@@ -120,7 +125,7 @@ export default function PaymentSuccess() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Plan:</span>
-                <span className="text-white">{sessionDetails.plan_name}</span>
+                <span className="text-white">{planDetails?.name || 'Professional'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Amount:</span>
@@ -139,19 +144,21 @@ export default function PaymentSuccess() {
           </motion.div>
         )}
 
-        {/* Next Steps */}
+        {/* Plan Features */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
           className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6"
         >
-          <h3 className="text-blue-400 font-semibold mb-2">What's Next?</h3>
+          <h3 className="text-blue-400 font-semibold mb-2">Your {planDetails?.name} Plan Includes:</h3>
           <ul className="text-blue-300 text-sm space-y-1 text-left">
-            <li>• Access your enhanced dashboard</li>
-            <li>• Explore premium features</li>
-            <li>• Invite team members</li>
-            <li>• Set up your inventory</li>
+            {planDetails?.features.slice(0, 4).map((feature, index) => (
+              <li key={index} className="flex items-center">
+                <RiCheckLine className="h-4 w-4 mr-2 text-green-400" />
+                {feature}
+              </li>
+            ))}
           </ul>
         </motion.div>
 
@@ -166,8 +173,7 @@ export default function PaymentSuccess() {
             onClick={handleContinue}
             className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
           >
-            Continue to Dashboard
-            <RiArrowRightLine className="h-5 w-5 ml-2" />
+            Continue to Dashboard <RiArrowRightLine className="h-5 w-5 ml-2" />
           </button>
           <button
             onClick={() => navigate('/settings/billing')}
@@ -186,10 +192,7 @@ export default function PaymentSuccess() {
         >
           <p className="text-gray-400 text-sm">
             Need help? Contact our support team at{' '}
-            <a
-              href="mailto:support@trackio.com"
-              className="text-primary-400 hover:text-primary-300"
-            >
+            <a href="mailto:support@trackio.com" className="text-primary-400 hover:text-primary-300">
               support@trackio.com
             </a>
           </p>

@@ -1,203 +1,158 @@
-import {motion} from 'framer-motion';
-import {useState,useEffect,useCallback} from 'react';
-import {RiAddLine,RiSearchLine,RiEditLine,RiDeleteBin6Line,RiCalendarLine,RiStore2Line,RiScanLine,RiAlertLine,RiArrowRightLine} from 'react-icons/ri';
-import {Link,useNavigate} from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine } from 'react-icons/ri';
+import { Link } from 'react-router-dom';
 import AddItemModal from '../components/AddItemModal';
 import EditItemModal from '../components/EditItemModal';
 import DeleteItemModal from '../components/DeleteItemModal';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
-import {getInventoryItems,addInventoryItem,updateInventoryItem,deleteInventoryItem,searchInventoryItems} from '../services/db';
-import {useAuth} from '../context/AuthContext';
-import {trackUsage,canPerformAction,isAtOrOverLimit} from '../lib/stripe';
+import { getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, searchInventoryItems } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 
 export default function Inventory() {
-  const [searchTerm,setSearchTerm]=useState('');
-  const [isAddModalOpen,setIsAddModalOpen]=useState(false);
-  const [isEditModalOpen,setIsEditModalOpen]=useState(false);
-  const [isDeleteModalOpen,setIsDeleteModalOpen]=useState(false);
-  const [isScannerOpen,setIsScannerOpen]=useState(false);
-  const [selectedItem,setSelectedItem]=useState(null);
-  const [inventoryItems,setInventoryItems]=useState([]);
-  const [isLoading,setIsLoading]=useState(true);
-  const [error,setError]=useState(null);
-  const [successMessage,setSuccessMessage]=useState('');
-  const [limitReached,setLimitReached]=useState(false);
-  const {user}=useAuth();
-  const navigate=useNavigate();
-  const userPlan=user?.subscriptionPlan || 'free';
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const { user } = useAuth();
 
-  const loadInventoryItems=useCallback(async ()=> {
+  const loadInventoryItems = useCallback(async () => {
     if (!user?.email) return;
+
     try {
       setIsLoading(true);
       setError(null);
-      const items=await getInventoryItems(user.email);
+      const items = await getInventoryItems(user.email);
       setInventoryItems(items);
-
-      // Track item count in localStorage for limit checking
-      const itemCount=items?.length || 0;
-      trackUsage('inventory_items',0);// Update count without incrementing
-      localStorage.setItem('usage_inventory_items',itemCount.toString());
-
-      // Check if user has reached their inventory limit
-      if (isAtOrOverLimit(userPlan,'inventoryItems')) {
-        setLimitReached(true);
-      } else {
-        setLimitReached(false);
-      }
     } catch (error) {
-      console.error('Error loading inventory items:',error);
+      console.error('Error loading inventory items:', error);
       setError('Failed to load inventory items');
     } finally {
       setIsLoading(false);
     }
-  },[user?.email,userPlan]);
+  }, [user?.email]);
 
-  useEffect(()=> {
+  useEffect(() => {
     loadInventoryItems();
-  },[loadInventoryItems]);
+  }, [loadInventoryItems]);
 
-  const handleAddItem=async (newItem)=> {
+  const handleAddItem = async (newItem) => {
     if (!user?.email) return;
-
-    // Check if user can add more items based on their plan
-    if (!canPerformAction(userPlan,'add_inventory_item')) {
-      setError('You have reached your inventory item limit. Please upgrade your plan to add more items.');
-      return;
-    }
 
     try {
       setError(null);
-      await addInventoryItem(newItem,user.email);
+      await addInventoryItem(newItem, user.email);
       await loadInventoryItems();
       setIsAddModalOpen(false);
       setSuccessMessage('Item added successfully!');
-      setTimeout(()=> setSuccessMessage(''),3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error adding inventory item:',error);
+      console.error('Error adding inventory item:', error);
       setError('Failed to add item');
     }
   };
 
-  const handleScannedItems=async (scannedItems)=> {
+  const handleScannedItems = async (scannedItems) => {
     if (!user?.email || !scannedItems.length) return;
-
-    // Check if user can scan receipts based on their plan
-    if (!canPerformAction(userPlan,'scan_receipt')) {
-      setError('You have reached your receipt scan limit. Please upgrade your plan to scan more receipts.');
-      return;
-    }
 
     try {
       setError(null);
-      let addedCount=0;
-      let failedCount=0;
+      let addedCount = 0;
 
-      // Check if adding these items would exceed the limit
-      const currentItems=await getInventoryItems(user.email);
-      const itemLimit=userPlan==='free' ? 10 : (userPlan==='pro' ? 2500 : -1);
-      
-      // Use let instead of const for remainingSlots since it will be modified
-      let remainingSlots=itemLimit===-1 ? Infinity : itemLimit - currentItems.length;
-
-      // Add each scanned item to inventory, respecting the limit
+      // Add each scanned item to inventory
       for (const item of scannedItems) {
-        if (remainingSlots > 0 || itemLimit===-1) {
-          try {
-            await addInventoryItem(item,user.email);
-            addedCount++;
-            if (itemLimit !==-1) remainingSlots--;
-          } catch (itemError) {
-            console.error('Error adding scanned item:',itemError);
-            failedCount++;
-          }
-        } else {
-          failedCount++;
+        try {
+          await addInventoryItem(item, user.email);
+          addedCount++;
+        } catch (itemError) {
+          console.error('Error adding scanned item:', itemError);
         }
       }
-
-      // Track receipt scan usage
-      trackUsage('receipt_scans_month',1);
 
       await loadInventoryItems();
 
       if (addedCount > 0) {
-        let message=`Successfully added ${addedCount} items from receipt scan!`;
-        if (failedCount > 0) {
-          message +=` (${failedCount} items couldn't be added due to your plan limits)`;
-        }
-        setSuccessMessage(message);
-        setTimeout(()=> setSuccessMessage(''),5000);
+        setSuccessMessage(`Successfully added ${addedCount} items from receipt scan!`);
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
-        setError('Failed to add items from receipt scan due to plan limits. Please upgrade your plan.');
+        setError('Failed to add items from receipt scan');
       }
     } catch (error) {
-      console.error('Error processing scanned items:',error);
+      console.error('Error processing scanned items:', error);
       setError('Failed to process scanned items');
     }
   };
 
-  const handleEditItem=(item)=> {
+  const handleEditItem = (item) => {
     setSelectedItem(item);
     setIsEditModalOpen(true);
   };
 
-  const handleDeleteItem=(item)=> {
+  const handleDeleteItem = (item) => {
     setSelectedItem(item);
     setIsDeleteModalOpen(true);
   };
 
-  const handleConfirmDelete=async (itemId)=> {
+  const handleConfirmDelete = async (itemId) => {
     if (!user?.email) return;
+
     try {
       setError(null);
-      await deleteInventoryItem(itemId,user.email);
+      await deleteInventoryItem(itemId, user.email);
       await loadInventoryItems();
       setSuccessMessage('Item deleted successfully!');
-      setTimeout(()=> setSuccessMessage(''),3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error deleting inventory item:',error);
+      console.error('Error deleting inventory item:', error);
       setError('Failed to delete item');
     }
   };
 
-  const handleSaveEdit=async (updatedItem)=> {
+  const handleSaveEdit = async (updatedItem) => {
     if (!user?.email) return;
+
     try {
       setError(null);
-      await updateInventoryItem(updatedItem,user.email);
+      await updateInventoryItem(updatedItem, user.email);
       await loadInventoryItems();
       setIsEditModalOpen(false);
       setSelectedItem(null);
       setSuccessMessage('Item updated successfully!');
-      setTimeout(()=> setSuccessMessage(''),3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error updating inventory item:',error);
+      console.error('Error updating inventory item:', error);
       setError('Failed to update item');
     }
   };
 
-  useEffect(()=> {
-    const searchItems=async ()=> {
+  useEffect(() => {
+    const searchItems = async () => {
       if (!user?.email) return;
+
       try {
         setIsLoading(true);
         setError(null);
-        const results=await searchInventoryItems(searchTerm,user.email);
+        const results = await searchInventoryItems(searchTerm, user.email);
         setInventoryItems(results);
       } catch (error) {
-        console.error('Error searching items:',error);
+        console.error('Error searching items:', error);
         setError('Failed to search items');
       } finally {
         setIsLoading(false);
       }
     };
 
-    const debounceSearch=setTimeout(searchItems,300);
-    return ()=> clearTimeout(debounceSearch);
-  },[searchTerm,user?.email]);
+    const debounceSearch = setTimeout(searchItems, 300);
+    return () => clearTimeout(debounceSearch);
+  }, [searchTerm, user?.email]);
 
-  const getStatusColor=(status)=> {
+  const getStatusColor = (status) => {
     switch (status) {
       case 'In Stock': return 'bg-green-100 text-green-800';
       case 'Limited Stock': return 'bg-yellow-100 text-yellow-800';
@@ -206,10 +161,10 @@ export default function Inventory() {
     }
   };
 
-  const formatDate=(dateString)=> {
+  const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
-      return new Date(dateString).toLocaleDateString('en-GB',{
+      return new Date(dateString).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -219,8 +174,8 @@ export default function Inventory() {
     }
   };
 
-  const formatCurrency=(value)=> {
-    return new Intl.NumberFormat('en-GB',{
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: 'GBP',
       minimumFractionDigits: 2,
@@ -231,9 +186,9 @@ export default function Inventory() {
   return (
     <div>
       <motion.div
-        initial={{opacity: 0,y: 20}}
-        animate={{opacity: 1,y: 0}}
-        transition={{duration: 0.5}}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
       >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -253,18 +208,16 @@ export default function Inventory() {
             </Link>
             <button
               type="button"
-              onClick={()=> setIsScannerOpen(true)}
+              onClick={() => setIsScannerOpen(true)}
               className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
-              disabled={!canPerformAction(userPlan,'scan_receipt')}
             >
               <RiScanLine className="mr-2 h-4 w-4" />
               Quick Scan
             </button>
             <button
               type="button"
-              onClick={()=> setIsAddModalOpen(true)}
+              onClick={() => setIsAddModalOpen(true)}
               className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto"
-              disabled={limitReached}
             >
               <RiAddLine className="mr-2 h-4 w-4" />
               Add Item
@@ -272,37 +225,11 @@ export default function Inventory() {
           </div>
         </div>
 
-        {/* Plan Limit Warning */}
-        {limitReached && (
-          <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
-            className="mb-4 rounded-md bg-red-900/50 p-4"
-          >
-            <div className="flex items-start">
-              <RiAlertLine className="h-5 w-5 text-red-400 mr-2 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-red-200">
-                  You've reached your inventory limit of {userPlan==='free' ? '10 items' : '2,500 items'}.
-                </p>
-                <div className="mt-2">
-                  <button
-                    onClick={()=> navigate('/subscription')}
-                    className="inline-flex items-center px-3 py-1 bg-red-600 text-white rounded-md text-sm hover:bg-red-700"
-                  >
-                    Upgrade Plan <RiArrowRightLine className="ml-1 h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {/* Success Message */}
         {successMessage && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="mb-4 rounded-md bg-green-900/50 p-4"
           >
             <div className="text-sm text-green-200">{successMessage}</div>
@@ -312,8 +239,8 @@ export default function Inventory() {
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="mb-4 rounded-md bg-red-900/50 p-4"
           >
             <div className="text-sm text-red-200">{error}</div>
@@ -331,7 +258,7 @@ export default function Inventory() {
               className="block w-full rounded-md border-gray-700 bg-gray-800 pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
               placeholder="Search inventory..."
               value={searchTerm}
-              onChange={(e)=> setSearchTerm(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
@@ -341,7 +268,7 @@ export default function Inventory() {
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
-        ) : inventoryItems.length===0 ? (
+        ) : inventoryItems.length === 0 ? (
           <div className="text-center py-12 bg-gray-800 rounded-lg">
             <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
             <h3 className="text-lg font-medium text-white mb-2">
@@ -350,7 +277,7 @@ export default function Inventory() {
             <p className="text-gray-400 text-sm mb-6">
               {searchTerm ? 'Try adjusting your search terms' : 'Add some items to get started with your inventory'}
             </p>
-            {!searchTerm && !limitReached && (
+            {!searchTerm && (
               <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <Link
                   to="/receipt-scanner"
@@ -360,7 +287,7 @@ export default function Inventory() {
                   Scan Receipt
                 </Link>
                 <button
-                  onClick={()=> setIsAddModalOpen(true)}
+                  onClick={() => setIsAddModalOpen(true)}
                   className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                   <RiAddLine className="mr-2 h-4 w-4" />
@@ -368,58 +295,17 @@ export default function Inventory() {
                 </button>
               </div>
             )}
-            {!searchTerm && limitReached && (
-              <div className="mt-4 p-4 bg-gray-700 rounded-lg max-w-md mx-auto">
-                <p className="text-gray-300 mb-3">
-                  You've reached the {userPlan==='free' ? '10 item' : '2,500 item'} limit of your {userPlan} plan.
-                </p>
-                <button
-                  onClick={()=> navigate('/subscription')}
-                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                >
-                  Upgrade Your Plan <RiArrowRightLine className="ml-1 h-4 w-4" />
-                </button>
-              </div>
-            )}
           </div>
         ) : (
           <>
-            {/* Plan Info Banner */}
-            <motion.div
-              initial={{opacity: 0,y: -10}}
-              animate={{opacity: 1,y: 0}}
-              className="mb-6 p-3 bg-gray-800 rounded-lg border border-gray-700"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <RiStore2Line className="h-5 w-5 text-primary-400 mr-2" />
-                  <span className="text-sm text-gray-300">
-                    {userPlan==='free'
-                      ? `Using ${inventoryItems.length}/10 items (Free Plan)`
-                      : userPlan==='pro'
-                      ? `Using ${inventoryItems.length}/2,500 items (Professional Plan)`
-                      : `Using ${inventoryItems.length} items (Power Plan - Unlimited)`}
-                  </span>
-                </div>
-                {userPlan !=='power' && inventoryItems.length > (userPlan==='free' ? 7 : 2000) && (
-                  <button
-                    onClick={()=> navigate('/subscription')}
-                    className="text-xs text-primary-400 hover:text-primary-300 underline"
-                  >
-                    Upgrade for more capacity
-                  </button>
-                )}
-              </div>
-            </motion.div>
-
             {/* Mobile Card View */}
             <div className="block lg:hidden space-y-4">
-              {inventoryItems.map((item)=> (
+              {inventoryItems.map((item) => (
                 <motion.div
                   key={item.id}
-                  initial={{opacity: 0}}
-                  animate={{opacity: 1}}
-                  transition={{duration: 0.3}}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
                   className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
                 >
                   {/* Card Header */}
@@ -433,13 +319,13 @@ export default function Inventory() {
                       </div>
                       <div className="flex space-x-2 ml-3 flex-shrink-0">
                         <button
-                          onClick={()=> handleEditItem(item)}
+                          onClick={() => handleEditItem(item)}
                           className="p-2 text-blue-400 hover:text-blue-300 hover:bg-gray-700 rounded-md transition-colors"
                         >
                           <RiEditLine className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={()=> handleDeleteItem(item)}
+                          onClick={() => handleDeleteItem(item)}
                           className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-md transition-colors"
                         >
                           <RiDeleteBin6Line className="h-4 w-4" />
@@ -469,11 +355,7 @@ export default function Inventory() {
                         <div className="space-y-3">
                           <div className="flex flex-col">
                             <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Status</span>
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold w-fit ${getStatusColor(
-                                item.status
-                              )}`}
-                            >
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold w-fit ${getStatusColor(item.status)}`}>
                               {item.status}
                             </span>
                           </div>
@@ -502,63 +384,45 @@ export default function Inventory() {
                   <table className="min-w-full divide-y divide-gray-700">
                     <thead className="bg-gray-800">
                       <tr>
-                        <th
-                          className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white sm:pl-6 min-w-[150px]"
-                        >
+                        <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white sm:pl-6 min-w-[150px]">
                           Name
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
                           Category
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[80px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[80px]">
                           Quantity
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
                           Unit Price
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
                           Total Value
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
                           Status
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
                           <div className="flex items-center">
                             <RiCalendarLine className="h-4 w-4 mr-1" />
                             Date Added
                           </div>
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[200px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[200px]">
                           Description
                         </th>
-                        <th
-                          className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]"
-                        >
+                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
                           Actions
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-700 bg-gray-800">
-                      {inventoryItems.map((item)=> (
+                      {inventoryItems.map((item) => (
                         <motion.tr
                           key={item.id}
-                          initial={{opacity: 0}}
-                          animate={{opacity: 1}}
-                          transition={{duration: 0.3}}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
                         >
                           <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-6">
                             <div className="max-w-[150px] truncate" title={item.name}>
@@ -580,11 +444,7 @@ export default function Inventory() {
                             {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
                           </td>
                           <td className="whitespace-nowrap px-3 py-4 text-sm">
-                            <span
-                              className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(
-                                item.status
-                              )}`}
-                            >
+                            <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
                               {item.status}
                             </span>
                           </td>
@@ -599,14 +459,14 @@ export default function Inventory() {
                           <td className="whitespace-nowrap px-3 py-4 text-sm">
                             <div className="flex space-x-2">
                               <button
-                                onClick={()=> handleEditItem(item)}
+                                onClick={() => handleEditItem(item)}
                                 className="text-blue-400 hover:text-blue-300"
                                 title="Edit item"
                               >
                                 <RiEditLine className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={()=> handleDeleteItem(item)}
+                                onClick={() => handleDeleteItem(item)}
                                 className="text-red-400 hover:text-red-300"
                                 title="Delete item"
                               >
@@ -627,13 +487,13 @@ export default function Inventory() {
 
       <AddItemModal
         isOpen={isAddModalOpen}
-        onClose={()=> setIsAddModalOpen(false)}
+        onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddItem}
       />
 
       <EditItemModal
         isOpen={isEditModalOpen}
-        onClose={()=> {
+        onClose={() => {
           setIsEditModalOpen(false);
           setSelectedItem(null);
         }}
@@ -643,7 +503,7 @@ export default function Inventory() {
 
       <DeleteItemModal
         isOpen={isDeleteModalOpen}
-        onClose={()=> {
+        onClose={() => {
           setIsDeleteModalOpen(false);
           setSelectedItem(null);
         }}
@@ -653,7 +513,7 @@ export default function Inventory() {
 
       <ReceiptScannerModal
         isOpen={isScannerOpen}
-        onClose={()=> setIsScannerOpen(false)}
+        onClose={() => setIsScannerOpen(false)}
         onItemsExtracted={handleScannedItems}
       />
     </div>

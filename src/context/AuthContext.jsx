@@ -1,10 +1,10 @@
-import {createContext, useContext, useState, useEffect} from 'react';
-import {getUserByEmail} from '../services/db';
-import {validateSession, createSession, clearSession, logSecurityEvent} from '../utils/security';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { getUserByEmail } from '../services/db';
+import { validateSession, createSession, clearSession, logSecurityEvent } from '../utils/security';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({children}) {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -30,6 +30,7 @@ export function AuthProvider({children}) {
   const initializeAuth = async () => {
     try {
       console.log('===AuthContext Debug===');
+      
       // Check for valid session first
       const session = validateSession();
       if (session && session.user) {
@@ -46,7 +47,7 @@ export function AuthProvider({children}) {
       if (savedEmail) {
         const userData = await getUserByEmail(savedEmail);
         if (userData) {
-          const {password, salt, ...userWithoutPassword} = userData;
+          const { password, salt, ...userWithoutPassword } = userData;
           console.log('Restored user from localStorage:', userWithoutPassword);
           
           // Create new session for legacy users
@@ -70,30 +71,23 @@ export function AuthProvider({children}) {
     console.log('Login called with:', userData);
     console.log('Setting user role:', userData.role);
     console.log('========================');
-
-    // Add default subscription plan if not provided
-    const userWithPlan = {
-      ...userData,
-      subscriptionPlan: userData.subscriptionPlan || 'free', // Default to free plan
-      subscriptionStatus: userData.subscriptionStatus || 'active'
-    };
-
+    
     // Create secure session
-    createSession(userWithPlan);
-    setUser(userWithPlan);
-
+    createSession(userData);
+    setUser(userData);
+    
     // Keep legacy localStorage for backward compatibility
-    localStorage.setItem('userEmail', userWithPlan.email);
-
+    localStorage.setItem('userEmail', userData.email);
+    
     logSecurityEvent('SESSION_CREATED', {
-      userEmail: userWithPlan.email,
-      role: userWithPlan.role,
-      subscriptionPlan: userWithPlan.subscriptionPlan
+      userEmail: userData.email,
+      role: userData.role
     });
   };
 
   const logout = () => {
     console.log('AuthContext - Logging out user');
+    
     if (user) {
       logSecurityEvent('USER_LOGOUT', {
         userEmail: user.email,
@@ -107,7 +101,7 @@ export function AuthProvider({children}) {
   };
 
   const updateUserData = (newData) => {
-    const updatedUser = {...user, ...newData};
+    const updatedUser = { ...user, ...newData };
     setUser(updatedUser);
     
     // Update session
@@ -145,11 +139,10 @@ export function AuthProvider({children}) {
   console.log('===AuthContext Current State===');
   console.log('Current user state:', user);
   console.log('User role:', user?.role);
-  console.log('Subscription plan:', user?.subscriptionPlan);
   console.log('=================================');
 
   return (
-    <AuthContext.Provider value={{user, login, logout, updateUserData}}>
+    <AuthContext.Provider value={{ user, login, logout, updateUserData }}>
       {children}
     </AuthContext.Provider>
   );

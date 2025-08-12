@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { getAllUsers, deleteUser, updateUserRole } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { Navigate } from 'react-router-dom';
-import { RiUserLine, RiAdminLine, RiDeleteBin6Line, RiEditLine, RiShieldCheckLine, RiTeamLine, RiSettings3Line, RiMoneyDollarCircleLine, RiDashboardLine } from 'react-icons/ri';
+import { RiUserLine, RiAdminLine, RiDeleteBin6Line, RiEditLine, RiShieldCheckLine, RiTeamLine, RiSettings3Line } from 'react-icons/ri';
 import DeleteUserModal from '../components/DeleteUserModal';
 import UserRoleModal from '../components/UserRoleModal';
 
@@ -21,7 +21,6 @@ export default function Admin() {
   const tabs = [
     { id: 'users', name: 'User Management', icon: RiTeamLine },
     { id: 'permissions', name: 'Permissions', icon: RiShieldCheckLine },
-    { id: 'payments', name: 'Payment Settings', icon: RiMoneyDollarCircleLine },
     { id: 'system', name: 'System Settings', icon: RiSettings3Line }
   ];
 
@@ -222,13 +221,18 @@ export default function Admin() {
                             </div>
                           </div>
                         </div>
+
                         <div className="p-4">
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Role:</span>
-                              <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                userData.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                              }`}>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                  userData.role === 'admin'
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
                                 {userData.role === 'admin' ? (
                                   <RiAdminLine className="mr-1 h-3 w-3" />
                                 ) : (
@@ -296,9 +300,13 @@ export default function Admin() {
                                 </div>
                               </td>
                               <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                                  userData.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                                }`}>
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                    userData.role === 'admin'
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
                                   {userData.role === 'admin' ? (
                                     <RiAdminLine className="mr-1 h-3 w-3" />
                                   ) : (
@@ -334,6 +342,91 @@ export default function Admin() {
                                 </div>
                               </td>
                             </motion.tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Mobile Horizontal Scroll Table Alternative */}
+                  <div className="block sm:hidden lg:hidden mt-8">
+                    <div className="mb-2">
+                      <p className="text-xs text-gray-400 px-1">
+                        💡 Swipe left/right to see more details
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto bg-gray-800 rounded-lg shadow">
+                      <table className="min-w-full divide-y divide-gray-700">
+                        <thead className="bg-gray-700">
+                          <tr>
+                            <th className="py-3 px-3 text-left text-xs font-semibold text-white uppercase tracking-wider min-w-[120px]">
+                              Business
+                            </th>
+                            <th className="py-3 px-3 text-left text-xs font-semibold text-white uppercase tracking-wider min-w-[150px]">
+                              Email
+                            </th>
+                            <th className="py-3 px-3 text-left text-xs font-semibold text-white uppercase tracking-wider min-w-[80px]">
+                              Role
+                            </th>
+                            <th className="py-3 px-3 text-left text-xs font-semibold text-white uppercase tracking-wider min-w-[80px]">
+                              Created
+                            </th>
+                            <th className="py-3 px-3 text-left text-xs font-semibold text-white uppercase tracking-wider min-w-[80px]">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {users.map((userData) => (
+                            <tr key={userData.email}>
+                              <td className="py-3 px-3 text-sm text-white">
+                                <div className="font-medium truncate max-w-[120px]" title={userData.businessName}>
+                                  {userData.businessName}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-sm text-gray-300">
+                                <div className="truncate max-w-[150px]" title={userData.email}>
+                                  {userData.email}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-sm">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                                    userData.role === 'admin'
+                                      ? 'bg-purple-100 text-purple-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
+                                  {userData.role}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-sm text-gray-300">
+                                {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString('en-GB', { 
+                                  day: '2-digit', 
+                                  month: '2-digit' 
+                                }) : 'N/A'}
+                              </td>
+                              <td className="py-3 px-3 text-sm">
+                                <div className="flex space-x-1">
+                                  <button
+                                    onClick={() => openRoleModal(userData)}
+                                    className="p-1 text-blue-400 hover:text-blue-300"
+                                    title="Edit"
+                                    disabled={userData.email === user.email}
+                                  >
+                                    <RiEditLine className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteModal(userData)}
+                                    className="p-1 text-red-400 hover:text-red-300"
+                                    title="Delete"
+                                    disabled={userData.email === user.email}
+                                  >
+                                    <RiDeleteBin6Line className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
                           ))}
                         </tbody>
                       </table>
@@ -465,96 +558,6 @@ export default function Admin() {
                       <li>• Access admin dashboard</li>
                       <li>• System-wide settings control</li>
                     </ul>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'payments' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="bg-gray-800 rounded-lg p-6"
-            >
-              <h3 className="text-lg font-medium text-white mb-4">Payment Settings</h3>
-              <div className="space-y-6">
-                <div className="border-b border-gray-700 pb-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Plans</h4>
-                  <div className="space-y-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Free Plan</p>
-                          <p className="text-sm text-gray-300">10 inventory items, 3 receipt scans/month</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£0</p>
-                          <p className="text-xs text-gray-400">forever</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Professional Plan</p>
-                          <p className="text-sm text-gray-300">2,500 inventory items, 100 scans/month</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£12/month</p>
-                          <p className="text-xs text-gray-400">or £120/year</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Power Plan</p>
-                          <p className="text-sm text-gray-300">Unlimited everything</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£25/month</p>
-                          <p className="text-xs text-gray-400">or £250/year</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Analytics</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">47</div>
-                      <div className="text-sm text-gray-400">Active Subscriptions</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">£1,428</div>
-                      <div className="text-sm text-gray-400">Monthly Recurring Revenue</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">2.4%</div>
-                      <div className="text-sm text-gray-400">Churn Rate</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Payment Processors</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg">
-                      <div className="flex items-center">
-                        <RiMoneyDollarCircleLine className="h-6 w-6 text-blue-400 mr-3" />
-                        <div>
-                          <p className="font-medium text-white">Direct Payment</p>
-                          <p className="text-sm text-gray-300">Direct payment processing</p>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>
-                    </div>
                   </div>
                 </div>
               </div>

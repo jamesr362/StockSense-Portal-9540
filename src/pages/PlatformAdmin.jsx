@@ -1,38 +1,34 @@
-import {motion} from 'framer-motion';
-import {useState,useEffect} from 'react';
-import {getAllUsers,deleteUser,updateUserRole,getPlatformStats} from '../services/db';
-import {useAuth} from '../context/AuthContext';
-import {Navigate} from 'react-router-dom';
-import {RiUserLine,RiAdminLine,RiDeleteBin6Line,RiEditLine,RiShieldCheckLine,RiTeamLine,RiSettings3Line,RiStore2Line,RiGlobalLine,RiRefreshLine,RiMoneyDollarCircleLine,RiDashboardLine,RiExchangeDollarLine,RiMailLine} from 'react-icons/ri';
+import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { getAllUsers, deleteUser, updateUserRole, getPlatformStats } from '../services/db';
+import { useAuth } from '../context/AuthContext';
+import { Navigate } from 'react-router-dom';
+import { RiUserLine, RiAdminLine, RiDeleteBin6Line, RiEditLine, RiShieldCheckLine, RiTeamLine, RiSettings3Line, RiDashboardLine, RiStore2Line, RiGlobalLine, RiRefreshLine } from 'react-icons/ri';
 import DeleteUserModal from '../components/DeleteUserModal';
 import UserRoleModal from '../components/UserRoleModal';
-import EmailConfigurationPanel from '../components/EmailConfigurationPanel';
 
 export default function PlatformAdmin() {
-  const [users,setUsers]=useState([]);
-  const [platformStats,setPlatformStats]=useState(null);
-  const [isLoading,setIsLoading]=useState(true);
-  const [isRefreshing,setIsRefreshing]=useState(false);
-  const [isDeleteModalOpen,setIsDeleteModalOpen]=useState(false);
-  const [isRoleModalOpen,setIsRoleModalOpen]=useState(false);
-  const [selectedUser,setSelectedUser]=useState(null);
-  const [error,setError]=useState(null);
-  const [successMessage,setSuccessMessage]=useState('');
-  const [activeTab,setActiveTab]=useState('overview');
-  const {user}=useAuth();
+  const [users, setUsers] = useState([]);
+  const [platformStats, setPlatformStats] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  const { user } = useAuth();
 
-  const tabs=[
-    {id: 'overview',name: 'Platform Overview',icon: RiDashboardLine},
-    {id: 'users',name: 'User Management',icon: RiTeamLine},
-    {id: 'email',name: 'Email Integration',icon: RiMailLine},
-    {id: 'payments',name: 'Payment Settings',icon: RiMoneyDollarCircleLine},
-    {id: 'stripe',name: 'Stripe Gateway',icon: RiExchangeDollarLine},
-    {id: 'permissions',name: 'Role Permissions',icon: RiShieldCheckLine},
-    {id: 'system',name: 'System Settings',icon: RiSettings3Line}
+  const tabs = [
+    { id: 'overview', name: 'Platform Overview', icon: RiDashboardLine },
+    { id: 'users', name: 'User Management', icon: RiTeamLine },
+    { id: 'permissions', name: 'Role Permissions', icon: RiShieldCheckLine },
+    { id: 'system', name: 'System Settings', icon: RiSettings3Line }
   ];
 
-  const loadData=async (showRefreshIndicator=false)=> {
-    if (user?.role !=='platformadmin') return;
+  const loadData = async (showRefreshIndicator = false) => {
+    if (user?.role !== 'platformadmin') return;
 
     try {
       if (showRefreshIndicator) {
@@ -42,7 +38,7 @@ export default function PlatformAdmin() {
       }
       setError(null);
 
-      const [allUsers,stats]=await Promise.all([
+      const [allUsers, stats] = await Promise.all([
         getAllUsers(),
         getPlatformStats()
       ]);
@@ -50,12 +46,12 @@ export default function PlatformAdmin() {
       setUsers(allUsers || []);
       setPlatformStats(stats);
 
-      console.log('Platform data refreshed:',{
+      console.log('Platform data refreshed:', {
         totalUsers: allUsers?.length,
         recentUsers: stats?.recentUsers?.length
       });
     } catch (error) {
-      console.error('Error loading platform data:',error);
+      console.error('Error loading platform data:', error);
       setError('Failed to load platform data');
       setUsers([]);
       setPlatformStats(null);
@@ -66,81 +62,82 @@ export default function PlatformAdmin() {
   };
 
   // Auto-refresh data every 30 seconds when on overview tab
-  useEffect(()=> {
+  useEffect(() => {
     let intervalId;
-    if (activeTab==='overview') {
-      intervalId=setInterval(()=> {
+    if (activeTab === 'overview') {
+      intervalId = setInterval(() => {
         loadData(true);
-      },30000);// Refresh every 30 seconds
+      }, 30000); // Refresh every 30 seconds
     }
-    return ()=> {
+
+    return () => {
       if (intervalId) {
         clearInterval(intervalId);
       }
     };
-  },[activeTab,user]);
+  }, [activeTab, user]);
 
   // Initial data load
-  useEffect(()=> {
+  useEffect(() => {
     loadData();
-  },[user]);
+  }, [user]);
 
   // Manual refresh function
-  const handleManualRefresh=()=> {
+  const handleManualRefresh = () => {
     loadData(true);
   };
 
-  const handleDeleteUser=async (email)=> {
+  const handleDeleteUser = async (email) => {
     try {
       setError(null);
       await deleteUser(email);
       setSuccessMessage(`User ${email} has been successfully deleted`);
       await loadData(true);
-      setTimeout(()=> {
+      setTimeout(() => {
         setSuccessMessage('');
-      },5000);
+      }, 5000);
     } catch (error) {
-      console.error('Error deleting user:',error);
+      console.error('Error deleting user:', error);
       setError(error.message || 'Failed to delete user. Please try again.');
     }
   };
 
-  const handleUpdateRole=async (email,newRole)=> {
+  const handleUpdateRole = async (email, newRole) => {
     try {
       setError(null);
-      await updateUserRole(email,newRole);
+      await updateUserRole(email, newRole);
       setSuccessMessage(`User role updated successfully`);
       await loadData(true);
-      setTimeout(()=> {
+      setTimeout(() => {
         setSuccessMessage('');
-      },5000);
+      }, 5000);
     } catch (error) {
-      console.error('Error updating user role:',error);
+      console.error('Error updating user role:', error);
       setError(error.message || 'Failed to update user role. Please try again.');
     }
   };
 
-  const openDeleteModal=(userData)=> {
+  const openDeleteModal = (userData) => {
     setSelectedUser(userData);
     setIsDeleteModalOpen(true);
   };
 
-  const openRoleModal=(userData)=> {
+  const openRoleModal = (userData) => {
     setSelectedUser(userData);
     setIsRoleModalOpen(true);
   };
 
-  const closeDeleteModal=()=> {
+  const closeDeleteModal = () => {
     setSelectedUser(null);
     setIsDeleteModalOpen(false);
   };
 
-  const closeRoleModal=()=> {
+  const closeRoleModal = () => {
     setSelectedUser(null);
     setIsRoleModalOpen(false);
   };
 
-  const getRoleIcon=(role)=> {
+  const getRoleIcon = (role) => {
     switch (role) {
       case 'platformadmin': return RiGlobalLine;
       case 'admin': return RiAdminLine;
@@ -149,7 +146,7 @@ export default function PlatformAdmin() {
     }
   };
 
-  const getRoleColor=(role)=> {
+  const getRoleColor = (role) => {
     switch (role) {
       case 'platformadmin': return 'bg-red-100 text-red-800';
       case 'admin': return 'bg-purple-100 text-purple-800';
@@ -159,7 +156,7 @@ export default function PlatformAdmin() {
   };
 
   // Check if user is platform admin
-  if (!user || user.role !=='platformadmin') {
+  if (!user || user.role !== 'platformadmin') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -175,9 +172,9 @@ export default function PlatformAdmin() {
   return (
     <div>
       <motion.div
-        initial={{opacity: 0,y: 20}}
-        animate={{opacity: 1,y: 0}}
-        transition={{duration: 0.5}}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
       >
         <div className="sm:flex sm:items-center">
           <div className="sm:flex-auto">
@@ -187,7 +184,7 @@ export default function PlatformAdmin() {
             </p>
           </div>
           <div className="mt-4 sm:mt-0 flex items-center space-x-4">
-            {activeTab==='overview' && (
+            {activeTab === 'overview' && (
               <button
                 onClick={handleManualRefresh}
                 disabled={isRefreshing}
@@ -208,12 +205,12 @@ export default function PlatformAdmin() {
         <div className="mt-8">
           <div className="border-b border-gray-700">
             <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
-              {tabs.map((tab)=> (
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={()=> setActiveTab(tab.id)}
+                  onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab===tab.id
+                    activeTab === tab.id
                       ? 'border-primary-500 text-primary-400'
                       : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
                   }`}
@@ -229,8 +226,8 @@ export default function PlatformAdmin() {
         {/* Success Message */}
         {successMessage && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="mt-4 rounded-md bg-green-900/50 p-4"
           >
             <div className="text-sm text-green-200">{successMessage}</div>
@@ -240,8 +237,8 @@ export default function PlatformAdmin() {
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
             className="mt-4 rounded-md bg-red-900/50 p-4"
           >
             <div className="text-sm text-red-200">{error}</div>
@@ -250,11 +247,11 @@ export default function PlatformAdmin() {
 
         {/* Tab Content */}
         <div className="mt-8">
-          {activeTab==='overview' && (
+          {activeTab === 'overview' && (
             <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
             >
               {/* Auto-refresh indicator */}
               <div className="mb-4 flex items-center text-sm text-gray-400">
@@ -266,9 +263,9 @@ export default function PlatformAdmin() {
               {platformStats && (
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
                   <motion.div
-                    initial={{opacity: 0,y: 20}}
-                    animate={{opacity: 1,y: 0}}
-                    transition={{duration: 0.5,delay: 0.1}}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.1 }}
                     className="bg-gray-800 overflow-hidden rounded-lg shadow"
                   >
                     <div className="p-5">
@@ -293,9 +290,9 @@ export default function PlatformAdmin() {
                   </motion.div>
 
                   <motion.div
-                    initial={{opacity: 0,y: 20}}
-                    animate={{opacity: 1,y: 0}}
-                    transition={{duration: 0.5,delay: 0.2}}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
                     className="bg-gray-800 overflow-hidden rounded-lg shadow"
                   >
                     <div className="p-5">
@@ -320,9 +317,9 @@ export default function PlatformAdmin() {
                   </motion.div>
 
                   <motion.div
-                    initial={{opacity: 0,y: 20}}
-                    animate={{opacity: 1,y: 0}}
-                    transition={{duration: 0.5,delay: 0.3}}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.3 }}
                     className="bg-gray-800 overflow-hidden rounded-lg shadow"
                   >
                     <div className="p-5">
@@ -347,9 +344,9 @@ export default function PlatformAdmin() {
                   </motion.div>
 
                   <motion.div
-                    initial={{opacity: 0,y: 20}}
-                    animate={{opacity: 1,y: 0}}
-                    transition={{duration: 0.5,delay: 0.4}}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.4 }}
                     className="bg-gray-800 overflow-hidden rounded-lg shadow"
                   >
                     <div className="p-5">
@@ -385,14 +382,14 @@ export default function PlatformAdmin() {
                 </div>
                 {platformStats?.recentUsers?.length > 0 ? (
                   <div className="space-y-3">
-                    {platformStats.recentUsers.map((recentUser)=> {
-                      const RoleIcon=getRoleIcon(recentUser.role);
+                    {platformStats.recentUsers.map((recentUser) => {
+                      const RoleIcon = getRoleIcon(recentUser.role);
                       return (
                         <motion.div
                           key={recentUser.email}
-                          initial={{opacity: 0,x: -20}}
-                          animate={{opacity: 1,x: 0}}
-                          transition={{duration: 0.3}}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.3 }}
                           className="flex items-center justify-between py-2 border-b border-gray-700"
                         >
                           <div className="flex items-center">
@@ -421,13 +418,13 @@ export default function PlatformAdmin() {
             </motion.div>
           )}
 
-          {activeTab==='users' && (
+          {activeTab === 'users' && (
             <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
             >
-              {users.length===0 ? (
+              {users.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-400">No users found.</p>
                 </div>
@@ -435,17 +432,17 @@ export default function PlatformAdmin() {
                 <>
                   {/* Mobile Card View */}
                   <div className="space-y-4">
-                    {users.map((userData)=> {
-                      const RoleIcon=getRoleIcon(userData.role);
-                      const isPlatformAdmin=userData.role==='platformadmin';
-                      const isCurrentUser=userData.email===user.email;
+                    {users.map((userData) => {
+                      const RoleIcon = getRoleIcon(userData.role);
+                      const isPlatformAdmin = userData.role === 'platformadmin';
+                      const isCurrentUser = userData.email === user.email;
 
                       return (
                         <motion.div
                           key={userData.email}
-                          initial={{opacity: 0}}
-                          animate={{opacity: 1}}
-                          transition={{duration: 0.3}}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3 }}
                           className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
                         >
                           <div className="px-4 py-3 border-b border-gray-700">
@@ -458,7 +455,7 @@ export default function PlatformAdmin() {
                               </div>
                               <div className="flex space-x-2 ml-3 flex-shrink-0">
                                 <button
-                                  onClick={()=> openRoleModal(userData)}
+                                  onClick={() => openRoleModal(userData)}
                                   className="p-2 text-blue-400 hover:text-blue-300 hover:bg-gray-700 rounded-md"
                                   title="Change role"
                                   disabled={isPlatformAdmin || isCurrentUser}
@@ -466,7 +463,7 @@ export default function PlatformAdmin() {
                                   <RiEditLine className="h-4 w-4" />
                                 </button>
                                 <button
-                                  onClick={()=> openDeleteModal(userData)}
+                                  onClick={() => openDeleteModal(userData)}
                                   className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-md"
                                   title="Delete user"
                                   disabled={isPlatformAdmin || isCurrentUser}
@@ -518,309 +515,11 @@ export default function PlatformAdmin() {
             </motion.div>
           )}
 
-          {activeTab==='email' && (
+          {activeTab === 'permissions' && (
             <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
-            >
-              <EmailConfigurationPanel />
-            </motion.div>
-          )}
-
-          {activeTab==='payments' && (
-            <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
-              className="bg-gray-800 rounded-lg p-6"
-            >
-              <h3 className="text-lg font-medium text-white mb-4">Payment Settings</h3>
-              <div className="space-y-6">
-                <div className="border-b border-gray-700 pb-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Plans</h4>
-                  <div className="space-y-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Free Plan</p>
-                          <p className="text-sm text-gray-300">10 inventory items, 3 receipt scans/month</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£0</p>
-                          <p className="text-xs text-gray-400">forever</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Professional Plan</p>
-                          <p className="text-sm text-gray-300">2,500 inventory items, 100 scans/month</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£12/month</p>
-                          <p className="text-xs text-gray-400">or £120/year</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-white">Power Plan</p>
-                          <p className="text-sm text-gray-300">Unlimited everything</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-white">£25/month</p>
-                          <p className="text-xs text-gray-400">or £250/year</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Analytics</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">47</div>
-                      <div className="text-sm text-gray-400">Active Subscriptions</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">£1,428</div>
-                      <div className="text-sm text-gray-400">Monthly Recurring Revenue</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">2.4%</div>
-                      <div className="text-sm text-gray-400">Churn Rate</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Payment Processors</h4>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg">
-                      <div className="flex items-center">
-                        <RiMoneyDollarCircleLine className="h-6 w-6 text-blue-400 mr-3" />
-                        <div>
-                          <p className="font-medium text-white">Stripe</p>
-                          <p className="text-sm text-gray-300">Primary payment processor</p>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-gray-700 p-4 rounded-lg">
-                      <div className="flex items-center">
-                        <RiMoneyDollarCircleLine className="h-6 w-6 text-gray-400 mr-3" />
-                        <div>
-                          <p className="font-medium text-white">PayPal</p>
-                          <p className="text-sm text-gray-300">Secondary payment option</p>
-                        </div>
-                      </div>
-                      <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">Inactive</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab==='stripe' && (
-            <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
-              className="bg-gray-800 rounded-lg p-6"
-            >
-              <h3 className="text-lg font-medium text-white mb-4">Stripe Payment Gateway</h3>
-              <div className="space-y-6">
-                <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-6">
-                  <p className="text-blue-300 text-sm">
-                    <strong>Status:</strong> Stripe is connected and working properly
-                  </p>
-                </div>
-                <div className="border-b border-gray-700 pb-6">
-                  <h4 className="text-md font-medium text-white mb-3">API Keys</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Publishable Key
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value="pk_test_•••••••••••••••••••••••••••••"
-                          className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          readOnly
-                        />
-                        <button className="absolute inset-y-0 right-0 px-3 text-primary-400 hover:text-primary-300">
-                          Show
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Secret Key
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value="sk_test_•••••••••••••••••••••••••••••"
-                          className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          readOnly
-                        />
-                        <button className="absolute inset-y-0 right-0 px-3 text-primary-400 hover:text-primary-300">
-                          Show
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-400">
-                    These are test keys. Switch to production keys when you're ready to accept real payments.
-                  </p>
-                </div>
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Plans</h4>
-                  <div className="space-y-4">
-                    <div className="bg-gray-700 rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">Free Plan</p>
-                        <p className="text-sm text-gray-300">ID: price_free</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">£0</p>
-                        <p className="text-xs text-gray-400">forever</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">Professional Plan (Monthly)</p>
-                        <p className="text-sm text-gray-300">ID: price_pro_monthly</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">£12</p>
-                        <p className="text-xs text-gray-400">per month</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">Professional Plan (Yearly)</p>
-                        <p className="text-sm text-gray-300">ID: price_pro_yearly</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">£120</p>
-                        <p className="text-xs text-gray-400">per year (save £24)</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">Power Plan (Monthly)</p>
-                        <p className="text-sm text-gray-300">ID: price_power_monthly</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">£25</p>
-                        <p className="text-xs text-gray-400">per month</p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-white">Power Plan (Yearly)</p>
-                        <p className="text-sm text-gray-300">ID: price_power_yearly</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-white">£250</p>
-                        <p className="text-xs text-gray-400">per year (save £50)</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex justify-end">
-                    <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                      Sync Plans from Stripe
-                    </button>
-                  </div>
-                </div>
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Webhooks</h4>
-                  <div className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium text-white">Endpoint URL</p>
-                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Active</span>
-                    </div>
-                    <input
-                      type="text"
-                      value="https://yourdomain.com/api/stripe/webhook"
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm mb-2"
-                      readOnly
-                    />
-                    <p className="text-xs text-gray-400">
-                      This webhook handles subscription events, including created, updated, and deleted.
-                    </p>
-                  </div>
-                  <div className="mt-4">
-                    <h5 className="text-sm font-medium text-white mb-2">Events to listen for:</h5>
-                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <li className="flex items-center text-gray-300">
-                        <input type="checkbox" className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600" checked readOnly />
-                        <span>customer.subscription.created</span>
-                      </li>
-                      <li className="flex items-center text-gray-300">
-                        <input type="checkbox" className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600" checked readOnly />
-                        <span>customer.subscription.updated</span>
-                      </li>
-                      <li className="flex items-center text-gray-300">
-                        <input type="checkbox" className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600" checked readOnly />
-                        <span>customer.subscription.deleted</span>
-                      </li>
-                      <li className="flex items-center text-gray-300">
-                        <input type="checkbox" className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600" checked readOnly />
-                        <span>invoice.payment_succeeded</span>
-                      </li>
-                      <li className="flex items-center text-gray-300">
-                        <input type="checkbox" className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600" checked readOnly />
-                        <span>invoice.payment_failed</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                <div className="border-b border-gray-700 py-6">
-                  <h4 className="text-md font-medium text-white mb-3">Subscription Analytics</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">47</div>
-                      <div className="text-sm text-gray-400">Active Subscriptions</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">£1,428</div>
-                      <div className="text-sm text-gray-400">Monthly Recurring Revenue</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-2xl font-bold text-white">2.4%</div>
-                      <div className="text-sm text-gray-400">Churn Rate</div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <a
-                    href="https://dashboard.stripe.com/test/dashboard"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
-                  >
-                    <RiMoneyDollarCircleLine className="mr-2 h-5 w-5" />
-                    Open Stripe Dashboard
-                  </a>
-                  <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab==='permissions' && (
-            <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
               className="bg-gray-800 rounded-lg p-6"
             >
               <h3 className="text-lg font-medium text-white mb-4">Platform Role Permissions</h3>
@@ -839,6 +538,7 @@ export default function PlatformAdmin() {
                       <li>• Search and filter inventory</li>
                     </ul>
                   </div>
+
                   <div className="border border-gray-700 rounded-lg p-4">
                     <div className="flex items-center mb-3">
                       <RiAdminLine className="h-5 w-5 text-purple-400 mr-2" />
@@ -853,6 +553,7 @@ export default function PlatformAdmin() {
                       <li>• Organization-level settings</li>
                     </ul>
                   </div>
+
                   <div className="border border-red-700 rounded-lg p-4 bg-red-900/10">
                     <div className="flex items-center mb-3">
                       <RiGlobalLine className="h-5 w-5 text-red-400 mr-2" />
@@ -864,7 +565,6 @@ export default function PlatformAdmin() {
                       <li>• Platform-wide statistics</li>
                       <li>• System-level configuration</li>
                       <li>• User role management</li>
-                      <li>• Email integration setup</li>
                       <li>• Platform oversight and control</li>
                     </ul>
                   </div>
@@ -873,11 +573,11 @@ export default function PlatformAdmin() {
             </motion.div>
           )}
 
-          {activeTab==='system' && (
+          {activeTab === 'system' && (
             <motion.div
-              initial={{opacity: 0}}
-              animate={{opacity: 1}}
-              transition={{duration: 0.3}}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
               className="bg-gray-800 rounded-lg p-6"
             >
               <h3 className="text-lg font-medium text-white mb-4">Platform System Settings</h3>
@@ -906,6 +606,7 @@ export default function PlatformAdmin() {
                     />
                   </div>
                 </div>
+
                 <div className="border-t border-gray-700 pt-6">
                   <h4 className="text-md font-medium text-white mb-3">Platform Admin Access Control</h4>
                   <p className="text-sm text-gray-400 mb-4">
@@ -920,6 +621,7 @@ export default function PlatformAdmin() {
                     </p>
                   </div>
                 </div>
+
                 <div className="border-t border-gray-700 pt-6">
                   <h4 className="text-md font-medium text-white mb-3">Role Assignment Rules</h4>
                   <div className="space-y-2 text-sm text-gray-300">

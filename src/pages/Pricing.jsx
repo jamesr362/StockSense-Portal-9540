@@ -1,86 +1,108 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Elements } from '@stripe/react-stripe-js';
-import { RiCheckLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
+import { 
+  RiCheckLine, 
+  RiArrowRightLine, 
+  RiStarLine, 
+  RiShieldCheckLine,
+  RiBarChart2Line,
+  RiGlobalLine 
+} from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import getStripe, { SUBSCRIPTION_PLANS, formatPrice } from '../lib/stripe';
-import PricingCard from '../components/PricingCard';
-import { createCheckoutSession } from '../services/stripe';
 import { logSecurityEvent } from '../utils/security';
+import { SUBSCRIPTION_PLANS, formatPrice } from '../lib/stripe';
+import { getUserSubscriptionSupabase } from '../services/supabaseDb';
 
 export default function Pricing() {
   const [billingInterval, setBillingInterval] = useState('monthly');
-  const [selectedPlan, setSelectedPlan] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [currentPlanId, setCurrentPlanId] = useState('free');
   const { user } = useAuth();
   const navigate = useNavigate();
-  const stripePromise = getStripe();
 
   useEffect(() => {
-    // Log pricing page view
-    logSecurityEvent('PRICING_PAGE_VIEW', {
-      userEmail: user?.email,
-      billingInterval
+    logSecurityEvent('PRICING_PAGE_VIEW', { 
+      userEmail: user?.email, 
+      billingInterval 
     });
+
+    // Load user's current subscription plan
+    const loadUserPlan = async () => {
+      if (user?.email) {
+        try {
+          const subscription = await getUserSubscriptionSupabase(user.email);
+          if (subscription && subscription.planId) {
+            // Extract plan name from price ID (e.g., "price_professional" -> "professional")
+            const planName = subscription.planId.split('_')[1];
+            if (planName && SUBSCRIPTION_PLANS[planName]) {
+              setCurrentPlanId(planName);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading subscription:', error);
+        }
+      }
+    };
+
+    loadUserPlan();
   }, [user, billingInterval]);
 
-  const handlePlanSelect = async (plan) => {
+  const handlePlanSelect = (plan) => {
     if (!user) {
       navigate('/login');
       return;
     }
 
-    if (plan.id === 'enterprise') {
-      // Handle enterprise plan differently
-      window.location.href = 'mailto:sales@trackio.com?subject=Enterprise Plan Inquiry';
+    // Don't allow selecting current plan
+    if (plan.id === currentPlanId) {
       return;
     }
 
-    setSelectedPlan(plan);
+    // Don't allow downgrading from the UI (would need to go through subscription management)
+    if (SUBSCRIPTION_PLANS[currentPlanId]?.price > plan.price) {
+      setError("To downgrade your plan, please go to Settings > Billing & Subscription");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      logSecurityEvent('PLAN_SELECTION', {
-        planId: plan.id,
+      logSecurityEvent('PLAN_SELECTION', { 
+        planId: plan.id, 
         userEmail: user.email,
-        billingInterval
+        billingInterval 
       });
 
-      // Create checkout session
-      await createCheckoutSession(
-        plan.priceId,
-        user.customerId, // If you have customer ID stored
-        {
-          user_email: user.email,
-          plan_id: plan.id,
-          billing_interval: billingInterval
-        }
-      );
+      // For free plan, redirect to dashboard
+      if (plan.id === 'free') {
+        navigate('/dashboard');
+        return;
+      }
+
+      // For paid plans, redirect to Stripe or settings
+      if (plan.paymentLink) {
+        window.open(plan.paymentLink, '_blank');
+      } else {
+        navigate('/settings/billing');
+      }
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('PLAN_SELECTION_ERROR', {
-        error: err.message,
-        planId: plan.id
+      logSecurityEvent('PLAN_SELECTION_ERROR', { 
+        error: err.message, 
+        planId: plan.id 
       });
     } finally {
       setIsLoading(false);
-      setSelectedPlan(null);
     }
-  };
-
-  const getAdjustedPrice = (basePrice) => {
-    if (billingInterval === 'yearly') {
-      return basePrice * 12 * 0.9; // 10% discount for yearly
-    }
-    return basePrice;
   };
 
   const features = [
     {
       title: 'Inventory Management',
+      icon: RiBarChart2Line,
       items: [
         'Real-time stock tracking',
         'Automated low stock alerts',
@@ -90,6 +112,7 @@ export default function Pricing() {
     },
     {
       title: 'Team Collaboration',
+      icon: RiGlobalLine,
       items: [
         'Multi-user access',
         'Role-based permissions',
@@ -99,6 +122,7 @@ export default function Pricing() {
     },
     {
       title: 'Analytics & Reporting',
+      icon: RiBarChart2Line,
       items: [
         'Inventory valuation',
         'Stock movement reports',
@@ -108,6 +132,7 @@ export default function Pricing() {
     },
     {
       title: 'Security & Compliance',
+      icon: RiShieldCheckLine,
       items: [
         'Bank-level encryption',
         'Regular backups',
@@ -138,6 +163,8 @@ export default function Pricing() {
     }
   ];
 
+  const plans = Object.values(SUBSCRIPTION_PLANS);
+
   return (
     <div className="min-h-screen bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -156,16 +183,11 @@ export default function Pricing() {
         </motion.div>
 
         {/* Billing Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex justify-center mb-12"
-        >
-          <div className="bg-gray-800 rounded-lg p-1 flex">
+        <div className="flex justify-center mb-12">
+          <div className="bg-gray-800 rounded-lg p-1 inline-flex">
             <button
               onClick={() => setBillingInterval('monthly')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-md ${
                 billingInterval === 'monthly'
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-400 hover:text-white'
@@ -175,19 +197,16 @@ export default function Pricing() {
             </button>
             <button
               onClick={() => setBillingInterval('yearly')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors relative ${
+              className={`px-4 py-2 text-sm font-medium rounded-md ${
                 billingInterval === 'yearly'
                   ? 'bg-primary-600 text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Yearly
-              <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs px-1 rounded-full">
-                10% OFF
-              </span>
+              Yearly <span className="text-xs text-green-400 ml-1">Save 10%</span>
             </button>
           </div>
-        </motion.div>
+        </div>
 
         {/* Error Message */}
         {error && (
@@ -202,25 +221,109 @@ export default function Pricing() {
           </motion.div>
         )}
 
+        {/* Current Plan Info */}
+        {user && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 max-w-md mx-auto"
+          >
+            <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-4 text-center">
+              <p className="text-gray-300 text-sm">
+                Your current plan: <span className="text-primary-400 font-semibold">{SUBSCRIPTION_PLANS[currentPlanId]?.name || 'Free'}</span>
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
-          {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16 max-w-7xl mx-auto">
+          {plans.map((plan, index) => (
             <motion.div
               key={plan.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 + index * 0.1 }}
+              className={`relative rounded-lg shadow-lg overflow-hidden ${
+                plan.highlighted
+                  ? 'border-2 border-primary-500 bg-gray-800'
+                  : 'border border-gray-700 bg-gray-800'
+              }`}
             >
-              <PricingCard
-                plan={{
-                  ...plan,
-                  price: plan.price === 'Custom' ? 'Custom' : getAdjustedPrice(plan.price)
-                }}
-                isPopular={plan.highlighted}
-                onSelectPlan={handlePlanSelect}
-                isLoading={isLoading && selectedPlan?.id === plan.id}
-                buttonText={plan.id === 'enterprise' ? 'Contact Sales' : null}
-              />
+              {/* Popular badge */}
+              {plan.highlighted && (
+                <div className="absolute top-0 right-0 bg-primary-500 text-white px-3 py-1 text-sm font-medium rounded-bl-lg">
+                  <div className="flex items-center">
+                    <RiStarLine className="h-4 w-4 mr-1" />
+                    Most Popular
+                  </div>
+                </div>
+              )}
+
+              <div className="px-6 py-8">
+                {/* Plan name and price */}
+                <div className="text-center mb-6">
+                  <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                  <div className="flex items-baseline justify-center">
+                    <span className="text-4xl font-extrabold text-white">
+                      {plan.price === 0 ? 'Free' : plan.price === 'Custom' ? 'Custom' : formatPrice(plan.price)}
+                    </span>
+                    {plan.price > 0 && plan.price !== 'Custom' && (
+                      <span className="text-xl font-semibold text-gray-400 ml-1">/month</span>
+                    )}
+                  </div>
+                  {plan.price > 0 && plan.price !== 'Custom' && billingInterval === 'yearly' && (
+                    <p className="text-gray-400 mt-2">
+                      {formatPrice(plan.price * 12 * 0.9)}/year (Save 10%)
+                    </p>
+                  )}
+                </div>
+
+                {/* Features list */}
+                <div className="space-y-4 mb-8">
+                  {plan.features.map((feature, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 }}
+                      className="flex items-start"
+                    >
+                      <div className="flex-shrink-0 mr-3">
+                        <RiCheckLine className="h-5 w-5 text-green-400" />
+                      </div>
+                      <p className="text-gray-300 text-sm leading-relaxed">{feature}</p>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* CTA Button */}
+                <button
+                  onClick={() => handlePlanSelect(plan)}
+                  disabled={isLoading || plan.id === currentPlanId}
+                  className={`w-full py-3 px-6 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center ${
+                    plan.id === currentPlanId
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      : plan.highlighted
+                      ? 'bg-primary-600 text-white hover:bg-primary-700 shadow-lg hover:shadow-xl'
+                      : 'bg-gray-700 text-white hover:bg-gray-600'
+                  }`}
+                >
+                  {isLoading ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Processing...
+                    </div>
+                  ) : plan.id === currentPlanId ? (
+                    'Current Plan'
+                  ) : (
+                    <>
+                      {plan.price === 0 ? 'Get Started' : plan.price === 'Custom' ? 'Contact Sales' : 'Upgrade'}
+                      <RiArrowRightLine className="h-4 w-4 ml-2" />
+                    </>
+                  )}
+                </button>
+              </div>
             </motion.div>
           ))}
         </div>
@@ -240,6 +343,7 @@ export default function Pricing() {
               Powerful features designed to streamline your inventory management process
             </p>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
               <motion.div
@@ -249,9 +353,12 @@ export default function Pricing() {
                 transition={{ delay: 0.6 + index * 0.1 }}
                 className="bg-gray-800 rounded-lg p-6"
               >
-                <h3 className="text-lg font-semibold text-white mb-4">
-                  {feature.title}
-                </h3>
+                <div className="flex items-center mb-4">
+                  <feature.icon className="h-6 w-6 text-primary-400" />
+                  <h3 className="text-lg font-semibold text-white ml-2">
+                    {feature.title}
+                  </h3>
+                </div>
                 <ul className="space-y-2">
                   {feature.items.map((item, itemIndex) => (
                     <li key={itemIndex} className="flex items-start">
@@ -280,6 +387,7 @@ export default function Pricing() {
               See what our customers have to say about Trackio
             </p>
           </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
               <motion.div
@@ -304,62 +412,6 @@ export default function Pricing() {
           </div>
         </motion.div>
 
-        {/* FAQ Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.0 }}
-          className="mb-16"
-        >
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Frequently Asked Questions
-            </h2>
-          </div>
-          <div className="max-w-3xl mx-auto space-y-6">
-            {[
-              {
-                question: 'Can I change my plan at any time?',
-                answer:
-                  'Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately, and we\'ll prorate the billing accordingly.'
-              },
-              {
-                question: 'Is there a free trial?',
-                answer:
-                  'Yes, all plans come with a 14-day free trial. No credit card required to start.'
-              },
-              {
-                question: 'What payment methods do you accept?',
-                answer:
-                  'We accept all major credit cards, PayPal, and bank transfers for UK customers.'
-              },
-              {
-                question: 'Is my data secure?',
-                answer:
-                  'Absolutely. We use bank-level encryption and follow industry best practices to keep your data secure.'
-              },
-              {
-                question: 'Can I cancel at any time?',
-                answer:
-                  'Yes, you can cancel your subscription at any time. You\'ll continue to have access until the end of your current billing period.'
-              }
-            ].map((faq, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1.1 + index * 0.1 }}
-                className="bg-gray-800 rounded-lg p-6"
-              >
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {faq.question}
-                </h3>
-                <p className="text-gray-300">{faq.answer}</p>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-
         {/* CTA Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -374,14 +426,10 @@ export default function Pricing() {
             Join thousands of businesses that trust Trackio to manage their inventory efficiently
           </p>
           <button
-            onClick={() =>
-              !user
-                ? navigate('/register')
-                : handlePlanSelect(SUBSCRIPTION_PLANS.professional)
-            }
+            onClick={() => !user ? navigate('/register') : navigate('/settings/billing')}
             className="inline-flex items-center px-8 py-3 bg-white text-primary-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
           >
-            {!user ? 'Start Free Trial' : 'Choose Plan'}
+            {!user ? 'Start Free Trial' : 'Manage Your Subscription'}
             <RiArrowRightLine className="h-5 w-5 ml-2" />
           </button>
         </motion.div>
