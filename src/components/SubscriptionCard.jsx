@@ -1,5 +1,5 @@
 import {motion} from 'framer-motion';
-import {RiCheckLine, RiCloseLine, RiCalendarLine, RiCreditCard2Line, RiArrowRightLine} from 'react-icons/ri';
+import {RiCheckLine, RiCloseLine, RiCalendarLine, RiCreditCardLine, RiArrowRightLine} from 'react-icons/ri';
 import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
 
 export default function SubscriptionCard({
@@ -13,7 +13,7 @@ export default function SubscriptionCard({
     return (
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="text-center">
-          <RiCreditCard2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+          <RiCreditCardLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">No Active Subscription</h3>
           <p className="text-gray-400 mb-4">You're currently on the Free plan</p>
           <button
@@ -72,8 +72,8 @@ export default function SubscriptionCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{opacity: 0, y: 20}}
+      animate={{opacity: 1, y: 0}}
       className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
     >
       {/* Header */}

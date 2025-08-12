@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
-import {RiCalendarLine, RiCreditCard2Line, RiTrendingUpLine, RiSettings3Line, RiUserLine} from 'react-icons/ri';
+import {RiCalendarLine, RiCreditCardLine, RiTrendingUpLine, RiSettings3Line, RiUserLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import useSubscription from '../hooks/useSubscription';
 import SubscriptionCard from '../components/SubscriptionCard';
@@ -32,7 +32,7 @@ export default function SubscriptionManagement() {
 
   const tabs = [
     {id: 'overview', name: 'Overview', icon: RiTrendingUpLine},
-    {id: 'subscription', name: 'Subscription', icon: RiCreditCard2Line},
+    {id: 'subscription', name: 'Subscription', icon: RiCreditCardLine},
     {id: 'usage', name: 'Usage', icon: RiUserLine},
     {id: 'billing', name: 'Billing History', icon: RiCalendarLine},
     {id: 'settings', name: 'Settings', icon: RiSettings3Line}
@@ -223,7 +223,7 @@ export default function SubscriptionManagement() {
                 
                 <div className="bg-gray-800 p-6 rounded-lg">
                   <div className="flex items-center">
-                    <RiCreditCard2Line className="h-8 w-8 text-green-400 mr-3" />
+                    <RiCreditCardLine className="h-8 w-8 text-green-400 mr-3" />
                     <div>
                       <div className="text-2xl font-bold text-white">
                         £{currentPlanDetails.price || 0}
