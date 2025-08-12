@@ -1,4 +1,4 @@
-// Replace with your actual Stripe publishable key 
+// Replace with your actual Stripe publishable key
 const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51NRLFoEw1FLYKy8hTsUx1GNUX0cUQ3Fgqf4nXJVwxmNILOAF5SaAOaLYMDjfLXQxfUTYMvhUzNFWPTtQW5jXgdHU00Qv5s0uK5';
 
 // Stripe configuration
@@ -57,9 +57,9 @@ export const SUBSCRIPTION_PLANS = {
   basic: {
     id: 'basic',
     name: 'Basic',
-    price: 15,
-    priceId: 'price_basic',
-    paymentLink: 'https://buy.stripe.com/test_7sYdR93tjcGPa5F3cc',
+    price: 9.99,
+    priceId: 'price_1RvPHREw1FLYKy8hmTH0P890',
+    paymentLink: 'https://buy.stripe.com/test_28EbJ15Br8qzelVfegcjS06',
     features: [
       'Up to 1,000 inventory items',
       'Excel importer',
@@ -76,9 +76,9 @@ export const SUBSCRIPTION_PLANS = {
   professional: {
     id: 'professional',
     name: 'Professional',
-    price: 35,
-    priceId: 'price_professional',
-    paymentLink: 'https://buy.stripe.com/test_bJe7sLaVLbCLb9J8wx',
+    price: 14.99,
+    priceId: 'price_1RvPHREw1FLYKy8hXCRwsIi2',
+    paymentLink: 'https://buy.stripe.com/test_4gMbJ1fc1ayHdhRc24cjS05',
     features: [
       'Unlimited inventory items',
       'Unlimited receipt scans',
@@ -152,11 +152,11 @@ export const hasReachedLimit = (userPlan, limitType, currentUsage) => {
 export const comparePlans = (currentPlan, targetPlan) => {
   const current = getPlanById(currentPlan);
   const target = getPlanById(targetPlan);
-
+  
   if (current.price === 'Custom' || target.price === 'Custom') {
     return 'contact'; // Need to contact for custom plans
   }
-
+  
   if (current.price < target.price) {
     return 'upgrade';
   } else if (current.price > target.price) {
@@ -177,6 +177,7 @@ export const getNextBillingDate = (subscriptionData) => {
 export const getDaysUntilRenewal = (subscriptionData) => {
   const nextBilling = getNextBillingDate(subscriptionData);
   if (!nextBilling) return null;
+  
   const now = new Date();
   const diffTime = nextBilling - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

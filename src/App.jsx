@@ -1,4 +1,4 @@
-import {Routes, Route, Navigate} from 'react-router-dom';
+import {Routes,Route,Navigate} from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -16,53 +16,34 @@ import {AuthProvider} from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
+import StripeProvider from './components/StripeProvider';
 
 export default function App() {
   return (
     <div className="min-h-screen bg-gray-900">
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/payment-success" element={<PaymentSuccess />} />
-          
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="receipt-scanner" element={<ReceiptScanner />} />
-            <Route path="excel-importer" element={<ExcelImporter />} />
-            <Route path="settings/*" element={<Settings />} />
-            <Route path="subscription" element={<SubscriptionManagement />} />
+      <StripeProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
             
-            <Route
-              path="admin"
-              element={
-                <AdminRoute>
-                  <Admin />
-                </AdminRoute>
-              }
-            />
-            
-            <Route
-              path="platform-admin"
-              element={
-                <PlatformAdminRoute>
-                  <PlatformAdmin />
-                </PlatformAdminRoute>
-              }
-            />
-          </Route>
-        </Routes>
-      </AuthProvider>
+            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="receipt-scanner" element={<ReceiptScanner />} />
+              <Route path="excel-importer" element={<ExcelImporter />} />
+              <Route path="settings/*" element={<Settings />} />
+              <Route path="subscription" element={<SubscriptionManagement />} />
+              
+              <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
+              <Route path="platform-admin" element={<PlatformAdminRoute><PlatformAdmin /></PlatformAdminRoute>} />
+            </Route>
+          </Routes>
+        </AuthProvider>
+      </StripeProvider>
     </div>
   );
 }

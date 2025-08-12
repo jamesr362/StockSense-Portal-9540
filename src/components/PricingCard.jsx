@@ -1,31 +1,30 @@
-import { motion } from 'framer-motion';
-import { RiCheckLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
-import { formatPrice } from '../lib/stripe';
+import {motion} from 'framer-motion';
+import {RiCheckLine,RiStarLine,RiArrowRightLine} from 'react-icons/ri';
+import {formatPrice} from '../lib/stripe';
 
-export default function PricingCard({ 
-  plan, 
-  isPopular = false, 
-  onSelectPlan, 
-  currentPlan = null, 
-  isLoading = false, 
-  buttonText = null, 
-  billingInterval = 'monthly' 
-}) {
-  const isCurrentPlan = currentPlan === plan.id;
-  const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
-  
-  const getPrice = () => {
-    if (plan.price === 0) return 'Free';
-    return billingInterval === 'yearly' 
-      ? formatPrice(plan.price * 12 * 0.9) + '/year' 
-      : formatPrice(plan.price) + '/month';
+export default function PricingCard({plan,isPopular=false,onSelectPlan,currentPlan=null,isLoading=false,buttonText=null,billingInterval='monthly'}) {
+  const isCurrentPlan=currentPlan===plan.id;
+  const defaultButtonText=isCurrentPlan ? 'Current Plan' : 'Get Started';
+
+  const getPrice=()=> {
+    if (plan.price===0) return 'Free';
+    return billingInterval==='yearly' ? formatPrice(plan.price * 12 * 0.9) + '/year' : formatPrice(plan.price) + '/month';
+  };
+
+  const handleSelectPlan = () => {
+    if (plan.paymentLink && !isCurrentPlan) {
+      // Open Stripe payment link in new tab
+      window.open(plan.paymentLink, '_blank');
+    } else if (onSelectPlan) {
+      onSelectPlan(plan);
+    }
   };
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      initial={{opacity: 0,y: 20}}
+      animate={{opacity: 1,y: 0}}
+      transition={{duration: 0.5}}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
         isPopular || plan.highlighted 
           ? 'border-2 border-primary-500 bg-gray-800' 
@@ -52,11 +51,11 @@ export default function PricingCard({
             </span>
             {plan.price > 0 && (
               <span className="text-xl font-semibold text-gray-400 ml-1">
-                {billingInterval === 'yearly' ? '/year' : '/month'}
+                {billingInterval==='yearly' ? '/year' : '/month'}
               </span>
             )}
           </div>
-          {plan.price > 0 && billingInterval === 'monthly' && (
+          {plan.price > 0 && billingInterval==='monthly' && (
             <p className="text-gray-400 mt-2">
               {formatPrice(plan.price * 12 * 0.9)}/year (Save 10%)
             </p>
@@ -65,12 +64,12 @@ export default function PricingCard({
 
         {/* Features list */}
         <div className="space-y-4 mb-8">
-          {plan.features.map((feature, index) => (
+          {plan.features.map((feature,index)=> (
             <motion.div
               key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
+              initial={{opacity: 0,x: -20}}
+              animate={{opacity: 1,x: 0}}
+              transition={{duration: 0.3,delay: index * 0.1}}
               className="flex items-start"
             >
               <div className="flex-shrink-0 mr-3">
@@ -83,7 +82,7 @@ export default function PricingCard({
 
         {/* CTA Button */}
         <button
-          onClick={() => onSelectPlan(plan)}
+          onClick={handleSelectPlan}
           disabled={isCurrentPlan || isLoading}
           className={`w-full py-3 px-6 rounded-lg font-semibold text-sm transition-all duration-200 flex items-center justify-center ${
             isCurrentPlan
