@@ -1,12 +1,58 @@
-import getStripe from '../lib/stripe';
+import { getStripeConfig } from '../lib/stripe';
 import { logSecurityEvent } from '../utils/security';
+import { getStripeConfigSupabase, updateStripeConfigSupabase } from './supabaseDb';
+
+// Get the current Stripe configuration
+export const getStripeConfiguration = async () => {
+  try {
+    // Try to get from Supabase first
+    const supabaseConfig = await getStripeConfigSupabase();
+    if (supabaseConfig) {
+      return {
+        publishableKey: supabaseConfig.publishable_key,
+        secretKey: supabaseConfig.secret_key,
+        webhookSecret: supabaseConfig.webhook_secret,
+        testMode: supabaseConfig.test_mode,
+        paymentMethods: supabaseConfig.payment_methods
+      };
+    }
+    
+    // Fallback to local config
+    return getStripeConfig();
+  } catch (error) {
+    console.error('Error getting Stripe configuration:', error);
+    // Fallback to local config
+    return getStripeConfig();
+  }
+};
+
+// Update Stripe configuration
+export const updateStripeConfiguration = async (config) => {
+  try {
+    logSecurityEvent('STRIPE_CONFIG_UPDATE_INITIATED', { testMode: config.testMode });
+    
+    // Try to update in Supabase
+    const result = await updateStripeConfigSupabase(config);
+    
+    logSecurityEvent('STRIPE_CONFIG_UPDATED', { 
+      testMode: config.testMode,
+      paymentMethods: Object.keys(config.paymentMethods).filter(m => config.paymentMethods[m]).join(',')
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Error updating Stripe configuration:', error);
+    logSecurityEvent('STRIPE_CONFIG_UPDATE_ERROR', { error: error.message });
+    throw error;
+  }
+};
 
 // Mock Stripe services for demo purposes (replace with real Stripe API calls)
 export const createCheckoutSession = async (priceId, customerId = null, metadata = {}) => {
   try {
     logSecurityEvent('STRIPE_CHECKOUT_INITIATED', { priceId, customerId });
-    
-    // In a real app, this would make an API call to your backend
+
+    // In a real app, this would make an API call to your backend 
     // For demo purposes, we'll simulate a checkout session
     console.log('Demo: Creating checkout session for:', { priceId, customerId, metadata });
     
@@ -65,6 +111,7 @@ export const cancelSubscription = async (subscriptionId) => {
     console.log('Demo: Canceling subscription:', subscriptionId);
     
     logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED', { subscriptionId });
+    
     return { status: 'canceled' };
   } catch (error) {
     console.error('Cancel subscription error:', error);
@@ -82,6 +129,7 @@ export const updateSubscription = async (subscriptionId, priceId) => {
     console.log('Demo: Updating subscription:', { subscriptionId, priceId });
     
     logSecurityEvent('STRIPE_SUBSCRIPTION_UPDATED', { subscriptionId, priceId });
+    
     return { status: 'active' };
   } catch (error) {
     console.error('Update subscription error:', error);
@@ -122,6 +170,30 @@ export const getUsageData = async (subscriptionId) => {
     };
   } catch (error) {
     console.error('Get usage data error:', error);
+    throw error;
+  }
+};
+
+// Test Stripe connection
+export const testStripeConnection = async (config) => {
+  try {
+    logSecurityEvent('STRIPE_CONNECTION_TEST_INITIATED', { 
+      testMode: config.testMode,
+    });
+    
+    // In a real app, this would make an API call to test the connection
+    // For demo purposes, we'll simulate a successful test
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Mock success
+    logSecurityEvent('STRIPE_CONNECTION_TEST_SUCCESS', { 
+      testMode: config.testMode 
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Stripe connection test error:', error);
+    logSecurityEvent('STRIPE_CONNECTION_TEST_ERROR', { error: error.message });
     throw error;
   }
 };

@@ -199,7 +199,7 @@ export default function Settings() {
                   </p>
                   <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
                     <p className="text-blue-300 text-sm">
-                      <strong>Current Plan:</strong> Professional Plan - Supports up to 10 team members
+                      <strong>Current Plan:</strong> Professional Plan
                     </p>
                   </div>
                 </div>

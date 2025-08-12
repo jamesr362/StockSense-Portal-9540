@@ -1,4 +1,4 @@
-// Replace with your actual Stripe publishable key
+// Replace with your actual Stripe publishable key 
 const STRIPE_PUBLISHABLE_KEY = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51NRLFoEw1FLYKy8hTsUx1GNUX0cUQ3Fgqf4nXJVwxmNILOAF5SaAOaLYMDjfLXQxfUTYMvhUzNFWPTtQW5jXgdHU00Qv5s0uK5';
 
 // Stripe configuration
@@ -6,6 +6,31 @@ export const STRIPE_CONFIG = {
   currency: 'gbp',
   country: 'GB',
   locale: 'en-GB'
+};
+
+// Function to get Stripe API keys - can be overridden by platform admin
+let stripeKeys = {
+  publishableKey: STRIPE_PUBLISHABLE_KEY,
+  secretKey: null, // Never expose in client-side code
+  webhookSecret: null
+};
+
+// Function to update Stripe configuration (for platform admin)
+export const updateStripeConfig = (config) => {
+  // In a real application, this would make a server call to update the configuration
+  // For client-side, we only update the publishable key
+  if (config && config.publishableKey) {
+    stripeKeys.publishableKey = config.publishableKey;
+  }
+  return stripeKeys;
+};
+
+// Function to get current Stripe configuration
+export const getStripeConfig = () => {
+  return {
+    publishableKey: stripeKeys.publishableKey,
+    testMode: stripeKeys.publishableKey.startsWith('pk_test_')
+  };
 };
 
 // Subscription plans configuration with comprehensive features
@@ -19,16 +44,14 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 100 inventory items',
       'Basic dashboard',
-      'Manual item entry',
-      'Email support',
-      '1 user account'
+      'Manual item entry'
     ],
     limits: {
       inventoryItems: 100,
       receiptScans: 0,
       excelImport: false,
       teamMembers: 1,
-      features: ['basic_dashboard', 'manual_entry', 'email_support']
+      features: ['basic_dashboard', 'manual_entry']
     }
   },
   basic: {
@@ -40,18 +63,14 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 1,000 inventory items',
       'Excel importer',
-      'Receipt scanner (50 scans/month)',
-      'Custom categories',
-      'Basic analytics',
-      'Email support',
-      'Up to 3 team members'
+      'Receipt scanner (50 scans/month)'
     ],
     limits: {
       inventoryItems: 1000,
       receiptScans: 50,
       excelImport: true,
       teamMembers: 3,
-      features: ['basic_dashboard', 'excel_import', 'receipt_scanner', 'custom_categories', 'basic_analytics', 'email_support']
+      features: ['basic_dashboard', 'excel_import', 'receipt_scanner']
     }
   },
   professional: {
@@ -63,46 +82,16 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Unlimited inventory items',
       'Unlimited receipt scans',
-      'Advanced analytics & reports',
-      'Priority support',
-      'Multiple locations',
-      'API access',
-      'Up to 10 team members',
-      'Bulk operations',
-      'Custom integrations'
+      'Unlimited Excel imports'
     ],
     limits: {
       inventoryItems: -1, // unlimited
       receiptScans: -1, // unlimited
-      excelImport: true,
+      excelImport: -1, // unlimited
       teamMembers: 10,
-      features: ['advanced_analytics', 'priority_support', 'multiple_locations', 'api_access', 'bulk_operations', 'custom_integrations']
+      features: ['advanced_analytics', 'priority_support', 'multiple_locations', 'api_access', 'bulk_operations', 'custom_integrations', 'custom_categories']
     },
     highlighted: true
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price: 'Custom',
-    priceId: 'price_enterprise',
-    paymentLink: null,
-    features: [
-      'Everything in Professional',
-      'Unlimited team members',
-      'Dedicated account manager',
-      'Custom development',
-      'On-premise deployment',
-      'Advanced security features',
-      'SLA guarantee',
-      'White-label options'
-    ],
-    limits: {
-      inventoryItems: -1,
-      receiptScans: -1,
-      excelImport: true,
-      teamMembers: -1,
-      features: ['everything_professional', 'unlimited_team', 'dedicated_manager', 'custom_development', 'on_premise', 'advanced_security', 'sla_guarantee', 'white_label']
-    }
   }
 };
 
@@ -163,11 +152,11 @@ export const hasReachedLimit = (userPlan, limitType, currentUsage) => {
 export const comparePlans = (currentPlan, targetPlan) => {
   const current = getPlanById(currentPlan);
   const target = getPlanById(targetPlan);
-  
+
   if (current.price === 'Custom' || target.price === 'Custom') {
     return 'contact'; // Need to contact for custom plans
   }
-  
+
   if (current.price < target.price) {
     return 'upgrade';
   } else if (current.price > target.price) {
@@ -188,7 +177,6 @@ export const getNextBillingDate = (subscriptionData) => {
 export const getDaysUntilRenewal = (subscriptionData) => {
   const nextBilling = getNextBillingDate(subscriptionData);
   if (!nextBilling) return null;
-  
   const now = new Date();
   const diffTime = nextBilling - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
