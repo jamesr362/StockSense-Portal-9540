@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
-import {RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine} from 'react-icons/ri';
-import {useState, useEffect} from 'react';
+import {RiBarChartBoxLine,RiStore2Line,RiAlertLine,RiScanLine,RiFileExcelLine,RiLineChartLine} from 'react-icons/ri';
+import {useState,useEffect} from 'react';
 import {getInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 import useSubscription from '../hooks/useSubscription';
@@ -9,28 +9,26 @@ import SubscriptionStatus from '../components/SubscriptionStatus';
 import PlanLimitChecker from '../components/PlanLimitChecker';
 
 export default function Dashboard() {
-  const [stats, setStats] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [inventoryCount, setInventoryCount] = useState(0);
-  const {user} = useAuth();
-  const {subscription, planLimits, currentPlan} = useSubscription();
+  const [stats,setStats]=useState(null);
+  const [isLoading,setIsLoading]=useState(true);
+  const [inventoryCount,setInventoryCount]=useState(0);
+  const {user}=useAuth();
+  const {subscription,planLimits,currentPlan}=useSubscription();
 
-  useEffect(() => {
-    const loadData = async () => {
+  useEffect(()=> {
+    const loadData=async ()=> {
       if (!user?.email) return;
-
       try {
         setIsLoading(true);
-        
         // Load inventory data
-        const items = await getInventoryItems(user.email);
-        const totalItems = items.length;
-        const outOfStockItems = items.filter((item) => item.status === 'Out of Stock').length;
-        const limitedStockItems = items.filter((item) => item.status === 'Limited Stock').length;
-        const totalValue = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-
+        const items=await getInventoryItems(user.email);
+        const totalItems=items.length;
+        const outOfStockItems=items.filter((item)=> item.status==='Out of Stock').length;
+        const limitedStockItems=items.filter((item)=> item.status==='Limited Stock').length;
+        const totalValue=items.reduce((sum,item)=> sum + item.quantity * item.unitPrice,0);
+        
         setInventoryCount(totalItems);
-        setStats([
+        setStats([ 
           {
             name: 'Total Items',
             value: totalItems.toString(),
@@ -55,14 +53,14 @@ export default function Dashboard() {
           },
         ]);
       } catch (error) {
-        console.error('Error loading dashboard stats:', error);
+        console.error('Error loading dashboard stats:',error);
       } finally {
         setIsLoading(false);
       }
     };
-
+    
     loadData();
-  }, [user?.email]);
+  },[user?.email]);
 
   if (isLoading) {
     return (
@@ -75,24 +73,21 @@ export default function Dashboard() {
   return (
     <div>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0,y: 20}}
+        animate={{opacity: 1,y: 0}}
+        transition={{duration: 0.5}}
       >
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-semibold text-white">Dashboard</h1>
-              <p className="text-sm text-gray-400 mt-2">Welcome back, {user?.businessName}</p>
+              <p className="text-sm text-gray-400 mt-2">Welcome back,{user?.businessName}</p>
             </div>
             <div className="flex flex-col items-end space-y-2">
               <SubscriptionStatus subscription={subscription} compact />
               {planLimits && (
                 <div className="text-xs text-gray-500">
-                  {planLimits.inventoryItems === -1 
-                    ? 'Unlimited items' 
-                    : `${inventoryCount}/${planLimits.inventoryItems} items used`
-                  }
+                  {planLimits.inventoryItems===-1 ? 'Unlimited items' : `${inventoryCount}/${planLimits.inventoryItems} items used`}
                 </div>
               )}
             </div>
@@ -100,16 +95,16 @@ export default function Dashboard() {
         </div>
 
         {/* Subscription Banner (if free plan) */}
-        {currentPlan === 'free' && (
+        {currentPlan==='free' && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0,y: -10}}
+            animate={{opacity: 1,y: 0}}
             className="mb-6 bg-gradient-to-r from-primary-600/20 to-blue-600/20 rounded-lg p-4 border border-primary-500/30"
           >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-white font-medium">Upgrade to unlock premium features</h3>
-                <p className="text-gray-300 text-sm mt-1">Get access to receipt scanning, Excel imports, and more!</p>
+                <p className="text-gray-300 text-sm mt-1">Get access to receipt scanning,Excel imports,and more!</p>
               </div>
               <Link
                 to="/pricing"
@@ -129,12 +124,12 @@ export default function Dashboard() {
         >
           {stats && stats.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {stats.map((stat, index) => (
+              {stats.map((stat,index)=> (
                 <motion.div
                   key={stat.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  initial={{opacity: 0,y: 20}}
+                  animate={{opacity: 1,y: 0}}
+                  transition={{duration: 0.5,delay: index * 0.1}}
                   className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
                 >
                   <div className="p-4 sm:p-5">
@@ -142,9 +137,9 @@ export default function Dashboard() {
                       <div className="flex-shrink-0">
                         <stat.icon
                           className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                            stat.changeType === 'negative'
+                            stat.changeType==='negative'
                               ? 'text-red-400'
-                              : stat.changeType === 'warning'
+                              : stat.changeType==='warning'
                               ? 'text-yellow-400'
                               : 'text-gray-400'
                           }`}
@@ -169,8 +164,8 @@ export default function Dashboard() {
             </div>
           ) : (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0,y: 20}}
+              animate={{opacity: 1,y: 0}}
               className="bg-gray-800 overflow-hidden rounded-lg shadow p-6 sm:p-8 text-center text-gray-400"
             >
               <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
@@ -186,9 +181,9 @@ export default function Dashboard() {
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Receipt Scanner Card */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            initial={{opacity: 0,y: 20}}
+            animate={{opacity: 1,y: 0}}
+            transition={{delay: 0.2}}
             className="bg-gray-800 rounded-lg p-6"
           >
             <div className="flex items-center mb-4">
@@ -219,9 +214,9 @@ export default function Dashboard() {
 
           {/* Excel Import Card */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            initial={{opacity: 0,y: 20}}
+            animate={{opacity: 1,y: 0}}
+            transition={{delay: 0.3}}
             className="bg-gray-800 rounded-lg p-6"
           >
             <div className="flex items-center mb-4">
@@ -231,7 +226,7 @@ export default function Dashboard() {
               <h3 className="ml-3 text-lg font-medium text-white">Excel Import</h3>
             </div>
             <p className="text-gray-400 mb-4">
-              Bulk import your inventory data from Excel spreadsheets.
+              Bulkimport your inventory data from Excel spreadsheets.
             </p>
             <div className="mt-2">
               {planLimits?.excelImport ? (
@@ -252,11 +247,11 @@ export default function Dashboard() {
         </div>
 
         {/* Plan Limit Warning for Inventory */}
-        {planLimits && planLimits.inventoryItems !== -1 && inventoryCount >= planLimits.inventoryItems * 0.8 && (
+        {planLimits && planLimits.inventoryItems !==-1 && inventoryCount >=planLimits.inventoryItems * 0.8 && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            initial={{opacity: 0,y: 20}}
+            animate={{opacity: 1,y: 0}}
+            transition={{delay: 0.4}}
             className="mt-6"
           >
             <PlanLimitChecker
@@ -272,7 +267,7 @@ export default function Dashboard() {
 }
 
 // Helper icon component
-function RiArrowRightIcon({ className }) {
+function RiArrowRightIcon({className}) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className={className}>
       <path fill="none" d="M0 0h24v24H0z" />

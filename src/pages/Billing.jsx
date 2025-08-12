@@ -1,71 +1,62 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
-import { 
-  RiCreditCardLine, 
-  RiCalendarLine, 
-  RiTrendingUpLine, 
-  RiSettings3Line,
-  RiArrowUpLine 
-} from 'react-icons/ri';
-import { useAuth } from '../context/AuthContext';
+import {motion} from 'framer-motion';
+import {useState,useEffect} from 'react';
+import {RiCreditCardLine,RiCalendarLine,RiLineChartLine,RiSettings3Line,RiArrowUpLine} from 'react-icons/ri';
+import {useAuth} from '../context/AuthContext';
 import SubscriptionManager from '../components/SubscriptionManager';
 import BillingHistory from '../components/BillingHistory';
 import UsageMetrics from '../components/UsageMetrics';
 import PlanUpgradeModal from '../components/PlanUpgradeModal';
-import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import {SUBSCRIPTION_PLANS} from '../lib/stripe';
 
 export default function Billing() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState('professional');
-  const { user } = useAuth();
+  const [activeTab,setActiveTab]=useState('overview');
+  const [showUpgradeModal,setShowUpgradeModal]=useState(false);
+  const [currentPlan,setCurrentPlan]=useState('professional');
+  const {user}=useAuth();
 
-  const tabs = [
-    { id: 'overview', name: 'Overview', icon: RiTrendingUpLine },
-    { id: 'subscription', name: 'Subscription', icon: RiCreditCardLine },
-    { id: 'usage', name: 'Usage', icon: RiTrendingUpLine },
-    { id: 'history', name: 'Billing History', icon: RiCalendarLine },
-    { id: 'settings', name: 'Settings', icon: RiSettings3Line }
+  const tabs=[ 
+    {id: 'overview',name: 'Overview',icon: RiLineChartLine},
+    {id: 'subscription',name: 'Subscription',icon: RiCreditCardLine},
+    {id: 'usage',name: 'Usage',icon: RiLineChartLine},
+    {id: 'history',name: 'Billing History',icon: RiCalendarLine},
+    {id: 'settings',name: 'Settings',icon: RiSettings3Line} 
   ];
 
-  const handlePlanUpgrade = async (plan, billingInterval) => {
+  const handlePlanUpgrade=async (plan,billingInterval)=> {
     try {
-      // In a real app, this would call your Stripe API
-      console.log('Upgrading to:', plan.name, billingInterval);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      // In a real app,this would call your Stripe API
+      console.log('Upgrading to:',plan.name,billingInterval);
+      // Simulate API call 
+      await new Promise(resolve=> setTimeout(resolve,2000));
       setCurrentPlan(plan.id);
       setShowUpgradeModal(false);
-      
       // Show success message
       alert(`Successfully upgraded to ${plan.name}!`);
     } catch (error) {
-      console.error('Upgrade failed:', error);
+      console.error('Upgrade failed:',error);
       alert('Failed to upgrade. Please try again later.');
     }
   };
 
-  const currentPlanDetails = SUBSCRIPTION_PLANS[currentPlan];
+  const currentPlanDetails=SUBSCRIPTION_PLANS[currentPlan];
 
   return (
     <div>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0,y: 20}}
+        animate={{opacity: 1,y: 0}}
+        transition={{duration: 0.5}}
       >
         <div className="sm:flex sm:items-center sm:justify-between mb-8">
           <div className="sm:flex-auto">
             <h1 className="text-2xl font-semibold text-white">Billing & Subscription</h1>
             <p className="mt-2 text-sm text-gray-400">
-              Manage your subscription, billing, and usage
+              Manage your subscription,billing,and usage
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
             <button
-              onClick={() => setShowUpgradeModal(true)}
+              onClick={()=> setShowUpgradeModal(true)}
               className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
               <RiArrowUpLine className="h-4 w-4 mr-2" />
@@ -78,12 +69,12 @@ export default function Billing() {
         <div className="mt-8">
           <div className="border-b border-gray-700">
             <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
-              {tabs.map((tab) => (
+              {tabs.map((tab)=> (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={()=> setActiveTab(tab.id)}
                   className={`flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === tab.id
+                    activeTab===tab.id
                       ? 'border-primary-500 text-primary-400'
                       : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
                   }`}
@@ -98,11 +89,11 @@ export default function Billing() {
 
         {/* Tab Content */}
         <div className="mt-8">
-          {activeTab === 'overview' && (
+          {activeTab==='overview' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
               className="space-y-6"
             >
               {/* Current Plan Overview */}
@@ -110,7 +101,7 @@ export default function Billing() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-white">Current Plan</h3>
                   <button
-                    onClick={() => setShowUpgradeModal(true)}
+                    onClick={()=> setShowUpgradeModal(true)}
                     className="text-primary-400 hover:text-primary-300 text-sm font-medium"
                   >
                     Upgrade Plan
@@ -131,7 +122,7 @@ export default function Billing() {
                   <div className="col-span-2">
                     <h5 className="text-white font-medium mb-3">Plan Features</h5>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {(currentPlanDetails?.features || []).slice(0, 6).map((feature, index) => (
+                      {(currentPlanDetails?.features || []).slice(0,6).map((feature,index)=> (
                         <div key={index} className="flex items-start text-sm">
                           <div className="w-2 h-2 bg-green-400 rounded-full mt-2 mr-2 flex-shrink-0"></div>
                           <span className="text-gray-300">{feature}</span>
@@ -164,7 +155,7 @@ export default function Billing() {
                 </div>
                 <div className="bg-gray-800 p-6 rounded-lg">
                   <div className="flex items-center">
-                    <RiTrendingUpLine className="h-8 w-8 text-purple-400 mr-3" />
+                    <RiLineChartLine className="h-8 w-8 text-purple-400 mr-3" />
                     <div>
                       <div className="text-2xl font-bold text-white">247</div>
                       <div className="text-gray-400 text-sm">Items Tracked</div>
@@ -175,15 +166,15 @@ export default function Billing() {
             </motion.div>
           )}
 
-          {activeTab === 'subscription' && (
+          {activeTab==='subscription' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
-              <SubscriptionManager 
+              <SubscriptionManager
                 customerId={user?.email}
-                onSubscriptionChange={() => {
+                onSubscriptionChange={()=> {
                   // Refresh data
                   console.log('Subscription changed');
                 }}
@@ -191,31 +182,31 @@ export default function Billing() {
             </motion.div>
           )}
 
-          {activeTab === 'usage' && (
+          {activeTab==='usage' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
               <UsageMetrics userPlan={currentPlan} />
             </motion.div>
           )}
 
-          {activeTab === 'history' && (
+          {activeTab==='history' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
               <BillingHistory customerId={user?.email} />
             </motion.div>
           )}
 
-          {activeTab === 'settings' && (
+          {activeTab==='settings' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
               className="space-y-6"
             >
               <div className="bg-gray-800 rounded-lg p-6">
@@ -231,7 +222,6 @@ export default function Billing() {
                       <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                     </label>
                   </div>
-
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-white font-medium">Email notifications</h4>
@@ -242,7 +232,6 @@ export default function Billing() {
                       <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                     </label>
                   </div>
-
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-white font-medium">Usage alerts</h4>
@@ -255,7 +244,6 @@ export default function Billing() {
                   </div>
                 </div>
               </div>
-
               <div className="bg-gray-800 rounded-lg p-6">
                 <h3 className="text-lg font-medium text-white mb-4">Billing Address</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -324,7 +312,7 @@ export default function Billing() {
       {/* Plan Upgrade Modal */}
       <PlanUpgradeModal
         isOpen={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
+        onClose={()=> setShowUpgradeModal(false)}
         currentPlan={currentPlan}
         onUpgrade={handlePlanUpgrade}
       />

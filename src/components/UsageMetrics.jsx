@@ -1,30 +1,31 @@
-import {useState, useEffect} from 'react';
+import {useState,useEffect} from 'react';
 import {motion} from 'framer-motion';
-import {RiBarChartLine, RiTeamLine, RiStore2Line, RiTrendingUpLine, RiScanLine} from 'react-icons/ri';
-import {SUBSCRIPTION_PLANS, getPlanById} from '../lib/stripe';
+import {RiBarChartLine,RiTeamLine,RiStore2Line,RiLineChartLine,RiScanLine} from 'react-icons/ri';
+import {SUBSCRIPTION_PLANS,getPlanById} from '../lib/stripe';
 
-export default function UsageMetrics({userPlan = 'free'}) {
-  const [usage, setUsage] = useState({
+export default function UsageMetrics({userPlan='free'}) {
+  const [usage,setUsage]=useState({
     inventoryItems: 0,
     teamMembers: 0,
     receiptScans: 0,
     apiCalls: 0,
     storageUsed: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [loading,setLoading]=useState(true);
 
-  useEffect(() => {
+  useEffect(()=> {
     loadUsageData();
-  }, []);
+  },[]);
 
-  const loadUsageData = async () => {
+  const loadUsageData=async ()=> {
     try {
       setLoading(true);
+      
       // Simulate API call with a delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve=> setTimeout(resolve,800));
       
       // Mock usage data - replace with actual API call
-      const mockUsage = {
+      const mockUsage={
         inventoryItems: 147,
         teamMembers: 1,
         receiptScans: 35,
@@ -34,28 +35,28 @@ export default function UsageMetrics({userPlan = 'free'}) {
       
       setUsage(mockUsage);
     } catch (error) {
-      console.error('Error loading usage data:', error);
+      console.error('Error loading usage data:',error);
     } finally {
       setLoading(false);
     }
   };
 
-  const plan = getPlanById(userPlan);
-  const limits = plan?.limits || {};
+  const plan=getPlanById(userPlan);
+  const limits=plan?.limits || {};
 
-  const getUsagePercentage = (current, limit) => {
-    if (limit === -1) return 0; // Unlimited
-    if (limit === 0) return 100; // Not available on this plan
-    return Math.min((current / limit) * 100, 100);
+  const getUsagePercentage=(current,limit)=> {
+    if (limit===-1) return 0;// Unlimited
+    if (limit===0) return 100;// Not available on this plan
+    return Math.min((current / limit) * 100,100);
   };
 
-  const getUsageColor = (percentage) => {
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 75) return 'bg-yellow-500';
+  const getUsageColor=(percentage)=> {
+    if (percentage >=90) return 'bg-red-500';
+    if (percentage >=75) return 'bg-yellow-500';
     return 'bg-green-500';
   };
 
-  const usageMetrics = [
+  const usageMetrics=[ 
     {
       name: 'Inventory Items',
       current: usage.inventoryItems,
@@ -81,11 +82,11 @@ export default function UsageMetrics({userPlan = 'free'}) {
     {
       name: 'Storage Used',
       current: usage.storageUsed,
-      limit: 5, // 5GB for all plans
+      limit: 5,// 5GB for all plans
       icon: RiBarChartLine,
       color: 'text-yellow-400',
       unit: 'GB'
-    }
+    } 
   ];
 
   if (loading) {
@@ -111,20 +112,19 @@ export default function UsageMetrics({userPlan = 'free'}) {
           </div>
         </div>
       </div>
-
       <div className="px-4 py-5 sm:p-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {usageMetrics.map((metric, index) => {
-            const percentage = getUsagePercentage(metric.current, metric.limit);
-            const isUnlimited = metric.limit === -1;
-            const isUnavailable = metric.limit === 0;
-
+          {usageMetrics.map((metric,index)=> {
+            const percentage=getUsagePercentage(metric.current,metric.limit);
+            const isUnlimited=metric.limit===-1;
+            const isUnavailable=metric.limit===0;
+            
             return (
               <motion.div
                 key={metric.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                initial={{opacity: 0,y: 20}}
+                animate={{opacity: 1,y: 0}}
+                transition={{delay: index * 0.1}}
                 className="bg-gray-700 rounded-lg p-4"
               >
                 <div className="flex items-center justify-between mb-3">
@@ -152,21 +152,19 @@ export default function UsageMetrics({userPlan = 'free'}) {
                     </div>
                     <div className="w-full bg-gray-600 rounded-full h-2">
                       <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percentage}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className={`h-2 rounded-full transition-all duration-300 ${
-                          isUnavailable ? 'bg-red-500' : isUnlimited ? 'bg-green-500' : getUsageColor(percentage)
-                        }`}
+                        initial={{width: 0}}
+                        animate={{width: `${percentage}%`}}
+                        transition={{duration: 1,ease: "easeOut"}}
+                        className={`h-2 rounded-full transition-all duration-300 ${isUnavailable ? 'bg-red-500' : isUnlimited ? 'bg-green-500' : getUsageColor(percentage)}`}
                       />
                     </div>
-
-                    {percentage >= 75 && !isUnlimited && !isUnavailable && (
-                      <div className={`text-xs ${percentage >= 90 ? 'text-red-400' : 'text-yellow-400'}`}>
-                        {percentage >= 90 ? '⚠️ Approaching limit - consider upgrading' : '⚡ High usage detected'}
+                    
+                    {percentage >=75 && !isUnlimited && !isUnavailable && (
+                      <div className={`text-xs ${percentage >=90 ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {percentage >=90 ? '⚠️ Approaching limit - consider upgrading' : '⚡ High usage detected'}
                       </div>
                     )}
-
+                    
                     {isUnavailable && (
                       <div className="text-xs text-red-400">
                         ⚠️ Upgrade your plan to access this feature

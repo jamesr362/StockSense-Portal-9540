@@ -1,13 +1,13 @@
 import {motion} from 'framer-motion';
-import {RiCheckLine, RiCloseLine, RiCalendarLine, RiCreditCardLine, RiArrowRightLine} from 'react-icons/ri';
-import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
+import {RiCheckLine,RiCloseLine,RiCalendarLine,RiCreditCardLine,RiArrowRightLine} from 'react-icons/ri';
+import {SUBSCRIPTION_PLANS,formatPrice} from '../lib/stripe';
 
 export default function SubscriptionCard({
   subscription, 
   onUpgrade, 
   onCancel, 
   onReactivate,
-  isLoading = false 
+  isLoading=false 
 }) {
   if (!subscription) {
     return (
@@ -36,16 +36,11 @@ export default function SubscriptionCard({
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': 
-        return willCancelAtPeriodEnd ? 'text-yellow-400' : 'text-green-400';
-      case 'canceled': 
-        return 'text-red-400';
-      case 'trialing': 
-        return 'text-blue-400';
-      case 'past_due': 
-        return 'text-orange-400';
-      default: 
-        return 'text-gray-400';
+      case 'active': return willCancelAtPeriodEnd ? 'text-yellow-400' : 'text-green-400';
+      case 'canceled': return 'text-red-400';
+      case 'trialing': return 'text-blue-400';
+      case 'past_due': return 'text-orange-400';
+      default: return 'text-gray-400';
     }
   };
 
@@ -182,8 +177,7 @@ export default function SubscriptionCard({
         {willCancelAtPeriodEnd && (
           <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
             <p className="text-yellow-300 text-sm">
-              Your subscription will end on {formatDate(subscription.currentPeriodEnd)}. 
-              You'll be downgraded to the Free plan unless you reactivate.
+              Your subscription will end on {formatDate(subscription.currentPeriodEnd)}. You'll be downgraded to the Free plan unless you reactivate.
             </p>
           </div>
         )}

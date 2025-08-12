@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
 import {useState} from 'react';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiCreditCardLine} from 'react-icons/ri';
+import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiMoneyDollarCircleLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import SecurityAuditLog from '../components/SecurityAuditLog';
 import SubscriptionManagement from './SubscriptionManagement';
@@ -11,7 +11,7 @@ export default function Settings() {
 
   const tabs = [
     {id: 'general', name: 'General', icon: RiStore2Line},
-    {id: 'subscription', name: 'Subscription', icon: RiCreditCardLine},
+    {id: 'subscription', name: 'Subscription', icon: RiMoneyDollarCircleLine},
     {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
     {id: 'security', name: 'Security', icon: RiLockLine},
     {id: 'team', name: 'Team', icon: RiUser3Line},
@@ -20,9 +20,9 @@ export default function Settings() {
   return (
     <div>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
+        transition={{duration: 0.5}}
       >
         <div className="sm:flex sm:items-center mb-8">
           <div className="sm:flex-auto">
@@ -56,9 +56,9 @@ export default function Settings() {
           <div className="mt-8">
             {activeTab === 'general' && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -80,7 +80,6 @@ export default function Settings() {
                         />
                       </div>
                     </div>
-
                     <div className="sm:col-span-3">
                       <label htmlFor="email" className="block text-sm font-medium text-gray-300">
                         Email
@@ -96,7 +95,6 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
-
                   <div className="pt-5">
                     <div className="flex justify-end">
                       <button
@@ -113,9 +111,9 @@ export default function Settings() {
 
             {activeTab === 'subscription' && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
               >
                 <SubscriptionManagement />
               </motion.div>
@@ -123,9 +121,9 @@ export default function Settings() {
 
             {activeTab === 'notifications' && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -151,7 +149,6 @@ export default function Settings() {
                         </p>
                       </div>
                     </div>
-
                     <div className="flex items-start">
                       <div className="flex items-center h-5">
                         <input
@@ -177,9 +174,9 @@ export default function Settings() {
 
             {activeTab === 'security' && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
                 className="space-y-6"
               >
                 <SecurityAuditLog userEmail={user?.email} />
@@ -188,9 +185,9 @@ export default function Settings() {
 
             {activeTab === 'team' && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{opacity: 0}}
+                animate={{opacity: 1}}
+                transition={{duration: 0.3}}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">

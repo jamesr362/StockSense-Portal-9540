@@ -1,14 +1,14 @@
 import {useState} from 'react';
 import {motion} from 'framer-motion';
-import {useStripe, useElements, CardElement} from '@stripe/react-stripe-js';
-import {RiLockLine, RiShieldCheckLine, RiCreditCardLine} from 'react-icons/ri';
+import {useStripe,useElements,CardElement} from '@stripe/react-stripe-js';
+import {RiLockLine,RiShieldCheckLine} from 'react-icons/ri';
 import {logSecurityEvent} from '../utils/security';
 
-const CARD_ELEMENT_OPTIONS = {
+const CARD_ELEMENT_OPTIONS={
   style: {
     base: {
       color: '#fff',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: 'system-ui,-apple-system,sans-serif',
       fontSmoothing: 'antialiased',
       fontSize: '16px',
       '::placeholder': {
@@ -25,19 +25,19 @@ const CARD_ELEMENT_OPTIONS = {
 
 export default function PaymentForm({
   amount,
-  currency = 'gbp',
+  currency='gbp',
   onSuccess,
   onError,
-  isProcessing = false,
-  showBillingAddress = true,
-  customerId = null,
-  metadata = {}
+  isProcessing=false,
+  showBillingAddress=true,
+  customerId=null,
+  metadata={}
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [error, setError] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [billingDetails, setBillingDetails] = useState({
+  const stripe=useStripe();
+  const elements=useElements();
+  const [error,setError]=useState(null);
+  const [processing,setProcessing]=useState(false);
+  const [billingDetails,setBillingDetails]=useState({
     name: '',
     email: '',
     address: {
@@ -49,7 +49,7 @@ export default function PaymentForm({
     },
   });
 
-  const handleSubmit = async (event) => {
+  const handleSubmit=async (event)=> {
     event.preventDefault();
 
     if (!stripe || !elements) {
@@ -60,12 +60,12 @@ export default function PaymentForm({
     setError(null);
 
     try {
-      logSecurityEvent('PAYMENT_FORM_SUBMISSION', { amount, currency });
+      logSecurityEvent('PAYMENT_FORM_SUBMISSION',{amount,currency});
 
-      const cardElement = elements.getElement(CardElement);
+      const cardElement=elements.getElement(CardElement);
 
       // Create payment method
-      const { error: pmError, paymentMethod } = await stripe.createPaymentMethod({
+      const {error: pmError,paymentMethod}=await stripe.createPaymentMethod({
         type: 'card',
         card: cardElement,
         billing_details: billingDetails,
@@ -73,18 +73,18 @@ export default function PaymentForm({
 
       if (pmError) {
         setError(pmError.message);
-        logSecurityEvent('PAYMENT_METHOD_ERROR', { error: pmError.message });
+        logSecurityEvent('PAYMENT_METHOD_ERROR',{error: pmError.message});
         return;
       }
 
       // Process payment
-      const response = await fetch('/api/stripe/process-payment', {
+      const response=await fetch('/api/stripe/process-payment',{
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: amount * 100, // Convert to cents
+          amount: amount * 100,// Convert to cents
           currency,
           payment_method: paymentMethod.id,
           customer_id: customerId,
@@ -96,10 +96,10 @@ export default function PaymentForm({
         throw new Error('Payment processing failed');
       }
 
-      const { client_secret } = await response.json();
+      const {client_secret}=await response.json();
 
       // Confirm payment
-      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(
+      const {error: confirmError,paymentIntent}=await stripe.confirmCardPayment(
         client_secret,
         {
           payment_method: paymentMethod.id,
@@ -108,25 +108,25 @@ export default function PaymentForm({
 
       if (confirmError) {
         setError(confirmError.message);
-        logSecurityEvent('PAYMENT_CONFIRMATION_ERROR', { error: confirmError.message });
+        logSecurityEvent('PAYMENT_CONFIRMATION_ERROR',{error: confirmError.message});
         return;
       }
 
-      logSecurityEvent('PAYMENT_SUCCESS', { paymentIntentId: paymentIntent.id });
+      logSecurityEvent('PAYMENT_SUCCESS',{paymentIntentId: paymentIntent.id});
       onSuccess(paymentIntent);
     } catch (err) {
       setError(err.message);
-      logSecurityEvent('PAYMENT_PROCESSING_ERROR', { error: err.message });
+      logSecurityEvent('PAYMENT_PROCESSING_ERROR',{error: err.message});
       onError(err);
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleBillingChange = (field, value) => {
+  const handleBillingChange=(field,value)=> {
     if (field.includes('.')) {
-      const [parent, child] = field.split('.');
-      setBillingDetails(prev => ({
+      const [parent,child]=field.split('.');
+      setBillingDetails(prev=> ({
         ...prev,
         [parent]: {
           ...prev[parent],
@@ -134,7 +134,7 @@ export default function PaymentForm({
         }
       }));
     } else {
-      setBillingDetails(prev => ({
+      setBillingDetails(prev=> ({
         ...prev,
         [field]: value
       }));
@@ -143,15 +143,12 @@ export default function PaymentForm({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{opacity: 0,y: 20}}
+      animate={{opacity: 1,y: 0}}
       className="max-w-md mx-auto bg-gray-800 rounded-lg p-6 shadow-xl"
     >
       {/* Header */}
       <div className="text-center mb-6">
-        <div className="flex items-center justify-center mb-2">
-          <RiCreditCardLine className="h-8 w-8 text-primary-400" />
-        </div>
         <h3 className="text-xl font-semibold text-white">Secure Payment</h3>
         <p className="text-gray-400 text-sm mt-1">
           Your payment information is encrypted and secure
@@ -175,7 +172,6 @@ export default function PaymentForm({
         {showBillingAddress && (
           <div className="space-y-4">
             <h4 className="text-sm font-medium text-white">Billing Information</h4>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -184,7 +180,7 @@ export default function PaymentForm({
                 <input
                   type="text"
                   value={billingDetails.name}
-                  onChange={(e) => handleBillingChange('name', e.target.value)}
+                  onChange={(e)=> handleBillingChange('name',e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="John Doe"
                   required
@@ -197,7 +193,7 @@ export default function PaymentForm({
                 <input
                   type="email"
                   value={billingDetails.email}
-                  onChange={(e) => handleBillingChange('email', e.target.value)}
+                  onChange={(e)=> handleBillingChange('email',e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="john@example.com"
                   required
@@ -212,7 +208,7 @@ export default function PaymentForm({
               <input
                 type="text"
                 value={billingDetails.address.line1}
-                onChange={(e) => handleBillingChange('address.line1', e.target.value)}
+                onChange={(e)=> handleBillingChange('address.line1',e.target.value)}
                 className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="123 Main Street"
                 required
@@ -227,7 +223,7 @@ export default function PaymentForm({
                 <input
                   type="text"
                   value={billingDetails.address.city}
-                  onChange={(e) => handleBillingChange('address.city', e.target.value)}
+                  onChange={(e)=> handleBillingChange('address.city',e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="London"
                   required
@@ -240,7 +236,7 @@ export default function PaymentForm({
                 <input
                   type="text"
                   value={billingDetails.address.postal_code}
-                  onChange={(e) => handleBillingChange('address.postal_code', e.target.value)}
+                  onChange={(e)=> handleBillingChange('address.postal_code',e.target.value)}
                   className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="SW1A 1AA"
                   required
@@ -263,8 +259,8 @@ export default function PaymentForm({
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0,y: -10}}
+            animate={{opacity: 1,y: 0}}
             className="p-3 bg-red-900/50 border border-red-700 rounded-md"
           >
             <p className="text-red-300 text-sm">{error}</p>
@@ -276,7 +272,7 @@ export default function PaymentForm({
           <div className="flex justify-between items-center">
             <span className="text-gray-300">Total Amount:</span>
             <span className="text-xl font-bold text-white">
-              {new Intl.NumberFormat('en-GB', {
+              {new Intl.NumberFormat('en-GB',{
                 style: 'currency',
                 currency: currency.toUpperCase(),
               }).format(amount)}
@@ -296,7 +292,7 @@ export default function PaymentForm({
               Processing...
             </div>
           ) : (
-            `Pay ${new Intl.NumberFormat('en-GB', {
+            `Pay ${new Intl.NumberFormat('en-GB',{
               style: 'currency',
               currency: currency.toUpperCase(),
             }).format(amount)}`
