@@ -4,6 +4,7 @@ import { RiFileExcelLine, RiDownloadLine, RiUploadLine, RiCheckLine, RiAlertLine
 import ExcelImporterModal from '../components/ExcelImporterModal';
 import { addInventoryItem } from '../services/db';
 import { useAuth } from '../context/AuthContext';
+import FeatureGate from '../components/FeatureGate';
 
 export default function ExcelImporter() {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -65,7 +66,9 @@ export default function ExcelImporter() {
       categories: [...new Set(importedItems.map(item => item.category))],
       summary: {
         totalQuantity: importedItems.reduce((sum, item) => sum + (item.quantity || 0), 0),
-        avgPrice: importedItems.length > 0 ? importedItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0) / importedItems.length : 0
+        avgPrice: importedItems.length > 0
+          ? importedItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0) / importedItems.length
+          : 0
       }
     };
 
@@ -106,7 +109,7 @@ export default function ExcelImporter() {
 
       if (addedCount > 0) {
         setSuccessMessage(
-          `Successfully imported ${addedCount} items from ${fileName}!` + 
+          `Successfully imported ${addedCount} items from ${fileName}!` +
           (failedCount > 0 ? ` (${failedCount} items failed to import)` : '')
         );
         setTimeout(() => setSuccessMessage(''), 5000);
@@ -148,7 +151,7 @@ export default function ExcelImporter() {
     const dataStr = JSON.stringify(importHistory, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `import-history-${new Date().toISOString().split('T')[0]}.json`;
-    
+
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -167,9 +170,9 @@ export default function ExcelImporter() {
     ];
 
     // Convert to CSV
-    const csvContent = sampleData.map(row => 
-      row.map(field => `"${field}"`).join(',')
-    ).join('\n');
+    const csvContent = sampleData
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -203,381 +206,378 @@ export default function ExcelImporter() {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'success': return <RiCheckLine className="h-5 w-5 text-green-400" />;
-      case 'failed': return <RiAlertLine className="h-5 w-5 text-red-400" />;
-      default: return <RiFileExcelLine className="h-5 w-5 text-blue-400" />;
+      case 'success':
+        return <RiCheckLine className="h-5 w-5 text-green-400" />;
+      case 'failed':
+        return <RiAlertLine className="h-5 w-5 text-red-400" />;
+      default:
+        return <RiFileExcelLine className="h-5 w-5 text-blue-400" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'success': return 'bg-green-100 text-green-800';
-      case 'failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-blue-100 text-blue-800';
+      case 'success':
+        return 'bg-green-100 text-green-800';
+      case 'failed':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-blue-100 text-blue-800';
     }
   };
 
   return (
-    <div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-white">Excel Importer</h1>
-            <p className="mt-1 text-sm text-gray-400">
-              Import inventory data from Excel, CSV, or ODS files
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <button
-              onClick={downloadTemplate}
-              className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
-            >
-              <RiDownloadLine className="mr-2 h-4 w-4" />
-              Download Template
-            </button>
-            {importHistory.length > 0 && (
-              <>
-                <button
-                  onClick={exportHistory}
-                  className="inline-flex items-center justify-center rounded-md border border-blue-600 bg-transparent px-4 py-2 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
-                >
-                  <RiDownloadLine className="mr-2 h-4 w-4" />
-                  Export History
-                </button>
-                <button
-                  onClick={clearHistory}
-                  className="inline-flex items-center justify-center rounded-md border border-red-600 bg-transparent px-4 py-2 text-sm font-medium text-red-400 shadow-sm hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
-                >
-                  Clear History
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => setIsImporterOpen(true)}
-              disabled={isLoading}
-              className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
-            >
-              <RiUploadLine className="mr-2 h-4 w-4" />
-              {isLoading ? 'Processing...' : 'Import Spreadsheet'}
-            </button>
-          </div>
-        </div>
-
-        {/* Success Message */}
-        {successMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 rounded-md bg-green-900/50 p-4"
-          >
-            <div className="flex items-center">
-              <RiCheckLine className="h-5 w-5 text-green-400 mr-2" />
-              <div className="text-sm text-green-200">{successMessage}</div>
+    <FeatureGate feature="excelImport" fallbackMessage="Excel importing requires a Basic or Professional plan">
+      <div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-semibold text-white">Excel Importer</h1>
+              <p className="mt-1 text-sm text-gray-400">
+                Import inventory data from Excel, CSV, or ODS files
+              </p>
             </div>
-          </motion.div>
-        )}
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <button
+                onClick={downloadTemplate}
+                className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
+              >
+                <RiDownloadLine className="mr-2 h-4 w-4" /> Download Template
+              </button>
 
-        {/* Error Message */}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 rounded-md bg-red-900/50 p-4"
-          >
-            <div className="flex items-center">
-              <RiAlertLine className="h-5 w-5 text-red-400 mr-2" />
-              <div className="text-sm text-red-200">{error}</div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-          >
-            <div className="p-4 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <RiFileExcelLine className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
-                </div>
-                <div className="ml-3 sm:ml-4 w-0 flex-1">
-                  <dl>
-                    <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                      Total Imports
-                    </dt>
-                    <dd className="flex items-baseline mt-1">
-                      <div className="text-xl sm:text-2xl font-semibold text-white">
-                        {stats.totalImports}
-                      </div>
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-          >
-            <div className="p-4 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-blue-400" />
-                </div>
-                <div className="ml-3 sm:ml-4 w-0 flex-1">
-                  <dl>
-                    <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                      Items Imported
-                    </dt>
-                    <dd className="flex items-baseline mt-1">
-                      <div className="text-xl sm:text-2xl font-semibold text-white">
-                        {stats.itemsImported}
-                      </div>
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-          >
-            <div className="p-4 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
-                </div>
-                <div className="ml-3 sm:ml-4 w-0 flex-1">
-                  <dl>
-                    <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                      Success Rate
-                    </dt>
-                    <dd className="flex items-baseline mt-1">
-                      <div className="text-xl sm:text-2xl font-semibold text-white">
-                        {stats.totalImports > 0 ? Math.round((stats.successfulImports / stats.totalImports) * 100) : 0}%
-                      </div>
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-          >
-            <div className="p-4 sm:p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <RiHistoryLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
-                </div>
-                <div className="ml-3 sm:ml-4 w-0 flex-1">
-                  <dl>
-                    <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                      Last Import
-                    </dt>
-                    <dd className="flex items-baseline mt-1">
-                      <div className="text-sm sm:text-base font-semibold text-white break-all">
-                        {stats.lastImport ? formatDate(stats.lastImport).split(' ')[0] : 'Never'}
-                      </div>
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Quick Start Guide */}
-        <div className="bg-gray-800 rounded-lg shadow-lg mb-8">
-          <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-white">Quick Start Guide</h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-400">
-              Follow these steps to import your inventory data
-            </p>
-          </div>
-          <div className="px-4 py-5 sm:p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-4 mx-auto">
-                  <span className="text-lg font-semibold">1</span>
-                </div>
-                <h4 className="text-white font-medium mb-2">Download Template</h4>
-                <p className="text-gray-400 text-sm">
-                  Get our Excel template with the correct column structure and sample data.
-                </p>
-                <button
-                  onClick={downloadTemplate}
-                  className="mt-3 inline-flex items-center px-3 py-1 bg-primary-600 text-white rounded text-sm hover:bg-primary-700"
-                >
-                  <RiDownloadLine className="h-4 w-4 mr-1" />
-                  Download
-                </button>
-              </div>
-              
-              <div className="text-center">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-4 mx-auto">
-                  <span className="text-lg font-semibold">2</span>
-                </div>
-                <h4 className="text-white font-medium mb-2">Prepare Your Data</h4>
-                <p className="text-gray-400 text-sm">
-                  Fill in your inventory data using the template format with required columns.
-                </p>
-              </div>
-              
-              <div className="text-center">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600 mb-4 mx-auto">
-                  <span className="text-lg font-semibold">3</span>
-                </div>
-                <h4 className="text-white font-medium mb-2">Import & Review</h4>
-                <p className="text-gray-400 text-sm">
-                  Upload your file, map columns, review data, and confirm the import.
-                </p>
-                <button
-                  onClick={() => setIsImporterOpen(true)}
-                  className="mt-3 inline-flex items-center px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
-                >
-                  <RiUploadLine className="h-4 w-4 mr-1" />
-                  Start Import
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Import History */}
-        <div className="bg-gray-800 rounded-lg shadow-lg">
-          <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg leading-6 font-medium text-white">Import History</h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-400">
-                  Your recent Excel imports and their details
-                </p>
-              </div>
-              <RiHistoryLine className="h-6 w-6 text-gray-400" />
-            </div>
-          </div>
-          <div className="px-4 py-5 sm:p-6">
-            {importHistory.length === 0 ? (
-              <div className="text-center py-12">
-                <RiFileExcelLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">No imports yet</h3>
-                <p className="text-gray-400 text-sm mb-6">
-                  Start by importing your first spreadsheet to build your import history
-                </p>
-                <button
-                  onClick={() => setIsImporterOpen(true)}
-                  className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                >
-                  <RiUploadLine className="mr-2 h-4 w-4" />
-                  Import Your First Spreadsheet
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {importHistory.map((importRecord) => (
-                  <motion.div
-                    key={importRecord.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors"
+              {importHistory.length > 0 && (
+                <>
+                  <button
+                    onClick={exportHistory}
+                    className="inline-flex items-center justify-center rounded-md border border-blue-600 bg-transparent px-4 py-2 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          {getStatusIcon(importRecord.status)}
-                          <span className="text-white font-medium ml-2">
-                            {importRecord.fileName}
-                          </span>
-                          <span className="ml-2 text-sm text-gray-400">
-                            {formatDate(importRecord.timestamp)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
-                          <span>{importRecord.itemCount} items</span>
-                          <span>Total: {formatCurrency(importRecord.totalValue)}</span>
-                          <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(importRecord.status)}`}>
-                            {importRecord.status}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => {
-                            const details = `Import Details:
-File: ${importRecord.fileName}
-Date: ${formatDate(importRecord.timestamp)}
-Items: ${importRecord.itemCount}
-Total Value: ${formatCurrency(importRecord.totalValue)}
-Categories: ${importRecord.categories.join(', ')}
-Total Quantity: ${importRecord.summary.totalQuantity}
-Average Price: ${formatCurrency(importRecord.summary.avgPrice)}`;
-                            alert(details);
-                          }}
-                          className="text-gray-400 hover:text-gray-300 p-1"
-                          title="View details"
-                        >
-                          <RiEyeLine className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteImportRecord(importRecord.id)}
-                          className="text-gray-400 hover:text-red-400 p-1"
-                          title="Delete import record"
-                        >
-                          <RiDeleteBin6Line className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {importRecord.categories.length > 0 && (
-                      <div className="bg-gray-700 rounded-md p-3">
-                        <h4 className="text-sm font-medium text-white mb-2">Categories Imported:</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {importRecord.categories.map((category, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-600 text-gray-200"
-                            >
-                              {category}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
+                    <RiDownloadLine className="mr-2 h-4 w-4" /> Export History
+                  </button>
+                  <button
+                    onClick={clearHistory}
+                    className="inline-flex items-center justify-center rounded-md border border-red-600 bg-transparent px-4 py-2 text-sm font-medium text-red-400 shadow-sm hover:bg-red-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
+                  >
+                    Clear History
+                  </button>
+                </>
+              )}
 
-      {/* Excel Importer Modal */}
-      <ExcelImporterModal
-        isOpen={isImporterOpen}
-        onClose={() => setIsImporterOpen(false)}
-        onItemsImported={handleImportedItems}
-      />
-    </div>
+              <button
+                onClick={() => setIsImporterOpen(true)}
+                disabled={isLoading}
+                className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
+              >
+                <RiUploadLine className="mr-2 h-4 w-4" />
+                {isLoading ? 'Processing...' : 'Import Spreadsheet'}
+              </button>
+            </div>
+          </div>
+
+          {/* Success Message */}
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-md bg-green-900/50 p-4"
+            >
+              <div className="flex items-center">
+                <RiCheckLine className="h-5 w-5 text-green-400 mr-2" />
+                <div className="text-sm text-green-200">{successMessage}</div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-md bg-red-900/50 p-4"
+            >
+              <div className="flex items-center">
+                <RiAlertLine className="h-5 w-5 text-red-400 mr-2" />
+                <div className="text-sm text-red-200">{error}</div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+            >
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <RiFileExcelLine className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
+                  </div>
+                  <div className="ml-3 sm:ml-4 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                        Total Imports
+                      </dt>
+                      <dd className="flex items-baseline mt-1">
+                        <div className="text-xl sm:text-2xl font-semibold text-white">
+                          {stats.totalImports}
+                        </div>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+            >
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-blue-400" />
+                  </div>
+                  <div className="ml-3 sm:ml-4 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                        Items Imported
+                      </dt>
+                      <dd className="flex items-baseline mt-1">
+                        <div className="text-xl sm:text-2xl font-semibold text-white">
+                          {stats.itemsImported}
+                        </div>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+            >
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
+                  </div>
+                  <div className="ml-3 sm:ml-4 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                        Success Rate
+                      </dt>
+                      <dd className="flex items-baseline mt-1">
+                        <div className="text-xl sm:text-2xl font-semibold text-white">
+                          {stats.totalImports > 0
+                            ? Math.round((stats.successfulImports / stats.totalImports) * 100)
+                            : 0}%
+                        </div>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+            >
+              <div className="p-4 sm:p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <RiHistoryLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
+                  </div>
+                  <div className="ml-3 sm:ml-4 w-0 flex-1">
+                    <dl>
+                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                        Last Import
+                      </dt>
+                      <dd className="flex items-baseline mt-1">
+                        <div className="text-sm sm:text-base font-semibold text-white break-all">
+                          {stats.lastImport ? formatDate(stats.lastImport).split(' ')[0] : 'Never'}
+                        </div>
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Quick Start Guide */}
+          <div className="bg-gray-800 rounded-lg shadow-lg mb-8">
+            <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
+              <h3 className="text-lg leading-6 font-medium text-white">Quick Start Guide</h3>
+              <p className="mt-1 max-w-2xl text-sm text-gray-400">
+                Follow these steps to import your inventory data
+              </p>
+            </div>
+            <div className="px-4 py-5 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary-100 text-primary-600 mb-4 mx-auto">
+                    <span className="text-lg font-semibold">1</span>
+                  </div>
+                  <h4 className="text-white font-medium mb-2">Download Template</h4>
+                  <p className="text-gray-400 text-sm">
+                    Get our Excel template with the correct column structure and sample data.
+                  </p>
+                  <button
+                    onClick={downloadTemplate}
+                    className="mt-3 inline-flex items-center px-3 py-1 bg-primary-600 text-white rounded text-sm hover:bg-primary-700"
+                  >
+                    <RiDownloadLine className="h-4 w-4 mr-1" /> Download
+                  </button>
+                </div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-4 mx-auto">
+                    <span className="text-lg font-semibold">2</span>
+                  </div>
+                  <h4 className="text-white font-medium mb-2">Prepare Your Data</h4>
+                  <p className="text-gray-400 text-sm">
+                    Fill in your inventory data using the template format with required columns.
+                  </p>
+                </div>
+                <div className="text-center">
+                  <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600 mb-4 mx-auto">
+                    <span className="text-lg font-semibold">3</span>
+                  </div>
+                  <h4 className="text-white font-medium mb-2">Import & Review</h4>
+                  <p className="text-gray-400 text-sm">
+                    Upload your file, map columns, review data, and confirm the import.
+                  </p>
+                  <button
+                    onClick={() => setIsImporterOpen(true)}
+                    className="mt-3 inline-flex items-center px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+                  >
+                    <RiUploadLine className="h-4 w-4 mr-1" /> Start Import
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Import History */}
+          <div className="bg-gray-800 rounded-lg shadow-lg">
+            <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg leading-6 font-medium text-white">Import History</h3>
+                  <p className="mt-1 max-w-2xl text-sm text-gray-400">
+                    Your recent Excel imports and their details
+                  </p>
+                </div>
+                <RiHistoryLine className="h-6 w-6 text-gray-400" />
+              </div>
+            </div>
+            <div className="px-4 py-5 sm:p-6">
+              {importHistory.length === 0 ? (
+                <div className="text-center py-12">
+                  <RiFileExcelLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">No imports yet</h3>
+                  <p className="text-gray-400 text-sm mb-6">
+                    Start by importing your first spreadsheet to build your import history
+                  </p>
+                  <button
+                    onClick={() => setIsImporterOpen(true)}
+                    className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  >
+                    <RiUploadLine className="mr-2 h-4 w-4" /> Import Your First Spreadsheet
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {importHistory.map((importRecord) => (
+                    <motion.div
+                      key={importRecord.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center">
+                            {getStatusIcon(importRecord.status)}
+                            <span className="text-white font-medium ml-2">
+                              {importRecord.fileName}
+                            </span>
+                            <span className="ml-2 text-sm text-gray-400">
+                              {formatDate(importRecord.timestamp)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
+                            <span>{importRecord.itemCount} items</span>
+                            <span>Total: {formatCurrency(importRecord.totalValue)}</span>
+                            <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(importRecord.status)}`}>
+                              {importRecord.status}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              const details = `Import Details: File: ${importRecord.fileName} Date: ${formatDate(importRecord.timestamp)} Items: ${importRecord.itemCount} Total Value: ${formatCurrency(importRecord.totalValue)} Categories: ${importRecord.categories.join(',')} Total Quantity: ${importRecord.summary.totalQuantity} Average Price: ${formatCurrency(importRecord.summary.avgPrice)}`;
+                              alert(details);
+                            }}
+                            className="text-gray-400 hover:text-gray-300 p-1"
+                            title="View details"
+                          >
+                            <RiEyeLine className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteImportRecord(importRecord.id)}
+                            className="text-gray-400 hover:text-red-400 p-1"
+                            title="Delete import record"
+                          >
+                            <RiDeleteBin6Line className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {importRecord.categories.length > 0 && (
+                        <div className="bg-gray-700 rounded-md p-3">
+                          <h4 className="text-sm font-medium text-white mb-2">Categories Imported:</h4>
+                          <div className="flex flex-wrap gap-2">
+                            {importRecord.categories.map((category, index) => (
+                              <span
+                                key={index}
+                                className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-600 text-gray-200"
+                              >
+                                {category}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Excel Importer Modal */}
+        <ExcelImporterModal
+          isOpen={isImporterOpen}
+          onClose={() => setIsImporterOpen(false)}
+          onItemsImported={handleImportedItems}
+        />
+      </div>
+    </FeatureGate>
   );
 }

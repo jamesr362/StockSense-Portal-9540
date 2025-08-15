@@ -2,14 +2,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Project URL will be auto-injected during deployment
-const SUPABASE_URL = 'https://xajnvqjkqmbdkwfkfxrs.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhham52cWprcW1iZGt3ZmtmeHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTMyMDY0NzUsImV4cCI6MjAyODc4MjQ3NX0.YVnMmLdoE1iKVoUGpJJqTbOaIwXMdOaOWIoFkKiNvvQ';
+const SUPABASE_URL = 'https://xnfxcsdsjxgiewrssgrn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuZnhjc2RzanhnaWV3cnNzZ3JuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMjcxMDYsImV4cCI6MjA3MDYwMzEwNn0._lug2dvx1Y1qKLuKVWc6b3DDTWqVQ1Ow77q768CcaG4';
 
 let supabase = null;
 
 try {
   // Only create client if credentials are properly configured
-  if (SUPABASE_URL !== 'https://xajnvqjkqmbdkwfkfxrs.supabase.co' && SUPABASE_ANON_KEY !== 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhham52cWprcW1iZGt3ZmtmeHJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTMyMDY0NzUsImV4cCI6MjAyODc4MjQ3NX0.YVnMmLdoE1iKVoUGpJJqTbOaIwXMdOaOWIoFkKiNvvQ') {
+  if (SUPABASE_URL !== 'https://xnfxcsdsjxgiewrssgrn.supabase.co' && SUPABASE_ANON_KEY !== 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhuZnhjc2RzanhnaWV3cnNzZ3JuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMjcxMDYsImV4cCI6MjA3MDYwMzEwNn0._lug2dvx1Y1qKLuKVWc6b3DDTWqVQ1Ow77q768CcaG4') {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: true,
