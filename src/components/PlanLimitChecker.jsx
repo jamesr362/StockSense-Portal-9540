@@ -1,36 +1,154 @@
-import {useState, useEffect} from 'react';
-import {motion, AnimatePresence} from 'framer-motion';
-import {RiAlertLine, RiArrowRightLine, RiCheckLine} from 'react-icons/ri';
-import {checkPlanLimit} from '../services/subscriptionService';
-import {useAuth} from '../context/AuthContext';
-import {Link} from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiAlertLine, RiArrowRightLine, RiCheckLine } from 'react-icons/ri';
+import { checkPlanLimit } from '../services/subscriptionService';
+import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 export default function PlanLimitChecker({ 
   limitType, 
   currentUsage, 
-  children,
+  children, 
   showUpgradePrompt = true,
   customMessage = null 
 }) {
   const [limitCheck, setLimitCheck] = useState(null);
   const [loading, setLoading] = useState(true);
-  const {user} = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     const checkLimit = async () => {
       if (!user?.email) return;
       
       try {
+        // Try to check directly with Supabase first
+        if (supabase) {
+          try {
+            const { data: subscriptionData, error: subError } = await supabase
+              .from('subscriptions_tb2k4x9p1m')
+              .select('plan_id')
+              .eq('user_email', user.email.toLowerCase())
+              .single();
+              
+            if (!subError && subscriptionData) {
+              // Get the plan name from the price ID
+              const planName = subscriptionData.plan_id.split('_')[1] || 'free';
+              
+              // Check limit based on plan
+              let allowed = false;
+              let limit = 0;
+              let unlimited = false;
+              let reason = '';
+              
+              switch (planName) {
+                case 'professional':
+                  switch (limitType) {
+                    case 'inventoryItems':
+                      allowed = true;
+                      unlimited = true;
+                      break;
+                    case 'receiptScans':
+                      allowed = true;
+                      unlimited = true;
+                      break;
+                    case 'teamMembers':
+                      limit = 10;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the team member limit for your plan';
+                      break;
+                    case 'excelImport':
+                      allowed = true;
+                      unlimited = true;
+                      break;
+                    default:
+                      allowed = true;
+                  }
+                  break;
+                  
+                case 'basic':
+                  switch (limitType) {
+                    case 'inventoryItems':
+                      limit = 1000;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the inventory item limit for your plan';
+                      break;
+                    case 'receiptScans':
+                      limit = 50;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the receipt scan limit for your plan';
+                      break;
+                    case 'teamMembers':
+                      limit = 3;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the team member limit for your plan';
+                      break;
+                    case 'excelImport':
+                      allowed = true;
+                      break;
+                    default:
+                      allowed = true;
+                  }
+                  break;
+                  
+                case 'free':
+                default:
+                  switch (limitType) {
+                    case 'inventoryItems':
+                      limit = 100;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the inventory item limit for the Free plan';
+                      break;
+                    case 'receiptScans':
+                      allowed = false;
+                      reason = 'Receipt scanning is not available on the Free plan';
+                      break;
+                    case 'teamMembers':
+                      limit = 1;
+                      allowed = currentUsage < limit;
+                      reason = allowed ? null : 'You have reached the team member limit for the Free plan';
+                      break;
+                    case 'excelImport':
+                      allowed = false;
+                      reason = 'Excel import is not available on the Free plan';
+                      break;
+                    default:
+                      allowed = false;
+                      reason = 'This feature is not available on the Free plan';
+                  }
+              }
+              
+              setLimitCheck({
+                allowed,
+                reason,
+                limit,
+                unlimited,
+                remaining: unlimited ? -1 : limit - currentUsage
+              });
+              
+              setLoading(false);
+              return;
+            }
+          } catch (err) {
+            console.error('Error checking limits directly with Supabase:', err);
+            // Fall back to service method
+          }
+        }
+        
+        // Fall back to service method
         const result = await checkPlanLimit(user.email, limitType, currentUsage);
         setLimitCheck(result);
       } catch (error) {
         console.error('Error checking plan limit:', error);
-        setLimitCheck({ allowed: false, reason: 'Error checking limits' });
+        setLimitCheck({
+          allowed: false,
+          reason: 'Error checking limits'
+        });
       } finally {
         setLoading(false);
       }
     };
-
+    
     checkLimit();
   }, [user?.email, limitType, currentUsage]);
 
@@ -69,28 +187,29 @@ export default function PlanLimitChecker({
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-400">Plan Limit:</span>
                   <span className="text-white">
-                    {limitCheck.unlimited ? 'Unlimited' : limitCheck.limit}
+                    {limitCheck.unlimited ? '∞' : limitCheck.limit}
                   </span>
                 </div>
                 {!limitCheck.unlimited && (
                   <div className="mt-2">
                     <div className="w-full bg-gray-600 rounded-full h-2">
-                      <div 
-                        className="bg-yellow-500 h-2 rounded-full" 
-                        style={{ width: `${Math.min((currentUsage / limitCheck.limit) * 100, 100)}%` }}
+                      <div
+                        className="bg-yellow-500 h-2 rounded-full"
+                        style={{
+                          width: `${Math.min((currentUsage / limitCheck.limit) * 100, 100)}%`
+                        }}
                       />
                     </div>
                   </div>
                 )}
               </div>
             )}
-
+            
             <Link
               to="/pricing"
               className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
-              Upgrade Your Plan
-              <RiArrowRightLine className="h-4 w-4 ml-2" />
+              Upgrade Your Plan <RiArrowRightLine className="h-4 w-4 ml-2" />
             </Link>
           </div>
         </div>
@@ -120,8 +239,8 @@ export default function PlanLimitChecker({
                     You're approaching your plan limit: {currentUsage}/{limitCheck.limit} used
                   </p>
                   <div className="mt-2 w-full bg-gray-600 rounded-full h-1">
-                    <div 
-                      className="bg-yellow-500 h-1 rounded-full transition-all duration-300" 
+                    <div
+                      className="bg-yellow-500 h-1 rounded-full transition-all duration-300"
                       style={{ width: `${(currentUsage / limitCheck.limit) * 100}%` }}
                     />
                   </div>

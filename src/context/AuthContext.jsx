@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { getUserByEmail } from '../services/db';
-import { getUserSubscription } from '../services/subscriptionService';
 import { validateSession, createSession, clearSession, logSecurityEvent } from '../utils/security';
 import { supabase } from '../lib/supabase';
 
@@ -24,7 +23,7 @@ export function AuthProvider({ children }) {
           logout();
         }
       }, 60000); // Check every minute
-
+      
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -33,88 +32,66 @@ export function AuthProvider({ children }) {
     try {
       console.log('===AuthContext Debug===');
       
-      // Check for valid session first
+      // First check if we have a Supabase session
+      if (supabase) {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (!sessionError && session) {
+          console.log('Valid Supabase session found:', session);
+          
+          // Get user data from our custom table
+          const { data: userData, error: userError } = await supabase
+            .from('users_tb2k4x9p1m')
+            .select('email, business_name, role, created_at, last_login')
+            .eq('email', session.user.email)
+            .single();
+          
+          if (!userError && userData) {
+            const userObj = {
+              email: userData.email,
+              businessName: userData.business_name,
+              role: userData.role
+            };
+            
+            console.log('User data retrieved from Supabase:', userObj);
+            
+            // Create session for our app
+            createSession(userObj);
+            setUser(userObj);
+            setLoading(false);
+            
+            // Update last login
+            await supabase
+              .from('users_tb2k4x9p1m')
+              .update({ last_login: new Date().toISOString() })
+              .eq('email', userData.email);
+            
+            return;
+          }
+        }
+      }
+      
+      // Check for valid session in our app
       const session = validateSession();
       if (session && session.user) {
         console.log('Valid session found:', session.user);
-        
-        // If we have a valid session, load subscription info
-        let subscriptionPlan = 'free';
-        if (supabase && session.user.email) {
-          try {
-            const { data: subscriptionData } = await supabase
-              .from('user_subscriptions_p3k7j2l')
-              .select('plan_id')
-              .eq('user_email', session.user.email.toLowerCase())
-              .single();
-              
-            if (subscriptionData?.plan_id) {
-              const { data: planData } = await supabase
-                .from('subscription_plans_p3k7j2l')
-                .select('name')
-                .eq('id', subscriptionData.plan_id)
-                .single();
-                
-              if (planData?.name) {
-                subscriptionPlan = planData.name.toLowerCase();
-              }
-            }
-          } catch (error) {
-            console.log('Error getting subscription plan:', error);
-          }
-        }
-        
-        setUser({
-          ...session.user,
-          plan: subscriptionPlan
-        });
+        setUser(session.user);
         setLoading(false);
         return;
       }
-
+      
       // Fallback to legacy localStorage check
       const savedEmail = localStorage.getItem('userEmail');
       console.log('Checking saved email:', savedEmail);
-      
       if (savedEmail) {
         const userData = await getUserByEmail(savedEmail);
         if (userData) {
           const { password, salt, ...userWithoutPassword } = userData;
           console.log('Restored user from localStorage:', userWithoutPassword);
           
-          // Get subscription plan if available
-          let subscriptionPlan = 'free';
-          if (supabase) {
-            try {
-              const { data: subscriptionData } = await supabase
-                .from('user_subscriptions_p3k7j2l')
-                .select('plan_id')
-                .eq('user_email', savedEmail.toLowerCase())
-                .single();
-                
-              if (subscriptionData?.plan_id) {
-                const { data: planData } = await supabase
-                  .from('subscription_plans_p3k7j2l')
-                  .select('name')
-                  .eq('id', subscriptionData.plan_id)
-                  .single();
-                  
-                if (planData?.name) {
-                  subscriptionPlan = planData.name.toLowerCase();
-                }
-              }
-            } catch (error) {
-              console.log('Error getting subscription plan:', error);
-            }
-          }
-          
           // Create new session for legacy users
-          const userWithPlan = {
-            ...userWithoutPassword,
-            plan: subscriptionPlan
-          };
-          createSession(userWithPlan);
-          setUser(userWithPlan);
+          createSession(userWithoutPassword);
+          setUser(userWithoutPassword);
         } else {
           // Clean up invalid saved email
           localStorage.removeItem('userEmail');
@@ -133,127 +110,59 @@ export function AuthProvider({ children }) {
     console.log('Login called with:', userData);
     console.log('Setting user role:', userData.role);
     console.log('========================');
-    
-    // Get subscription plan if available
-    let subscriptionPlan = 'free';
+
+    // If we have Supabase available, sign in there too
     if (supabase) {
       try {
-        const { data: subscriptionData } = await supabase
-          .from('user_subscriptions_p3k7j2l')
-          .select('plan_id')
-          .eq('user_email', userData.email.toLowerCase())
-          .single();
-          
-        if (subscriptionData?.plan_id) {
-          const { data: planData } = await supabase
-            .from('subscription_plans_p3k7j2l')
-            .select('name')
-            .eq('id', subscriptionData.plan_id)
-            .single();
-            
-          if (planData?.name) {
-            subscriptionPlan = planData.name.toLowerCase();
-          }
-        } else {
-          // Create default free subscription for new users
-          const { data: freePlanData } = await supabase
-            .from('subscription_plans_p3k7j2l')
-            .select('id')
-            .eq('name', 'Free')
-            .single();
-            
-          if (freePlanData?.id) {
-            await supabase.from('user_subscriptions_p3k7j2l').insert([{
-              user_email: userData.email.toLowerCase(),
-              plan_id: freePlanData.id,
-              status: 'active',
-              start_date: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }]);
-          }
+        const { error } = await supabase.auth.signInWithPassword({
+          email: userData.email,
+          password: userData.password || 'default-password' // Only used if password is provided
+        });
+        
+        if (error) {
+          console.error('Supabase auth error:', error);
+          // Continue anyway with our local auth
         }
-      } catch (error) {
-        console.log('Error getting subscription plan:', error);
+      } catch (err) {
+        console.error('Error signing in with Supabase:', err);
+        // Continue with our local auth
       }
     }
     
-    // Enhance user data with subscription plan
-    const enhancedUserData = {
-      ...userData,
-      plan: subscriptionPlan
-    };
-
     // Create secure session
-    createSession(enhancedUserData);
-    setUser(enhancedUserData);
+    createSession(userData);
+    setUser(userData);
     
     // Keep legacy localStorage for backward compatibility
     localStorage.setItem('userEmail', userData.email);
-    
-    logSecurityEvent('SESSION_CREATED', {
-      userEmail: userData.email,
-      role: userData.role,
-      plan: subscriptionPlan
-    });
+    logSecurityEvent('SESSION_CREATED', { userEmail: userData.email, role: userData.role });
   };
 
-  const logout = () => {
+  const logout = async () => {
     console.log('AuthContext - Logging out user');
     if (user) {
-      logSecurityEvent('USER_LOGOUT', {
-        userEmail: user.email,
-        role: user.role,
-        plan: user.plan
-      });
+      logSecurityEvent('USER_LOGOUT', { userEmail: user.email, role: user.role });
     }
+    
+    // Sign out from Supabase if available
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    
     setUser(null);
     clearSession();
     localStorage.removeItem('userEmail');
   };
 
-  const updateUserData = async (newData) => {
-    // Get current subscription plan if it's not provided in the update
-    let updatedPlan = newData.plan || user.plan;
-    if (!newData.plan && supabase) {
-      try {
-        const { data: subscriptionData } = await supabase
-          .from('user_subscriptions_p3k7j2l')
-          .select('plan_id')
-          .eq('user_email', user.email.toLowerCase())
-          .single();
-          
-        if (subscriptionData?.plan_id) {
-          const { data: planData } = await supabase
-            .from('subscription_plans_p3k7j2l')
-            .select('name')
-            .eq('id', subscriptionData.plan_id)
-            .single();
-            
-          if (planData?.name) {
-            updatedPlan = planData.name.toLowerCase();
-          }
-        }
-      } catch (error) {
-        console.log('Error updating subscription plan:', error);
-      }
-    }
-    
-    const updatedUser = {
-      ...user,
-      ...newData,
-      plan: updatedPlan
-    };
-    
+  const updateUserData = (newData) => {
+    const updatedUser = { ...user, ...newData };
     setUser(updatedUser);
     
     // Update session
     createSession(updatedUser);
-    
-    logSecurityEvent('USER_DATA_UPDATED', {
-      userEmail: updatedUser.email,
-      updatedFields: Object.keys(newData),
-      plan: updatedPlan
+    logSecurityEvent('USER_DATA_UPDATED', { 
+      userEmail: updatedUser.email, 
+      updatedFields: Object.keys(newData) 
     });
   };
 
@@ -261,10 +170,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (user) {
-        logSecurityEvent('SESSION_ENDED', {
-          userEmail: user.email,
-          reason: 'window_close'
-        });
+        logSecurityEvent('SESSION_ENDED', { userEmail: user.email, reason: 'window_close' });
       }
     };
 
@@ -279,11 +185,10 @@ export function AuthProvider({ children }) {
       </div>
     );
   }
-
+  
   console.log('===AuthContext Current State===');
   console.log('Current user state:', user);
   console.log('User role:', user?.role);
-  console.log('User plan:', user?.plan);
   console.log('=================================');
 
   return (

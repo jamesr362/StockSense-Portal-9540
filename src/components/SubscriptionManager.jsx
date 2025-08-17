@@ -1,21 +1,32 @@
-import {useState,useEffect} from 'react';
-import {motion} from 'framer-motion';
-import {RiCalendarLine,RiArrowRightLine,RiCheckLine,RiAlertLine,RiSettings3Line,RiDownloadLine,RiRefreshLine,RiMoneyDollarCircleLine,RiCreditCardLine,RiLineChartLine} from 'react-icons/ri';
-import {SUBSCRIPTION_PLANS,formatPrice,getPlanById,getDaysUntilRenewal} from '../lib/stripe';
-import {logSecurityEvent} from '../utils/security';
-import {supabase} from '../lib/supabase';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { 
+  RiCalendarLine, 
+  RiArrowRightLine, 
+  RiCheckLine, 
+  RiAlertLine, 
+  RiSettings3Line, 
+  RiDownloadLine, 
+  RiRefreshLine, 
+  RiMoneyDollarCircleLine, 
+  RiCreditCardLine, 
+  RiLineChartLine 
+} from 'react-icons/ri';
+import { SUBSCRIPTION_PLANS, formatPrice, getPlanById } from '../lib/stripe';
+import { logSecurityEvent } from '../utils/security';
+import { supabase } from '../lib/supabase';
 
 // Mock Stripe services for demo purposes
-const mockStripeServices={
-  getCustomerSubscription: async ()=> ({
+const mockStripeServices = {
+  getCustomerSubscription: async () => ({
     id: 'sub_demo',
     status: 'active',
     price_id: 'price_professional',
-    amount: 3500,// £35.00 in pence
+    amount: 1499, // £14.99 in pence
     currency: 'gbp',
-    current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60)
+    current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days
   }),
-  getPaymentMethods: async ()=> ([ 
+  getPaymentMethods: async () => ([
     {
       id: 'pm_demo',
       card: {
@@ -25,41 +36,36 @@ const mockStripeServices={
         exp_year: 2025
       },
       is_default: true
-    } 
+    }
   ]),
-  getUsageData: async ()=> ({
+  getUsageData: async () => ({
     inventory_items: 250,
     team_members: 3,
     receipt_scans: 85
   }),
-  cancelSubscription: async ()=> ({
-    status: 'canceled'
-  }),
-  updateSubscription: async ()=> ({
-    status: 'active'
-  }),
-  createPortalSession: async ()=> {
-    window.open('https://billing.stripe.com','_blank');
+  cancelSubscription: async () => ({ status: 'canceled' }),
+  updateSubscription: async () => ({ status: 'active' }),
+  createPortalSession: async () => {
+    window.open('https://billing.stripe.com', '_blank');
   }
 };
 
-export default function SubscriptionManager({customerId,onSubscriptionChange}) {
-  const [subscription,setSubscription]=useState(null);
-  const [paymentMethods,setPaymentMethods]=useState([]);
-  const [usageData,setUsageData]=useState(null);
-  const [loading,setLoading]=useState(true);
-  const [actionLoading,setActionLoading]=useState(false);
-  const [error,setError]=useState(null);
-  const [showCancelConfirm,setShowCancelConfirm]=useState(false);
-  const [billingInterval,setBillingInterval]=useState('monthly');
+export default function SubscriptionManager({ customerId, onSubscriptionChange }) {
+  const [subscription, setSubscription] = useState(null);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [usageData, setUsageData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
-  useEffect(()=> {
+  useEffect(() => {
     if (customerId) {
       loadSubscriptionData();
     }
-  },[customerId]);
+  }, [customerId]);
 
-  const loadSubscriptionData=async ()=> {
+  const loadSubscriptionData = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -67,77 +73,77 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
       // First try to get data from Supabase if available
       if (supabase) {
         try {
-          const {data: subscriptionData,error: subscriptionError}=await supabase
+          const { data: subscriptionData, error: subscriptionError } = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .select('*')
-            .eq('user_email',customerId)
+            .eq('user_email', customerId)
             .single();
 
           if (!subscriptionError && subscriptionData) {
-            console.log('Loaded subscription from Supabase:',subscriptionData);
+            console.log('Loaded subscription from Supabase:', subscriptionData);
             
             // Transform to expected format
             setSubscription({
               id: subscriptionData.stripe_subscription_id || 'sub_demo',
               status: subscriptionData.status || 'active',
               price_id: subscriptionData.plan_id || 'price_professional',
-              amount: getPlanAmountFromId(subscriptionData.plan_id) * 100,// convert to pence
+              amount: getPlanAmountFromId(subscriptionData.plan_id) * 100, // convert to pence
               current_period_end: Math.floor(new Date(subscriptionData.current_period_end || Date.now() + 30*24*60*60*1000).getTime() / 1000)
             });
             setLoading(false);
             return;
           }
         } catch (err) {
-          console.log('Error fetching from Supabase,falling back to mock data:',err);
+          console.log('Error fetching from Supabase, falling back to mock data:', err);
         }
       }
 
       // Simulate API calls with a slight delay to feel more realistic
-      await new Promise(resolve=> setTimeout(resolve,800));
-      
-      const [subData,paymentData,usageInfo]=await Promise.all([
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const [subData, paymentData, usageInfo] = await Promise.all([
         mockStripeServices.getCustomerSubscription(customerId),
         mockStripeServices.getPaymentMethods(customerId),
         mockStripeServices.getUsageData()
       ]);
-      
+
       setSubscription(subData);
       setPaymentMethods(paymentData);
       setUsageData(usageInfo);
-      
-      logSecurityEvent('SUBSCRIPTION_DATA_LOADED',{customerId});
+
+      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', { customerId });
     } catch (err) {
-      console.error('Error loading subscription data:',err);
+      console.error('Error loading subscription data:', err);
       setError('Failed to load subscription data. Please try again.');
-      logSecurityEvent('SUBSCRIPTION_DATA_ERROR',{error: err.message});
+      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', { error: err.message });
     } finally {
       setLoading(false);
     }
   };
 
-  const getPlanAmountFromId=(planId)=> {
-    // Extract the plan name from the price ID (e.g.,"price_professional" -> "professional")
-    const planName=planId?.split('_')[1];
-    return SUBSCRIPTION_PLANS[planName]?.price || 35;// Default to Professional plan amount
+  const getPlanAmountFromId = (planId) => {
+    // Extract the plan name from the price ID (e.g., "price_professional" -> "professional")
+    const planName = planId?.split('_')[1];
+    return SUBSCRIPTION_PLANS[planName]?.price || 14.99; // Default to Professional plan amount
   };
 
-  const handleCancelSubscription=async ()=> {
+  const handleCancelSubscription = async () => {
     if (!subscription?.id) return;
-    
+
     try {
       setActionLoading(true);
-      
+
       // Try to update in Supabase first
       if (supabase) {
         try {
-          const {error}=await supabase
+          const { error } = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update({
               status: 'canceled',
               updated_at: new Date().toISOString()
             })
-            .eq('user_email',customerId);
-            
+            .eq('user_email', customerId);
+
           if (!error) {
             console.log('Updated subscription status in Supabase');
             await loadSubscriptionData();
@@ -146,12 +152,12 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
             return;
           }
         } catch (err) {
-          console.log('Error updating Supabase,falling back to mock:',err);
+          console.log('Error updating Supabase, falling back to mock:', err);
         }
       }
 
       // Simulate API call with a delay
-      await new Promise(resolve=> setTimeout(resolve,1500));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       await mockStripeServices.cancelSubscription(subscription.id);
       await loadSubscriptionData();
       onSubscriptionChange?.();
@@ -163,23 +169,23 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
     }
   };
 
-  const handleUpdateSubscription=async (newPriceId)=> {
+  const handleUpdateSubscription = async (newPriceId) => {
     if (!subscription?.id) return;
-    
+
     try {
       setActionLoading(true);
-      
+
       // Try to update in Supabase first
       if (supabase) {
         try {
-          const {error}=await supabase
+          const { error } = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update({
               plan_id: newPriceId,
               updated_at: new Date().toISOString()
             })
-            .eq('user_email',customerId);
-            
+            .eq('user_email', customerId);
+
           if (!error) {
             console.log('Updated subscription plan in Supabase');
             await loadSubscriptionData();
@@ -187,13 +193,13 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
             return;
           }
         } catch (err) {
-          console.log('Error updating Supabase,falling back to mock:',err);
+          console.log('Error updating Supabase, falling back to mock:', err);
         }
       }
 
       // Simulate API call with a delay
-      await new Promise(resolve=> setTimeout(resolve,1500));
-      await mockStripeServices.updateSubscription(subscription.id,newPriceId);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await mockStripeServices.updateSubscription(subscription.id, newPriceId);
       await loadSubscriptionData();
       onSubscriptionChange?.();
     } catch (err) {
@@ -203,7 +209,7 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
     }
   };
 
-  const handleOpenPortal=async ()=> {
+  const handleOpenPortal = async () => {
     try {
       setActionLoading(true);
       await mockStripeServices.createPortalSession(customerId);
@@ -214,28 +220,27 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
     }
   };
 
-  const getSubscriptionStatus=()=> {
-    if (!subscription) return {text: 'No subscription',color: 'text-gray-400'};
-    
+  const getSubscriptionStatus = () => {
+    if (!subscription) return { text: 'No subscription', color: 'text-gray-400' };
+
     switch (subscription.status) {
-      case 'active': return {text: 'Active',color: 'text-green-400'};
-      case 'canceled': return {text: 'Canceled',color: 'text-red-400'};
-      case 'past_due': return {text: 'Past Due',color: 'text-yellow-400'};
-      case 'unpaid': return {text: 'Unpaid',color: 'text-red-400'};
-      default: return {text: subscription.status,color: 'text-gray-400'};
+      case 'active': return { text: 'Active', color: 'text-green-400' };
+      case 'canceled': return { text: 'Canceled', color: 'text-red-400' };
+      case 'past_due': return { text: 'Past Due', color: 'text-yellow-400' };
+      case 'unpaid': return { text: 'Unpaid', color: 'text-red-400' };
+      default: return { text: subscription.status, color: 'text-gray-400' };
     }
   };
 
-  const getCurrentPlan=()=> {
+  const getCurrentPlan = () => {
     if (!subscription?.price_id) return null;
-    
-    // Extract plan name from price ID (e.g.,"price_professional" -> "professional")
-    const planName=subscription.price_id.split('_')[1];
+    // Extract plan name from price ID (e.g., "price_professional" -> "professional")
+    const planName = subscription.price_id.split('_')[1];
     return SUBSCRIPTION_PLANS[planName];
   };
 
-  const formatDate=(timestamp)=> {
-    return new Date(timestamp * 1000).toLocaleDateString('en-GB',{
+  const formatDate = (timestamp) => {
+    return new Date(timestamp * 1000).toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -250,14 +255,14 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
     );
   }
 
-  const status=getSubscriptionStatus();
-  const currentPlan=getCurrentPlan() || SUBSCRIPTION_PLANS.free;
+  const status = getSubscriptionStatus();
+  const currentPlan = getCurrentPlan() || SUBSCRIPTION_PLANS.free;
 
   // Get usage percentage for the progress bars
-  const getUsagePercentage=(used,limit)=> {
-    if (limit===-1) return 0;// Unlimited
-    if (limit===0) return 100;// Not available
-    return Math.min((used / limit) * 100,100);
+  const getUsagePercentage = (used, limit) => {
+    if (limit === -1) return 0; // Unlimited
+    if (limit === 0) return 100; // Not available
+    return Math.min((used / limit) * 100, 100);
   };
 
   return (
@@ -265,8 +270,8 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
       {/* Error Message */}
       {error && (
         <motion.div
-          initial={{opacity: 0,y: -10}}
-          animate={{opacity: 1,y: 0}}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
           className="p-4 bg-red-900/50 border border-red-700 rounded-lg"
         >
           <div className="flex items-center">
@@ -298,7 +303,7 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
                   {currentPlan?.name || 'Free Plan'}
                 </h4>
                 <p className="text-gray-400 text-sm">
-                  {currentPlan?.price===0 ? 'Free Plan' : `${formatPrice(currentPlan?.price || 0)}/month`}
+                  {currentPlan?.price === 0 ? 'Free Plan' : `£${currentPlan?.price || 0}/month`}
                 </p>
               </div>
               <div className="text-right">
@@ -322,29 +327,37 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-400">Inventory Items</span>
                       <span className="text-white">
-                        {usageData.inventory_items} / {currentPlan.limits.inventoryItems===-1 ? '∞' : currentPlan.limits.inventoryItems}
+                        {usageData.inventory_items} / {currentPlan.limits.inventoryItems === -1 ? '∞' : currentPlan.limits.inventoryItems}
                       </span>
                     </div>
                     <div className="w-full bg-gray-600 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full ${getUsagePercentage(usageData.inventory_items,currentPlan.limits.inventoryItems) > 80 ? 'bg-red-500' : 'bg-green-500'}`}
-                        style={{width: `${getUsagePercentage(usageData.inventory_items,currentPlan.limits.inventoryItems)}%`}}
+                        className={`h-2 rounded-full ${
+                          getUsagePercentage(usageData.inventory_items, currentPlan.limits.inventoryItems) > 80
+                            ? 'bg-red-500'
+                            : 'bg-green-500'
+                        }`}
+                        style={{ width: `${getUsagePercentage(usageData.inventory_items, currentPlan.limits.inventoryItems)}%` }}
                       />
                     </div>
                   </div>
 
-                  {currentPlan.limits.receiptScans !==0 && (
+                  {currentPlan.limits.receiptScans !== 0 && (
                     <div>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="text-gray-400">Receipt Scans</span>
                         <span className="text-white">
-                          {usageData.receipt_scans} / {currentPlan.limits.receiptScans===-1 ? '∞' : currentPlan.limits.receiptScans}
+                          {usageData.receipt_scans} / {currentPlan.limits.receiptScans === -1 ? '∞' : currentPlan.limits.receiptScans}
                         </span>
                       </div>
                       <div className="w-full bg-gray-600 rounded-full h-2">
                         <div
-                          className={`h-2 rounded-full ${getUsagePercentage(usageData.receipt_scans,currentPlan.limits.receiptScans) > 80 ? 'bg-red-500' : 'bg-green-500'}`}
-                          style={{width: `${getUsagePercentage(usageData.receipt_scans,currentPlan.limits.receiptScans)}%`}}
+                          className={`h-2 rounded-full ${
+                            getUsagePercentage(usageData.receipt_scans, currentPlan.limits.receiptScans) > 80
+                              ? 'bg-red-500'
+                              : 'bg-green-500'
+                          }`}
+                          style={{ width: `${getUsagePercentage(usageData.receipt_scans, currentPlan.limits.receiptScans)}%` }}
                         />
                       </div>
                     </div>
@@ -354,13 +367,17 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-400">Team Members</span>
                       <span className="text-white">
-                        {usageData.team_members} / {currentPlan.limits.teamMembers===-1 ? '∞' : currentPlan.limits.teamMembers}
+                        {usageData.team_members} / {currentPlan.limits.teamMembers === -1 ? '∞' : currentPlan.limits.teamMembers}
                       </span>
                     </div>
                     <div className="w-full bg-gray-600 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full ${getUsagePercentage(usageData.team_members,currentPlan.limits.teamMembers) > 80 ? 'bg-red-500' : 'bg-green-500'}`}
-                        style={{width: `${getUsagePercentage(usageData.team_members,currentPlan.limits.teamMembers)}%`}}
+                        className={`h-2 rounded-full ${
+                          getUsagePercentage(usageData.team_members, currentPlan.limits.teamMembers) > 80
+                            ? 'bg-red-500'
+                            : 'bg-green-500'
+                        }`}
+                        style={{ width: `${getUsagePercentage(usageData.team_members, currentPlan.limits.teamMembers)}%` }}
                       />
                     </div>
                   </div>
@@ -402,9 +419,9 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
                 Manage Billing
               </button>
 
-              {subscription.status==='active' && currentPlan.price > 0 && (
+              {subscription.status === 'active' && currentPlan.price > 0 && (
                 <button
-                  onClick={()=> setShowCancelConfirm(true)}
+                  onClick={() => setShowCancelConfirm(true)}
                   disabled={actionLoading}
                   className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
@@ -440,59 +457,32 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Upgrade Options</h3>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={()=> setBillingInterval('monthly')}
-              className={`px-3 py-1 rounded-md text-xs font-medium ${
-                billingInterval==='monthly'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-700 text-gray-300'
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={()=> setBillingInterval('yearly')}
-              className={`px-3 py-1 rounded-md text-xs font-medium ${
-                billingInterval==='yearly'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-700 text-gray-300'
-              }`}
-            >
-              Yearly
-              <span className="text-green-400">-10%</span>
-            </button>
-          </div>
+          <span className="text-sm text-gray-400">Monthly billing only</span>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Object.values(SUBSCRIPTION_PLANS)
-            .filter(plan=> {
-              // If current plan is free,show Basic and Professional
-              if (!currentPlan || currentPlan.id==='free') {
-                return plan.id==='basic' || plan.id==='professional';
+            .filter(plan => {
+              // If current plan is free, show Basic and Professional
+              if (!currentPlan || currentPlan.id === 'free') {
+                return plan.id === 'basic' || plan.id === 'professional';
               }
-              
-              // If current plan is basic,show only Professional
-              else if (currentPlan.id==='basic') {
-                return plan.id==='professional';
+              // If current plan is basic, show only Professional
+              else if (currentPlan.id === 'basic') {
+                return plan.id === 'professional';
               }
-              
-              // Otherwise,don't show upgrade options
+              // Otherwise, don't show upgrade options
               return false;
             })
-            .map(plan=> (
+            .map(plan => (
               <div key={plan.id} className="p-4 bg-gray-700 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium text-white">{plan.name}</h4>
                   <span className="text-primary-400 font-semibold">
-                    {billingInterval==='yearly'
-                      ? formatPrice(plan.price * 12 * 0.9) + '/year'
-                      : formatPrice(plan.price) + '/month'}
+                    £{plan.price}/month
                   </span>
                 </div>
                 <div className="space-y-2 mb-3">
-                  {plan.features.slice(0,3).map((feature,idx)=> (
+                  {plan.features.slice(0, 3).map((feature, idx) => (
                     <div key={idx} className="flex items-start">
                       <RiCheckLine className="h-4 w-4 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
                       <span className="text-gray-300 text-sm">{feature}</span>
@@ -500,7 +490,7 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
                   ))}
                 </div>
                 <button
-                  onClick={()=> handleUpdateSubscription(`price_${plan.id}`)}
+                  onClick={() => handleUpdateSubscription(`price_${plan.id}`)}
                   disabled={actionLoading}
                   className="w-full py-2 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
@@ -525,7 +515,7 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
         <h3 className="text-lg font-semibold text-white mb-4">Payment Methods</h3>
         {paymentMethods.length > 0 ? (
           <div className="space-y-3">
-            {paymentMethods.map((method)=> (
+            {paymentMethods.map((method) => (
               <div
                 key={method.id}
                 className="flex items-center p-3 bg-gray-700 rounded-lg"
@@ -560,8 +550,8 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
-            initial={{opacity: 0,scale: 0.95}}
-            animate={{opacity: 1,scale: 1}}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
             className="bg-gray-800 rounded-lg p-6 max-w-md mx-4"
           >
             <h3 className="text-lg font-semibold text-white mb-4">
@@ -572,7 +562,7 @@ export default function SubscriptionManager({customerId,onSubscriptionChange}) {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={()=> setShowCancelConfirm(false)}
+                onClick={() => setShowCancelConfirm(false)}
                 className="flex-1 py-2 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
               >
                 Keep Subscription

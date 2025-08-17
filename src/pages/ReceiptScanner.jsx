@@ -2,9 +2,11 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { RiScanLine, RiHistoryLine, RiDownloadLine, RiEyeLine, RiCheckLine, RiAlertLine } from 'react-icons/ri';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
+import FeatureGate from '../components/FeatureGate';
+import UsageLimitGate from '../components/UsageLimitGate';
 import { getInventoryItems, addInventoryItem } from '../services/db';
 import { useAuth } from '../context/AuthContext';
-import FeatureGate from '../components/FeatureGate';
+import useFeatureAccess from '../hooks/useFeatureAccess';
 
 export default function ReceiptScanner() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -12,6 +14,7 @@ export default function ReceiptScanner() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [currentScans, setCurrentScans] = useState(0);
   const [stats, setStats] = useState({
     totalScans: 0,
     itemsScanned: 0,
@@ -19,6 +22,7 @@ export default function ReceiptScanner() {
     lastScan: null
   });
   const { user } = useAuth();
+  const { canScanReceipt, canUseFeature } = useFeatureAccess();
 
   // Load scan history from localStorage
   useEffect(() => {
@@ -29,6 +33,15 @@ export default function ReceiptScanner() {
           const history = JSON.parse(stored);
           setScanHistory(history);
           updateStats(history);
+          
+          // Count current month's scans for usage tracking
+          const currentMonth = new Date().getMonth();
+          const currentYear = new Date().getFullYear();
+          const monthlyScans = history.filter(scan => {
+            const scanDate = new Date(scan.timestamp);
+            return scanDate.getMonth() === currentMonth && scanDate.getFullYear() === currentYear;
+          }).length;
+          setCurrentScans(monthlyScans);
         }
       } catch (error) {
         console.error('Error loading scan history:', error);
@@ -68,6 +81,9 @@ export default function ReceiptScanner() {
     setScanHistory(newHistory);
     updateStats(newHistory);
 
+    // Update current month's scan count
+    setCurrentScans(prev => prev + 1);
+
     // Save to localStorage
     try {
       localStorage.setItem(`scanHistory_${user?.email}`, JSON.stringify(newHistory));
@@ -82,7 +98,9 @@ export default function ReceiptScanner() {
     try {
       setError(null);
       setIsLoading(true);
+
       let addedCount = 0;
+      let failedCount = 0;
 
       // Add each scanned item to inventory
       for (const item of scannedItems) {
@@ -91,6 +109,7 @@ export default function ReceiptScanner() {
           addedCount++;
         } catch (itemError) {
           console.error('Error adding scanned item:', itemError);
+          failedCount++;
         }
       }
 
@@ -98,7 +117,10 @@ export default function ReceiptScanner() {
       saveScanToHistory(scannedItems, receiptImage);
 
       if (addedCount > 0) {
-        setSuccessMessage(`Successfully scanned and added ${addedCount} items to inventory!`);
+        setSuccessMessage(
+          `Successfully scanned and added ${addedCount} items to inventory!` +
+          (failedCount > 0 ? ` (${failedCount} items failed to import)` : '')
+        );
         setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         setError('Failed to add items from receipt scan');
@@ -128,7 +150,6 @@ export default function ReceiptScanner() {
     const dataStr = JSON.stringify(scanHistory, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `receipt-scan-history-${new Date().toISOString().split('T')[0]}.json`;
-
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -154,8 +175,25 @@ export default function ReceiptScanner() {
     }).format(value || 0);
   };
 
+  const handleScanReceiptClick = () => {
+    // Check feature access
+    if (!canUseFeature('receiptScanner')) {
+      setError('Receipt scanning is not available on your current plan');
+      return;
+    }
+
+    // Check usage limits
+    const usageCheck = canScanReceipt(currentScans);
+    if (!usageCheck.allowed) {
+      setError(usageCheck.reason);
+      return;
+    }
+
+    setIsScannerOpen(true);
+  };
+
   return (
-    <FeatureGate feature="receiptScanner" fallbackMessage="Receipt scanning requires a Basic or Professional plan">
+    <FeatureGate feature="receiptScanner">
       <div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -177,7 +215,8 @@ export default function ReceiptScanner() {
                     onClick={exportHistory}
                     className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
                   >
-                    <RiDownloadLine className="mr-2 h-4 w-4" /> Export History
+                    <RiDownloadLine className="mr-2 h-4 w-4" />
+                    Export History
                   </button>
                   <button
                     onClick={clearHistory}
@@ -187,14 +226,16 @@ export default function ReceiptScanner() {
                   </button>
                 </>
               )}
-              <button
-                onClick={() => setIsScannerOpen(true)}
-                disabled={isLoading}
-                className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
-              >
-                <RiScanLine className="mr-2 h-4 w-4" />
-                {isLoading ? 'Processing...' : 'Scan Receipt'}
-              </button>
+              <UsageLimitGate limitType="receiptScans" currentUsage={currentScans} showUpgradePrompt={false}>
+                <button
+                  onClick={handleScanReceiptClick}
+                  disabled={isLoading}
+                  className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
+                >
+                  <RiScanLine className="mr-2 h-4 w-4" />
+                  {isLoading ? 'Processing...' : 'Scan Receipt'}
+                </button>
+              </UsageLimitGate>
             </div>
           </div>
 
@@ -226,205 +267,208 @@ export default function ReceiptScanner() {
             </motion.div>
           )}
 
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-            >
-              <div className="p-4 sm:p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <RiScanLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                        Total Scans
-                      </dt>
-                      <dd className="flex items-baseline mt-1">
-                        <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {stats.totalScans}
-                        </div>
-                      </dd>
-                    </dl>
+          {/* Usage Limit Gate */}
+          <UsageLimitGate limitType="receiptScans" currentUsage={currentScans}>
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+                className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+              >
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <RiScanLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
+                    </div>
+                    <div className="ml-3 sm:ml-4 w-0 flex-1">
+                      <dl>
+                        <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                          Total Scans
+                        </dt>
+                        <dd className="flex items-baseline mt-1">
+                          <div className="text-xl sm:text-2xl font-semibold text-white">
+                            {stats.totalScans}
+                          </div>
+                        </dd>
+                      </dl>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-            >
-              <div className="p-4 sm:p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                        Items Scanned
-                      </dt>
-                      <dd className="flex items-baseline mt-1">
-                        <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {stats.itemsScanned}
-                        </div>
-                      </dd>
-                    </dl>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+              >
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
+                    </div>
+                    <div className="ml-3 sm:ml-4 w-0 flex-1">
+                      <dl>
+                        <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                          Items Scanned
+                        </dt>
+                        <dd className="flex items-baseline mt-1">
+                          <div className="text-xl sm:text-2xl font-semibold text-white">
+                            {stats.itemsScanned}
+                          </div>
+                        </dd>
+                      </dl>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-            >
-              <div className="p-4 sm:p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-blue-400" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                        Success Rate
-                      </dt>
-                      <dd className="flex items-baseline mt-1">
-                        <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {stats.totalScans > 0
-                            ? Math.round((stats.successfulScans / stats.totalScans) * 100)
-                            : 0}%
-                        </div>
-                      </dd>
-                    </dl>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+              >
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <RiCheckLine className="h-6 w-6 sm:h-7 sm:w-7 text-blue-400" />
+                    </div>
+                    <div className="ml-3 sm:ml-4 w-0 flex-1">
+                      <dl>
+                        <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                          Success Rate
+                        </dt>
+                        <dd className="flex items-baseline mt-1">
+                          <div className="text-xl sm:text-2xl font-semibold text-white">
+                            {stats.totalScans > 0 ? Math.round((stats.successfulScans / stats.totalScans) * 100) : 0}%
+                          </div>
+                        </dd>
+                      </dl>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
-              className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-            >
-              <div className="p-4 sm:p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <RiHistoryLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
-                  </div>
-                  <div className="ml-3 sm:ml-4 w-0 flex-1">
-                    <dl>
-                      <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                        Last Scan
-                      </dt>
-                      <dd className="flex items-baseline mt-1">
-                        <div className="text-sm sm:text-base font-semibold text-white break-all">
-                          {stats.lastScan ? formatDate(stats.lastScan).split(' ')[0] : 'Never'}
-                        </div>
-                      </dd>
-                    </dl>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+                className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+              >
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <RiHistoryLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
+                    </div>
+                    <div className="ml-3 sm:ml-4 w-0 flex-1">
+                      <dl>
+                        <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                          Last Scan
+                        </dt>
+                        <dd className="flex items-baseline mt-1">
+                          <div className="text-sm sm:text-base font-semibold text-white break-all">
+                            {stats.lastScan ? formatDate(stats.lastScan).split(' ')[0] : 'Never'}
+                          </div>
+                        </dd>
+                      </dl>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Scan History */}
-          <div className="bg-gray-800 rounded-lg shadow-lg">
-            <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg leading-6 font-medium text-white">Scan History</h3>
-                  <p className="mt-1 max-w-2xl text-sm text-gray-400">
-                    Your recent receipt scans and extracted items
-                  </p>
-                </div>
-                <RiHistoryLine className="h-6 w-6 text-gray-400" />
-              </div>
+              </motion.div>
             </div>
-            <div className="px-4 py-5 sm:p-6">
-              {scanHistory.length === 0 ? (
-                <div className="text-center py-12">
-                  <RiScanLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-                  <h3 className="text-lg font-medium text-white mb-2">No scans yet</h3>
-                  <p className="text-gray-400 text-sm mb-6">
-                    Start by scanning your first receipt to build your scan history
-                  </p>
-                  <button
-                    onClick={() => setIsScannerOpen(true)}
-                    className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                  >
-                    <RiScanLine className="mr-2 h-4 w-4" /> Scan Your First Receipt
-                  </button>
+
+            {/* Scan History */}
+            <div className="bg-gray-800 rounded-lg shadow-lg">
+              <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg leading-6 font-medium text-white">Scan History</h3>
+                    <p className="mt-1 max-w-2xl text-sm text-gray-400">
+                      Your recent receipt scans and extracted items
+                    </p>
+                  </div>
+                  <RiHistoryLine className="h-6 w-6 text-gray-400" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {scanHistory.map((scan) => (
-                    <motion.div
-                      key={scan.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors"
+              </div>
+              <div className="px-4 py-5 sm:p-6">
+                {scanHistory.length === 0 ? (
+                  <div className="text-center py-12">
+                    <RiScanLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+                    <h3 className="text-lg font-medium text-white mb-2">No scans yet</h3>
+                    <p className="text-gray-400 text-sm mb-6">
+                      Start by scanning your first receipt to build your scan history
+                    </p>
+                    <button
+                      onClick={handleScanReceiptClick}
+                      className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1">
-                          <div className="flex items-center">
-                            <RiScanLine className="h-5 w-5 text-primary-400 mr-2" />
-                            <span className="text-white font-medium">
-                              Scan #{scan.id}
-                            </span>
-                            <span className="ml-2 text-sm text-gray-400">
-                              {formatDate(scan.timestamp)}
-                            </span>
+                      <RiScanLine className="mr-2 h-4 w-4" />
+                      Scan Your First Receipt
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {scanHistory.map((scan) => (
+                      <motion.div
+                        key={scan.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center">
+                              <RiScanLine className="h-5 w-5 text-primary-400 mr-2" />
+                              <span className="text-white font-medium">
+                                Scan #{scan.id}
+                              </span>
+                              <span className="ml-2 text-sm text-gray-400">
+                                {formatDate(scan.timestamp)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
+                              <span>{scan.itemCount} items</span>
+                              <span>Total: {formatCurrency(scan.totalValue)}</span>
+                            </div>
                           </div>
-                          <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
-                            <span>{scan.itemCount} items</span>
-                            <span>Total: {formatCurrency(scan.totalValue)}</span>
-                          </div>
+                          {scan.receiptImage && (
+                            <button
+                              onClick={() => window.open(scan.receiptImage)}
+                              className="text-gray-400 hover:text-gray-300 p-1"
+                              title="View receipt image"
+                            >
+                              <RiEyeLine className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
-                        {scan.receiptImage && (
-                          <button
-                            onClick={() => window.open(scan.receiptImage)}
-                            className="text-gray-400 hover:text-gray-300 p-1"
-                            title="View receipt image"
-                          >
-                            <RiEyeLine className="h-4 w-4" />
-                          </button>
+
+                        {scan.items.length > 0 && (
+                          <div className="bg-gray-700 rounded-md p-3">
+                            <h4 className="text-sm font-medium text-white mb-2">Extracted Items:</h4>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                              {scan.items.map((item, index) => (
+                                <div key={index} className="flex justify-between text-sm">
+                                  <span className="text-gray-300 truncate flex-1 mr-2">
+                                    {item.name}
+                                  </span>
+                                  <span className="text-primary-400 font-medium">
+                                    {formatCurrency(item.unitPrice)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                      </div>
-                      {scan.items.length > 0 && (
-                        <div className="bg-gray-700 rounded-md p-3">
-                          <h4 className="text-sm font-medium text-white mb-2">Extracted Items:</h4>
-                          <div className="space-y-1 max-h-32 overflow-y-auto">
-                            {scan.items.map((item, index) => (
-                              <div key={index} className="flex justify-between text-sm">
-                                <span className="text-gray-300 truncate flex-1 mr-2">
-                                  {item.name}
-                                </span>
-                                <span className="text-primary-400 font-medium">
-                                  {formatCurrency(item.unitPrice)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              )}
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </UsageLimitGate>
         </motion.div>
 
         {/* Receipt Scanner Modal */}

@@ -35,7 +35,7 @@ export default function PaymentSuccess() {
         customer_email: 'customer@example.com',
         subscription_id: 'sub_' + Math.random().toString(36).substring(2, 15)
       };
-      
+
       setSessionDetails(mockDetails);
       setLoading(false);
     } catch (error) {
@@ -173,8 +173,10 @@ export default function PaymentSuccess() {
             onClick={handleContinue}
             className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
           >
-            Continue to Dashboard <RiArrowRightLine className="h-5 w-5 ml-2" />
+            Continue to Dashboard
+            <RiArrowRightLine className="h-5 w-5 ml-2" />
           </button>
+
           <button
             onClick={() => navigate('/settings/billing')}
             className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
@@ -192,7 +194,10 @@ export default function PaymentSuccess() {
         >
           <p className="text-gray-400 text-sm">
             Need help? Contact our support team at{' '}
-            <a href="mailto:support@trackio.com" className="text-primary-400 hover:text-primary-300">
+            <a
+              href="mailto:support@trackio.com"
+              className="text-primary-400 hover:text-primary-300"
+            >
               support@trackio.com
             </a>
           </p>

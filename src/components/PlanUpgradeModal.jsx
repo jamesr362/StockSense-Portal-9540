@@ -1,11 +1,10 @@
-import {motion, AnimatePresence} from 'framer-motion';
-import {RiCloseLine, RiCheckLine, RiArrowRightLine, RiStarLine} from 'react-icons/ri';
-import {useState} from 'react';
-import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiCloseLine, RiCheckLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
+import { useState } from 'react';
+import { SUBSCRIPTION_PLANS, formatPrice } from '../lib/stripe';
 
-export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrade}) {
+export default function PlanUpgradeModal({ isOpen, onClose, currentPlan, onUpgrade }) {
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const [billingInterval, setBillingInterval] = useState('monthly');
   const [loading, setLoading] = useState(false);
 
   const plans = Object.values(SUBSCRIPTION_PLANS);
@@ -20,7 +19,7 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
       setLoading(true);
       // Simulate API call with delay
       await new Promise(resolve => setTimeout(resolve, 1500));
-      await onUpgrade(selectedPlan, billingInterval);
+      await onUpgrade(selectedPlan, 'monthly');
       onClose();
     } catch (error) {
       console.error('Upgrade error:', error);
@@ -28,20 +27,6 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
     } finally {
       setLoading(false);
     }
-  };
-
-  const getPrice = (plan) => {
-    if (plan.price === 'Custom') return 'Custom';
-    return billingInterval === 'yearly' 
-      ? formatPrice(plan.price * 12 * 0.9) + '/year' 
-      : formatPrice(plan.price) + '/month';
-  };
-
-  const getSavings = (plan) => {
-    if (plan.price === 'Custom') return null;
-    const monthlyTotal = plan.price * 12;
-    const yearlyTotal = plan.price * 12 * 0.9;
-    return monthlyTotal - yearlyTotal;
   };
 
   return (
@@ -76,33 +61,6 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
                 </button>
               </div>
 
-              {/* Billing Toggle */}
-              <div className="flex justify-center p-6 border-b border-gray-700">
-                <div className="bg-gray-700 rounded-lg p-1 inline-flex">
-                  <button
-                    onClick={() => setBillingInterval('monthly')}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                      billingInterval === 'monthly' 
-                        ? 'bg-primary-600 text-white' 
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingInterval('yearly')}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                      billingInterval === 'yearly' 
-                        ? 'bg-primary-600 text-white' 
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    Yearly
-                    <span className="text-xs text-green-400 ml-1">Save 10%</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Plan Options */}
               <div className="p-6">
                 {availableUpgrades.length === 0 ? (
@@ -123,8 +81,8 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         className={`border rounded-lg p-6 cursor-pointer transition-all ${
-                          selectedPlan?.id === plan.id 
-                            ? 'border-primary-500 bg-primary-50/5' 
+                          selectedPlan?.id === plan.id
+                            ? 'border-primary-500 bg-primary-50/5'
                             : 'border-gray-700 hover:border-gray-600'
                         }`}
                         onClick={() => setSelectedPlan(plan)}
@@ -138,25 +96,16 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
                             </span>
                           )}
                         </div>
-
                         <div className="mb-4">
                           <div className="flex items-baseline">
                             <span className="text-3xl font-bold text-white">
-                              {plan.price === 'Custom' ? 'Custom' : getPrice(plan).split('/')[0]}
+                              {plan.price === 0 ? 'Free' : `£${plan.price}`}
                             </span>
-                            {plan.price !== 'Custom' && (
-                              <span className="text-gray-400 ml-1">
-                                /{billingInterval === 'yearly' ? 'year' : 'month'}
-                              </span>
+                            {plan.price > 0 && (
+                              <span className="text-gray-400 ml-1">/month</span>
                             )}
                           </div>
-                          {billingInterval === 'yearly' && plan.price !== 'Custom' && (
-                            <p className="text-green-400 text-sm mt-1">
-                              Save {formatPrice(getSavings(plan))} per year
-                            </p>
-                          )}
                         </div>
-
                         <div className="space-y-2 mb-6">
                           {plan.features.slice(0, 4).map((feature, index) => (
                             <div key={index} className="flex items-start">
@@ -170,7 +119,6 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
                             </div>
                           )}
                         </div>
-
                         <div
                           className={`w-full py-2 px-4 rounded-lg text-center text-sm font-medium transition-colors ${
                             selectedPlan?.id === plan.id
@@ -193,15 +141,12 @@ export default function PlanUpgradeModal({isOpen, onClose, currentPlan, onUpgrad
                     {selectedPlan && (
                       <span>
                         Upgrading to <strong className="text-white">{selectedPlan.name}</strong>
-                        {billingInterval === 'yearly' && selectedPlan.price !== 'Custom' && (
-                          <span className="text-green-400 ml-1">
-                            (Save {formatPrice(getSavings(selectedPlan))}/year)
-                          </span>
-                        )}
+                        <span className="text-gray-300 ml-1">
+                          - Billed monthly
+                        </span>
                       </span>
                     )}
                   </div>
-
                   <div className="flex space-x-3">
                     <button
                       onClick={onClose}

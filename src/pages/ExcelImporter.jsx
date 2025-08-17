@@ -2,9 +2,11 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { RiFileExcelLine, RiDownloadLine, RiUploadLine, RiCheckLine, RiAlertLine, RiHistoryLine, RiEyeLine, RiDeleteBin6Line } from 'react-icons/ri';
 import ExcelImporterModal from '../components/ExcelImporterModal';
+import FeatureGate from '../components/FeatureGate';
+import UsageLimitGate from '../components/UsageLimitGate';
 import { addInventoryItem } from '../services/db';
 import { useAuth } from '../context/AuthContext';
-import FeatureGate from '../components/FeatureGate';
+import useFeatureAccess from '../hooks/useFeatureAccess';
 
 export default function ExcelImporter() {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -19,6 +21,7 @@ export default function ExcelImporter() {
     lastImport: null
   });
   const { user } = useAuth();
+  const { canUseFeature, canAddInventoryItem } = useFeatureAccess();
 
   // Load import history from localStorage
   useEffect(() => {
@@ -66,9 +69,7 @@ export default function ExcelImporter() {
       categories: [...new Set(importedItems.map(item => item.category))],
       summary: {
         totalQuantity: importedItems.reduce((sum, item) => sum + (item.quantity || 0), 0),
-        avgPrice: importedItems.length > 0
-          ? importedItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0) / importedItems.length
-          : 0
+        avgPrice: importedItems.length > 0 ? importedItems.reduce((sum, item) => sum + (item.unitPrice || 0), 0) / importedItems.length : 0
       }
     };
 
@@ -87,16 +88,35 @@ export default function ExcelImporter() {
   const handleImportedItems = async (importedItems, fileName) => {
     if (!user?.email || !importedItems.length) return;
 
+    // Check if user can use Excel import feature
+    if (!canUseFeature('excelImporter')) {
+      setError('Excel import is not available on your current plan');
+      return;
+    }
+
     try {
       setError(null);
       setIsLoading(true);
+
       let addedCount = 0;
       let failedCount = 0;
+      let itemsToAdd = [...importedItems];
 
-      // Add each imported item to inventory
-      for (const item of importedItems) {
+      // Check inventory limits
+      const currentInventoryCount = await getCurrentInventoryCount();
+      
+      for (let i = 0; i < itemsToAdd.length; i++) {
+        const limitCheck = canAddInventoryItem(currentInventoryCount + addedCount);
+        
+        if (!limitCheck.allowed && limitCheck.limit !== -1) {
+          // Hit the limit, stop adding more items
+          const remainingItems = itemsToAdd.length - i;
+          setError(`Added ${addedCount} items. Remaining ${remainingItems} items could not be added due to plan limits.`);
+          break;
+        }
+
         try {
-          await addInventoryItem(item, user.email);
+          await addInventoryItem(itemsToAdd[i], user.email);
           addedCount++;
         } catch (itemError) {
           console.error('Error adding imported item:', itemError);
@@ -122,6 +142,17 @@ export default function ExcelImporter() {
       saveImportToHistory(importedItems, fileName, 'failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getCurrentInventoryCount = async () => {
+    try {
+      const { getInventoryItems } = await import('../services/db');
+      const items = await getInventoryItems(user.email);
+      return items.length;
+    } catch (error) {
+      console.error('Error getting inventory count:', error);
+      return 0;
     }
   };
 
@@ -151,7 +182,6 @@ export default function ExcelImporter() {
     const dataStr = JSON.stringify(importHistory, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = `import-history-${new Date().toISOString().split('T')[0]}.json`;
-
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -170,9 +200,9 @@ export default function ExcelImporter() {
     ];
 
     // Convert to CSV
-    const csvContent = sampleData
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
+    const csvContent = sampleData.map(row =>
+      row.map(field => `"${field}"`).join(',')
+    ).join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -206,28 +236,30 @@ export default function ExcelImporter() {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'success':
-        return <RiCheckLine className="h-5 w-5 text-green-400" />;
-      case 'failed':
-        return <RiAlertLine className="h-5 w-5 text-red-400" />;
-      default:
-        return <RiFileExcelLine className="h-5 w-5 text-blue-400" />;
+      case 'success': return <RiCheckLine className="h-5 w-5 text-green-400" />;
+      case 'failed': return <RiAlertLine className="h-5 w-5 text-red-400" />;
+      default: return <RiFileExcelLine className="h-5 w-5 text-blue-400" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'success':
-        return 'bg-green-100 text-green-800';
-      case 'failed':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
+      case 'success': return 'bg-green-100 text-green-800';
+      case 'failed': return 'bg-red-100 text-red-800';
+      default: return 'bg-blue-100 text-blue-800';
     }
   };
 
+  const handleImportClick = () => {
+    if (!canUseFeature('excelImporter')) {
+      setError('Excel import is not available on your current plan');
+      return;
+    }
+    setIsImporterOpen(true);
+  };
+
   return (
-    <FeatureGate feature="excelImport" fallbackMessage="Excel importing requires a Basic or Professional plan">
+    <FeatureGate feature="excelImporter">
       <div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -247,16 +279,18 @@ export default function ExcelImporter() {
                 onClick={downloadTemplate}
                 className="inline-flex items-center justify-center rounded-md border border-gray-600 bg-transparent px-4 py-2 text-sm font-medium text-gray-300 shadow-sm hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
               >
-                <RiDownloadLine className="mr-2 h-4 w-4" /> Download Template
+                <RiDownloadLine className="mr-2 h-4 w-4" />
+                Download Template
               </button>
-
+              
               {importHistory.length > 0 && (
                 <>
                   <button
                     onClick={exportHistory}
                     className="inline-flex items-center justify-center rounded-md border border-blue-600 bg-transparent px-4 py-2 text-sm font-medium text-blue-400 shadow-sm hover:bg-blue-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full sm:w-auto transition-colors"
                   >
-                    <RiDownloadLine className="mr-2 h-4 w-4" /> Export History
+                    <RiDownloadLine className="mr-2 h-4 w-4" />
+                    Export History
                   </button>
                   <button
                     onClick={clearHistory}
@@ -266,9 +300,9 @@ export default function ExcelImporter() {
                   </button>
                 </>
               )}
-
+              
               <button
-                onClick={() => setIsImporterOpen(true)}
+                onClick={handleImportClick}
                 disabled={isLoading}
                 className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50"
               >
@@ -380,9 +414,7 @@ export default function ExcelImporter() {
                       </dt>
                       <dd className="flex items-baseline mt-1">
                         <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {stats.totalImports > 0
-                            ? Math.round((stats.successfulImports / stats.totalImports) * 100)
-                            : 0}%
+                          {stats.totalImports > 0 ? Math.round((stats.successfulImports / stats.totalImports) * 100) : 0}%
                         </div>
                       </dd>
                     </dl>
@@ -441,9 +473,11 @@ export default function ExcelImporter() {
                     onClick={downloadTemplate}
                     className="mt-3 inline-flex items-center px-3 py-1 bg-primary-600 text-white rounded text-sm hover:bg-primary-700"
                   >
-                    <RiDownloadLine className="h-4 w-4 mr-1" /> Download
+                    <RiDownloadLine className="h-4 w-4 mr-1" />
+                    Download
                   </button>
                 </div>
+
                 <div className="text-center">
                   <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-4 mx-auto">
                     <span className="text-lg font-semibold">2</span>
@@ -453,6 +487,7 @@ export default function ExcelImporter() {
                     Fill in your inventory data using the template format with required columns.
                   </p>
                 </div>
+
                 <div className="text-center">
                   <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600 mb-4 mx-auto">
                     <span className="text-lg font-semibold">3</span>
@@ -462,10 +497,11 @@ export default function ExcelImporter() {
                     Upload your file, map columns, review data, and confirm the import.
                   </p>
                   <button
-                    onClick={() => setIsImporterOpen(true)}
+                    onClick={handleImportClick}
                     className="mt-3 inline-flex items-center px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
                   >
-                    <RiUploadLine className="h-4 w-4 mr-1" /> Start Import
+                    <RiUploadLine className="h-4 w-4 mr-1" />
+                    Start Import
                   </button>
                 </div>
               </div>
@@ -494,10 +530,11 @@ export default function ExcelImporter() {
                     Start by importing your first spreadsheet to build your import history
                   </p>
                   <button
-                    onClick={() => setIsImporterOpen(true)}
+                    onClick={handleImportClick}
                     className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                   >
-                    <RiUploadLine className="mr-2 h-4 w-4" /> Import Your First Spreadsheet
+                    <RiUploadLine className="mr-2 h-4 w-4" />
+                    Import Your First Spreadsheet
                   </button>
                 </div>
               ) : (
@@ -531,7 +568,15 @@ export default function ExcelImporter() {
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => {
-                              const details = `Import Details: File: ${importRecord.fileName} Date: ${formatDate(importRecord.timestamp)} Items: ${importRecord.itemCount} Total Value: ${formatCurrency(importRecord.totalValue)} Categories: ${importRecord.categories.join(',')} Total Quantity: ${importRecord.summary.totalQuantity} Average Price: ${formatCurrency(importRecord.summary.avgPrice)}`;
+                              const details = `Import Details:
+
+File: ${importRecord.fileName}
+Date: ${formatDate(importRecord.timestamp)}
+Items: ${importRecord.itemCount}
+Total Value: ${formatCurrency(importRecord.totalValue)}
+Categories: ${importRecord.categories.join(', ')}
+Total Quantity: ${importRecord.summary.totalQuantity}
+Average Price: ${formatCurrency(importRecord.summary.avgPrice)}`;
                               alert(details);
                             }}
                             className="text-gray-400 hover:text-gray-300 p-1"
@@ -548,6 +593,7 @@ export default function ExcelImporter() {
                           </button>
                         </div>
                       </div>
+
                       {importRecord.categories.length > 0 && (
                         <div className="bg-gray-700 rounded-md p-3">
                           <h4 className="text-sm font-medium text-white mb-2">Categories Imported:</h4>

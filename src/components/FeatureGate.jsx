@@ -1,182 +1,113 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { RiLockLine, RiArrowRightLine } from 'react-icons/ri';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiLockLine, RiArrowRightLine, RiStarLine, RiAlertLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import { logSecurityEvent } from '../utils/security';
+import useFeatureAccess from '../hooks/useFeatureAccess';
 
-/**
- * FeatureGate - A component that restricts access to features based on user subscription
- * 
- * @param {string} feature - The feature to check access for (e.g., 'receiptScanner', 'excelImport')
- * @param {React.ReactNode} children - The content to render if the user has access
- * @param {string} fallbackMessage - Custom message to display when access is denied
- * @param {boolean} redirectToPricing - Whether to show a redirect to pricing page button
- */
 export default function FeatureGate({ 
   feature, 
   children, 
-  fallbackMessage = "This feature requires a higher subscription plan",
-  redirectToPricing = true 
+  fallback = null,
+  showUpgradePrompt = true,
+  customMessage = null,
+  requiredPlan = null 
 }) {
-  const { user } = useAuth();
-  const [hasAccess, setHasAccess] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [reason, setReason] = useState('');
-
-  useEffect(() => {
-    const checkAccess = async () => {
-      if (!user?.email) {
-        setHasAccess(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        
-        // Check if Supabase is available
-        if (supabase) {
-          // Call the database function to check access
-          const { data, error } = await supabase.rpc('check_feature_access', {
-            user_email: user.email,
-            feature_name: feature
-          });
-          
-          if (error) {
-            console.error('Error checking feature access:', error);
-            logSecurityEvent('FEATURE_ACCESS_CHECK_ERROR', {
-              feature,
-              error: error.message
-            });
-            
-            // Default to allowing access if there's an error
-            setHasAccess(true);
-          } else {
-            setHasAccess(data);
-            
-            // If access is denied, get the latest log entry to see why
-            if (!data) {
-              const { data: logData } = await supabase
-                .from('feature_access_logs_p3k7j2l')
-                .select('reason')
-                .eq('user_email', user.email)
-                .eq('feature_name', feature)
-                .eq('access_granted', false)
-                .order('timestamp', { ascending: false })
-                .limit(1);
-                
-              if (logData && logData.length > 0) {
-                setReason(logData[0].reason);
-              }
-            }
-            
-            logSecurityEvent('FEATURE_ACCESS_CHECK', {
-              feature,
-              granted: data
-            });
-          }
-        } else {
-          // Fallback to client-side check when Supabase is not available
-          // This is less secure but provides a fallback
-          const planLimits = {
-            free: {
-              inventoryItems: 100,
-              receiptScans: 0,
-              excelImport: false,
-              teamMembers: 1
-            },
-            basic: {
-              inventoryItems: 1000,
-              receiptScans: 50,
-              excelImport: true,
-              teamMembers: 3
-            },
-            professional: {
-              inventoryItems: -1, // unlimited
-              receiptScans: -1, // unlimited
-              excelImport: true,
-              teamMembers: 10
-            }
-          };
-          
-          // Determine user's plan (default to free)
-          const userPlan = user.plan || 'free';
-          const limits = planLimits[userPlan];
-          
-          // Check feature access based on limits
-          let access = false;
-          if (feature === 'receiptScanner') {
-            access = limits.receiptScans > 0 || limits.receiptScans === -1;
-            if (!access) setReason('Receipt scanning not available on current plan');
-          } else if (feature === 'excelImport') {
-            access = limits.excelImport === true;
-            if (!access) setReason('Excel import not available on current plan');
-          } else if (feature === 'inventoryItems') {
-            // For inventory items, we'd need to check against current usage
-            // Since we can't do that without the database, we'll assume access is granted
-            access = true;
-          } else {
-            // Default to allowing access for unknown features
-            access = true;
-          }
-          
-          setHasAccess(access);
-          
-          logSecurityEvent('FEATURE_ACCESS_CHECK_FALLBACK', {
-            feature,
-            granted: access,
-            plan: userPlan
-          });
-        }
-      } catch (error) {
-        console.error('Error in feature access check:', error);
-        // Default to allowing access on error
-        setHasAccess(true);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAccess();
-  }, [user?.email, feature]);
+  const { canUseFeature, currentPlan, planInfo, loading } = useFeatureAccess();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
       </div>
     );
   }
 
-  if (!hasAccess) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-center"
-      >
-        <div className="mx-auto w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-4">
-          <RiLockLine className="h-6 w-6 text-amber-600" />
-        </div>
-        <h3 className="text-lg font-medium text-white mb-2">
-          Feature Restricted
-        </h3>
-        <p className="text-gray-300 mb-6">
-          {reason || fallbackMessage}
-        </p>
-        {redirectToPricing && (
-          <Link
-            to="/pricing"
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-          >
-            Upgrade Your Plan <RiArrowRightLine className="ml-2 h-4 w-4" />
-          </Link>
-        )}
-      </motion.div>
-    );
+  const hasAccess = canUseFeature(feature);
+
+  if (hasAccess) {
+    return children;
   }
 
-  return children;
+  if (fallback) {
+    return fallback;
+  }
+
+  if (!showUpgradePrompt) {
+    return null;
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-gray-800 rounded-lg p-6 border border-gray-700"
+    >
+      <div className="flex items-start">
+        <div className="flex-shrink-0">
+          <div className="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center">
+            <RiLockLine className="h-5 w-5 text-gray-400" />
+          </div>
+        </div>
+        <div className="ml-4 flex-1">
+          <h3 className="text-lg font-medium text-white mb-2">
+            Premium Feature
+          </h3>
+          <p className="text-gray-300 mb-4">
+            {customMessage || getFeatureMessage(feature)}
+          </p>
+          
+          <div className="bg-gray-700 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-gray-400">Current Plan:</span>
+              <span className="text-white font-medium">{planInfo.name}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">Required Plan:</span>
+              <span className="text-primary-400 font-medium">
+                {requiredPlan || getRequiredPlan(feature)}
+              </span>
+            </div>
+          </div>
+          
+          <Link
+            to="/pricing"
+            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            <RiStarLine className="h-4 w-4 mr-2" />
+            Upgrade Plan
+            <RiArrowRightLine className="h-4 w-4 ml-2" />
+          </Link>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function getFeatureMessage(feature) {
+  const messages = {
+    receiptScanner: 'Receipt scanning allows you to automatically extract items from receipts and add them to your inventory.',
+    excelImporter: 'Excel import lets you bulk import inventory data from spreadsheets.',
+    advancedAnalytics: 'Advanced analytics provide detailed insights into your inventory trends and performance.',
+    customCategories: 'Create custom categories to better organize your inventory items.',
+    multipleLocations: 'Manage inventory across multiple locations or warehouses.',
+    apiAccess: 'Access our REST API to integrate with your existing systems.',
+    bulkOperations: 'Perform bulk operations on multiple inventory items at once.',
+    prioritySupport: 'Get priority customer support with faster response times.'
+  };
+  
+  return messages[feature] || 'This feature is available with a premium plan.';
+}
+
+function getRequiredPlan(feature) {
+  const requirements = {
+    receiptScanner: 'Basic Plan or higher',
+    excelImporter: 'Basic Plan or higher',
+    advancedAnalytics: 'Professional Plan',
+    customCategories: 'Professional Plan',
+    multipleLocations: 'Professional Plan',
+    apiAccess: 'Professional Plan',
+    bulkOperations: 'Professional Plan',
+    prioritySupport: 'Professional Plan'
+  };
+  
+  return requirements[feature] || 'Premium Plan';
 }

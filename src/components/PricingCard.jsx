@@ -1,15 +1,17 @@
-import {motion} from 'framer-motion';
-import {RiCheckLine,RiStarLine,RiArrowRightLine} from 'react-icons/ri';
-import {formatPrice} from '../lib/stripe';
+import { motion } from 'framer-motion';
+import { RiCheckLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
+import { formatPrice } from '../lib/stripe';
 
-export default function PricingCard({plan,isPopular=false,onSelectPlan,currentPlan=null,isLoading=false,buttonText=null,billingInterval='monthly'}) {
-  const isCurrentPlan=currentPlan===plan.id;
-  const defaultButtonText=isCurrentPlan ? 'Current Plan' : 'Get Started';
-
-  const getPrice=()=> {
-    if (plan.price===0) return 'Free';
-    return billingInterval==='yearly' ? formatPrice(plan.price * 12 * 0.9) + '/year' : formatPrice(plan.price) + '/month';
-  };
+export default function PricingCard({ 
+  plan, 
+  isPopular = false, 
+  onSelectPlan, 
+  currentPlan = null, 
+  isLoading = false,
+  buttonText = null 
+}) {
+  const isCurrentPlan = currentPlan === plan.id;
+  const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
 
   const handleSelectPlan = () => {
     if (plan.paymentLink && !isCurrentPlan) {
@@ -22,12 +24,12 @@ export default function PricingCard({plan,isPopular=false,onSelectPlan,currentPl
 
   return (
     <motion.div
-      initial={{opacity: 0,y: 20}}
-      animate={{opacity: 1,y: 0}}
-      transition={{duration: 0.5}}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
-        isPopular || plan.highlighted 
-          ? 'border-2 border-primary-500 bg-gray-800' 
+        isPopular || plan.highlighted
+          ? 'border-2 border-primary-500 bg-gray-800'
           : 'border border-gray-700 bg-gray-800'
       }`}
     >
@@ -47,29 +49,29 @@ export default function PricingCard({plan,isPopular=false,onSelectPlan,currentPl
           <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
           <div className="flex items-baseline justify-center">
             <span className="text-4xl font-extrabold text-white">
-              {getPrice().split('/')[0]}
+              {plan.price === 0 ? 'Free' : `£${plan.price}`}
             </span>
             {plan.price > 0 && (
               <span className="text-xl font-semibold text-gray-400 ml-1">
-                {billingInterval==='yearly' ? '/year' : '/month'}
+                /month
               </span>
             )}
           </div>
-          {plan.price > 0 && billingInterval==='monthly' && (
-            <p className="text-gray-400 mt-2">
-              {formatPrice(plan.price * 12 * 0.9)}/year (Save 10%)
+          {plan.price > 0 && (
+            <p className="text-gray-400 mt-2 text-sm">
+              Billed monthly • Cancel anytime
             </p>
           )}
         </div>
 
         {/* Features list */}
         <div className="space-y-4 mb-8">
-          {plan.features.map((feature,index)=> (
+          {plan.features.map((feature, index) => (
             <motion.div
               key={index}
-              initial={{opacity: 0,x: -20}}
-              animate={{opacity: 1,x: 0}}
-              transition={{duration: 0.3,delay: index * 0.1}}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.1 }}
               className="flex items-start"
             >
               <div className="flex-shrink-0 mr-3">

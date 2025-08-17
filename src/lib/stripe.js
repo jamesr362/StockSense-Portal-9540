@@ -57,9 +57,9 @@ export const SUBSCRIPTION_PLANS = {
   basic: {
     id: 'basic',
     name: 'Basic',
-    price: 9.99,
-    priceId: 'price_1RvPHREw1FLYKy8hmTH0P890',
-    paymentLink: 'https://buy.stripe.com/test_28EbJ15Br8qzelVfegcjS06',
+    price: 4.99,
+    priceId: 'price_1RxEcJEw1FLYKy8hoghyrJL9',
+    paymentLink: 'https://buy.stripe.com/test_00w00jfc1eOX5Pp2rucjS08',
     features: [
       'Up to 1,000 inventory items',
       'Excel importer',
@@ -76,9 +76,9 @@ export const SUBSCRIPTION_PLANS = {
   professional: {
     id: 'professional',
     name: 'Professional',
-    price: 14.99,
-    priceId: 'price_1RvPHREw1FLYKy8hXCRwsIi2',
-    paymentLink: 'https://buy.stripe.com/test_4gMbJ1fc1ayHdhRc24cjS05',
+    price: 9.99,
+    priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
+    paymentLink: 'https://buy.stripe.com/test_9B6fZh4xneOXcdN4zCcjS07',
     features: [
       'Unlimited inventory items',
       'Unlimited receipt scans',
