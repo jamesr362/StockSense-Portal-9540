@@ -1,20 +1,9 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  RiCalendarLine, 
-  RiArrowRightLine, 
-  RiCheckLine, 
-  RiAlertLine, 
-  RiSettings3Line, 
-  RiDownloadLine, 
-  RiRefreshLine, 
-  RiMoneyDollarCircleLine, 
-  RiCreditCardLine, 
-  RiLineChartLine 
-} from 'react-icons/ri';
-import { SUBSCRIPTION_PLANS, formatPrice, getPlanById } from '../lib/stripe';
-import { logSecurityEvent } from '../utils/security';
-import { supabase } from '../lib/supabase';
+import {useState, useEffect} from 'react';
+import {motion} from 'framer-motion';
+import {RiCalendarLine, RiArrowRightLine, RiCheckLine, RiAlertLine, RiSettings3Line, RiDownloadLine, RiRefreshLine, RiMoneyDollarCircleLine, RiCreditCard2Line, RiLineChartLine} from 'react-icons/ri';
+import {SUBSCRIPTION_PLANS, formatPrice, getPlanById} from '../lib/stripe';
+import {logSecurityEvent} from '../utils/security';
+import {supabase} from '../lib/supabase';
 
 // Mock Stripe services for demo purposes
 const mockStripeServices = {
@@ -43,14 +32,14 @@ const mockStripeServices = {
     team_members: 3,
     receipt_scans: 85
   }),
-  cancelSubscription: async () => ({ status: 'canceled' }),
-  updateSubscription: async () => ({ status: 'active' }),
+  cancelSubscription: async () => ({status: 'canceled'}),
+  updateSubscription: async () => ({status: 'active'}),
   createPortalSession: async () => {
     window.open('https://billing.stripe.com', '_blank');
   }
 };
 
-export default function SubscriptionManager({ customerId, onSubscriptionChange }) {
+export default function SubscriptionManager({customerId, onSubscriptionChange}) {
   const [subscription, setSubscription] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [usageData, setUsageData] = useState(null);
@@ -73,7 +62,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       // First try to get data from Supabase if available
       if (supabase) {
         try {
-          const { data: subscriptionData, error: subscriptionError } = await supabase
+          const {data: subscriptionData, error: subscriptionError} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .select('*')
             .eq('user_email', customerId)
@@ -88,7 +77,9 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
               status: subscriptionData.status || 'active',
               price_id: subscriptionData.plan_id || 'price_professional',
               amount: getPlanAmountFromId(subscriptionData.plan_id) * 100, // convert to pence
-              current_period_end: Math.floor(new Date(subscriptionData.current_period_end || Date.now() + 30*24*60*60*1000).getTime() / 1000)
+              current_period_end: Math.floor(
+                new Date(subscriptionData.current_period_end || Date.now() + 30*24*60*60*1000).getTime() / 1000
+              )
             });
             setLoading(false);
             return;
@@ -111,11 +102,12 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       setPaymentMethods(paymentData);
       setUsageData(usageInfo);
 
-      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', { customerId });
+      logSecurityEvent('SUBSCRIPTION_DATA_LOADED', {customerId});
+
     } catch (err) {
       console.error('Error loading subscription data:', err);
       setError('Failed to load subscription data. Please try again.');
-      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', { error: err.message });
+      logSecurityEvent('SUBSCRIPTION_DATA_ERROR', {error: err.message});
     } finally {
       setLoading(false);
     }
@@ -136,7 +128,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       // Try to update in Supabase first
       if (supabase) {
         try {
-          const { error } = await supabase
+          const {error} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update({
               status: 'canceled',
@@ -162,6 +154,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       await loadSubscriptionData();
       onSubscriptionChange?.();
       setShowCancelConfirm(false);
+
     } catch (err) {
       setError('Failed to cancel subscription. Please try again.');
     } finally {
@@ -178,7 +171,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       // Try to update in Supabase first
       if (supabase) {
         try {
-          const { error } = await supabase
+          const {error} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update({
               plan_id: newPriceId,
@@ -202,6 +195,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       await mockStripeServices.updateSubscription(subscription.id, newPriceId);
       await loadSubscriptionData();
       onSubscriptionChange?.();
+
     } catch (err) {
       setError('Failed to update subscription. Please try again.');
     } finally {
@@ -221,14 +215,14 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
   };
 
   const getSubscriptionStatus = () => {
-    if (!subscription) return { text: 'No subscription', color: 'text-gray-400' };
+    if (!subscription) return {text: 'No subscription', color: 'text-gray-400'};
 
     switch (subscription.status) {
-      case 'active': return { text: 'Active', color: 'text-green-400' };
-      case 'canceled': return { text: 'Canceled', color: 'text-red-400' };
-      case 'past_due': return { text: 'Past Due', color: 'text-yellow-400' };
-      case 'unpaid': return { text: 'Unpaid', color: 'text-red-400' };
-      default: return { text: subscription.status, color: 'text-gray-400' };
+      case 'active': return {text: 'Active', color: 'text-green-400'};
+      case 'canceled': return {text: 'Canceled', color: 'text-red-400'};
+      case 'past_due': return {text: 'Past Due', color: 'text-yellow-400'};
+      case 'unpaid': return {text: 'Unpaid', color: 'text-red-400'};
+      default: return {text: subscription.status, color: 'text-gray-400'};
     }
   };
 
@@ -270,8 +264,8 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       {/* Error Message */}
       {error && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{opacity: 0, y: -10}}
+          animate={{opacity: 1, y: 0}}
           className="p-4 bg-red-900/50 border border-red-700 rounded-lg"
         >
           <div className="flex items-center">
@@ -337,7 +331,9 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                             ? 'bg-red-500'
                             : 'bg-green-500'
                         }`}
-                        style={{ width: `${getUsagePercentage(usageData.inventory_items, currentPlan.limits.inventoryItems)}%` }}
+                        style={{
+                          width: `${getUsagePercentage(usageData.inventory_items, currentPlan.limits.inventoryItems)}%`
+                        }}
                       />
                     </div>
                   </div>
@@ -357,7 +353,9 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                               ? 'bg-red-500'
                               : 'bg-green-500'
                           }`}
-                          style={{ width: `${getUsagePercentage(usageData.receipt_scans, currentPlan.limits.receiptScans)}%` }}
+                          style={{
+                            width: `${getUsagePercentage(usageData.receipt_scans, currentPlan.limits.receiptScans)}%`
+                          }}
                         />
                       </div>
                     </div>
@@ -377,7 +375,9 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                             ? 'bg-red-500'
                             : 'bg-green-500'
                         }`}
-                        style={{ width: `${getUsagePercentage(usageData.team_members, currentPlan.limits.teamMembers)}%` }}
+                        style={{
+                          width: `${getUsagePercentage(usageData.team_members, currentPlan.limits.teamMembers)}%`
+                        }}
                       />
                     </div>
                   </div>
@@ -459,6 +459,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
           <h3 className="text-lg font-semibold text-white">Upgrade Options</h3>
           <span className="text-sm text-gray-400">Monthly billing only</span>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Object.values(SUBSCRIPTION_PLANS)
             .filter(plan => {
@@ -520,7 +521,7 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
                 key={method.id}
                 className="flex items-center p-3 bg-gray-700 rounded-lg"
               >
-                <RiCreditCardLine className="h-5 w-5 text-gray-400 mr-3" />
+                <RiCreditCard2Line className="h-5 w-5 text-gray-400 mr-3" />
                 <div className="flex-1">
                   <p className="text-white">
                     •••• •••• •••• {method.card.last4}
@@ -550,8 +551,8 @@ export default function SubscriptionManager({ customerId, onSubscriptionChange }
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{opacity: 0, scale: 0.95}}
+            animate={{opacity: 1, scale: 1}}
             className="bg-gray-800 rounded-lg p-6 max-w-md mx-4"
           >
             <h3 className="text-lg font-semibold text-white mb-4">

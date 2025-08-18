@@ -1,35 +1,38 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
-import { RiCreditCardLine, RiCalendarLine, RiLineChartLine, RiSettings3Line, RiArrowUpLine } from 'react-icons/ri';
-import { useAuth } from '../context/AuthContext';
+import {motion} from 'framer-motion';
+import {useState, useEffect} from 'react';
+import {RiCreditCard2Line, RiCalendarLine, RiLineChartLine, RiSettings3Line, RiArrowUpLine} from 'react-icons/ri';
+import {useAuth} from '../context/AuthContext';
 import SubscriptionManager from '../components/SubscriptionManager';
 import BillingHistory from '../components/BillingHistory';
 import UsageMetrics from '../components/UsageMetrics';
 import PlanUpgradeModal from '../components/PlanUpgradeModal';
-import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import {SUBSCRIPTION_PLANS} from '../lib/stripe';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState('overview');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [currentPlan, setCurrentPlan] = useState('professional');
-  const { user } = useAuth();
+  const {user} = useAuth();
 
   const tabs = [
-    { id: 'overview', name: 'Overview', icon: RiLineChartLine },
-    { id: 'subscription', name: 'Subscription', icon: RiCreditCardLine },
-    { id: 'usage', name: 'Usage', icon: RiLineChartLine },
-    { id: 'history', name: 'Billing History', icon: RiCalendarLine },
-    { id: 'settings', name: 'Settings', icon: RiSettings3Line }
+    {id: 'overview', name: 'Overview', icon: RiLineChartLine},
+    {id: 'subscription', name: 'Subscription', icon: RiCreditCard2Line},
+    {id: 'usage', name: 'Usage', icon: RiLineChartLine},
+    {id: 'history', name: 'Billing History', icon: RiCalendarLine},
+    {id: 'settings', name: 'Settings', icon: RiSettings3Line}
   ];
 
   const handlePlanUpgrade = async (plan) => {
     try {
       // In a real app, this would call your Stripe API
       console.log('Upgrading to:', plan.name);
+      
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 2000));
+      
       setCurrentPlan(plan.id);
       setShowUpgradeModal(false);
+      
       // Show success message
       alert(`Successfully upgraded to ${plan.name}!`);
     } catch (error) {
@@ -43,9 +46,9 @@ export default function Billing() {
   return (
     <div>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
+        transition={{duration: 0.5}}
       >
         <div className="sm:flex sm:items-center sm:justify-between mb-8">
           <div className="sm:flex-auto">
@@ -91,9 +94,9 @@ export default function Billing() {
         <div className="mt-8">
           {activeTab === 'overview' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
               className="space-y-6"
             >
               {/* Current Plan Overview */}
@@ -146,7 +149,7 @@ export default function Billing() {
                 </div>
                 <div className="bg-gray-800 p-6 rounded-lg">
                   <div className="flex items-center">
-                    <RiCreditCardLine className="h-8 w-8 text-green-400 mr-3" />
+                    <RiCreditCard2Line className="h-8 w-8 text-green-400 mr-3" />
                     <div>
                       <div className="text-2xl font-bold text-white">£{currentPlanDetails?.price || 35}</div>
                       <div className="text-gray-400 text-sm">Monthly Cost</div>
@@ -168,9 +171,9 @@ export default function Billing() {
 
           {activeTab === 'subscription' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
               <SubscriptionManager
                 customerId={user?.email}
@@ -184,9 +187,9 @@ export default function Billing() {
 
           {activeTab === 'usage' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
               <UsageMetrics userPlan={currentPlan} />
             </motion.div>
@@ -194,9 +197,9 @@ export default function Billing() {
 
           {activeTab === 'history' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
             >
               <BillingHistory customerId={user?.email} />
             </motion.div>
@@ -204,151 +207,9 @@ export default function Billing() {
 
           {activeTab === 'settings' && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6"
-            >
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-white mb-4">Billing Settings</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-medium">Auto-renewal</h4>
-                      <p className="text-gray-400 text-sm">Automatically renew your monthly subscription</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-medium">Email notifications</h4>
-                      <p className="text-gray-400 text-sm">Receive billing notifications via email</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-medium">Usage alerts</h4>
-                      <p className="text-gray-400 text-sm">Get notified when approaching plan limits</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-white mb-4">Billing Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Business Name
-                    </label>
-                    <input
-                      type="text"
-                      value={user?.businessName || ''}
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={user?.email || ''}
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Address
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="123 Business Street"
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="London"
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Postal Code
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="SW1A 1AA"
-                      className="block w-full rounded-md border-gray-600 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <button className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors">
-                    Update Billing Address
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'subscription' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <SubscriptionManager
-                customerId={user?.email}
-                onSubscriptionChange={() => {
-                  // Refresh data
-                  console.log('Subscription changed');
-                }}
-              />
-            </motion.div>
-          )}
-
-          {activeTab === 'usage' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <UsageMetrics userPlan={currentPlan} />
-            </motion.div>
-          )}
-
-          {activeTab === 'history' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <BillingHistory customerId={user?.email} />
-            </motion.div>
-          )}
-
-          {activeTab === 'settings' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
+              initial={{opacity: 0}}
+              animate={{opacity: 1}}
+              transition={{duration: 0.3}}
               className="space-y-6"
             >
               <div className="bg-gray-800 rounded-lg p-6">
@@ -386,7 +247,6 @@ export default function Billing() {
                   </div>
                 </div>
               </div>
-
               <div className="bg-gray-800 rounded-lg p-6">
                 <h3 className="text-lg font-medium text-white mb-4">Billing Address</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

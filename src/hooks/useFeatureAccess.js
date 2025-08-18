@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import {useState, useEffect} from 'react';
+import {useAuth} from '../context/AuthContext';
+import {supabase} from '../lib/supabase';
+import {SUBSCRIPTION_PLANS} from '../lib/stripe';
 
 export const useFeatureAccess = () => {
   const [subscription, setSubscription] = useState(null);
   const [planLimits, setPlanLimits] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const {user} = useAuth();
 
   useEffect(() => {
     loadSubscriptionData();
@@ -21,11 +21,11 @@ export const useFeatureAccess = () => {
 
     try {
       setLoading(true);
-      
+
       // Try to get subscription from Supabase
       if (supabase) {
         try {
-          const { data, error } = await supabase
+          const {data, error} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .select('*')
             .eq('user_email', user.email.toLowerCase())
@@ -61,7 +61,7 @@ export const useFeatureAccess = () => {
   // Feature access checkers
   const canUseFeature = (featureName) => {
     if (!planLimits) return false;
-    
+
     switch (featureName) {
       case 'receiptScanner':
         return planLimits.receiptScans > 0 || planLimits.receiptScans === -1;
@@ -86,11 +86,11 @@ export const useFeatureAccess = () => {
 
   // Usage limit checkers
   const canAddInventoryItem = (currentCount) => {
-    if (!planLimits) return { allowed: false, reason: 'Plan not loaded' };
-    
-    if (planLimits.inventoryItems === -1) return { allowed: true, unlimited: true };
-    if (planLimits.inventoryItems === 0) return { allowed: false, reason: 'Inventory items not available on this plan' };
-    
+    if (!planLimits) return {allowed: false, reason: 'Plan not loaded'};
+
+    if (planLimits.inventoryItems === -1) return {allowed: true, unlimited: true};
+    if (planLimits.inventoryItems === 0) return {allowed: false, reason: 'Inventory items not available on this plan'};
+
     const allowed = currentCount < planLimits.inventoryItems;
     return {
       allowed,
@@ -101,11 +101,11 @@ export const useFeatureAccess = () => {
   };
 
   const canScanReceipt = (currentScans) => {
-    if (!planLimits) return { allowed: false, reason: 'Plan not loaded' };
-    
-    if (planLimits.receiptScans === -1) return { allowed: true, unlimited: true };
-    if (planLimits.receiptScans === 0) return { allowed: false, reason: 'Receipt scanning not available on this plan' };
-    
+    if (!planLimits) return {allowed: false, reason: 'Plan not loaded'};
+
+    if (planLimits.receiptScans === -1) return {allowed: true, unlimited: true};
+    if (planLimits.receiptScans === 0) return {allowed: false, reason: 'Receipt scanning not available on this plan'};
+
     const allowed = currentScans < planLimits.receiptScans;
     return {
       allowed,
@@ -116,11 +116,11 @@ export const useFeatureAccess = () => {
   };
 
   const canAddTeamMember = (currentMembers) => {
-    if (!planLimits) return { allowed: false, reason: 'Plan not loaded' };
-    
-    if (planLimits.teamMembers === -1) return { allowed: true, unlimited: true };
-    if (planLimits.teamMembers === 0) return { allowed: false, reason: 'Team members not available on this plan' };
-    
+    if (!planLimits) return {allowed: false, reason: 'Plan not loaded'};
+
+    if (planLimits.teamMembers === -1) return {allowed: true, unlimited: true};
+    if (planLimits.teamMembers === 0) return {allowed: false, reason: 'Team members not available on this plan'};
+
     const allowed = currentMembers < planLimits.teamMembers;
     return {
       allowed,
@@ -155,11 +155,13 @@ export const useFeatureAccess = () => {
     loading,
     currentPlan: getCurrentPlan(),
     planInfo: getPlanInfo(),
+    
     // Feature checkers
     canUseFeature,
     canAddInventoryItem,
     canScanReceipt,
     canAddTeamMember,
+    
     // Refresh function
     refresh: loadSubscriptionData
   };
