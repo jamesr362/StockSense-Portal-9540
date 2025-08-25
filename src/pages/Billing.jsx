@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
 import {useState, useEffect} from 'react';
-import {RiCreditCard2Line, RiCalendarLine, RiLineChartLine, RiSettings3Line, RiArrowUpLine} from 'react-icons/ri';
+import {RiSecurePaymentLine, RiCalendarLine, RiLineChartLine, RiSettings3Line, RiArrowUpLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import SubscriptionManager from '../components/SubscriptionManager';
 import BillingHistory from '../components/BillingHistory';
@@ -16,7 +16,7 @@ export default function Billing() {
 
   const tabs = [
     {id: 'overview', name: 'Overview', icon: RiLineChartLine},
-    {id: 'subscription', name: 'Subscription', icon: RiCreditCard2Line},
+    {id: 'subscription', name: 'Subscription', icon: RiSecurePaymentLine},
     {id: 'usage', name: 'Usage', icon: RiLineChartLine},
     {id: 'history', name: 'Billing History', icon: RiCalendarLine},
     {id: 'settings', name: 'Settings', icon: RiSettings3Line}
@@ -149,7 +149,7 @@ export default function Billing() {
                 </div>
                 <div className="bg-gray-800 p-6 rounded-lg">
                   <div className="flex items-center">
-                    <RiCreditCard2Line className="h-8 w-8 text-green-400 mr-3" />
+                    <RiSecurePaymentLine className="h-8 w-8 text-green-400 mr-3" />
                     <div>
                       <div className="text-2xl font-bold text-white">£{currentPlanDetails?.price || 35}</div>
                       <div className="text-gray-400 text-sm">Monthly Cost</div>

@@ -1,6 +1,6 @@
 import {useState, useEffect} from 'react';
 import {motion} from 'framer-motion';
-import {RiCalendarLine, RiArrowRightLine, RiCheckLine, RiAlertLine, RiSettings3Line, RiDownloadLine, RiRefreshLine, RiMoneyDollarCircleLine, RiCreditCard2Line, RiLineChartLine} from 'react-icons/ri';
+import {RiCalendarLine, RiArrowRightLine, RiCheckLine, RiAlertLine, RiSettings3Line, RiDownloadLine, RiRefreshLine, RiMoneyDollarCircleLine, RiSecurePaymentLine, RiLineChartLine} from 'react-icons/ri';
 import {SUBSCRIPTION_PLANS, formatPrice, getPlanById} from '../lib/stripe';
 import {logSecurityEvent} from '../utils/security';
 import {supabase} from '../lib/supabase';
@@ -521,7 +521,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 key={method.id}
                 className="flex items-center p-3 bg-gray-700 rounded-lg"
               >
-                <RiCreditCard2Line className="h-5 w-5 text-gray-400 mr-3" />
+                <RiSecurePaymentLine className="h-5 w-5 text-gray-400 mr-3" />
                 <div className="flex-1">
                   <p className="text-white">
                     •••• •••• •••• {method.card.last4}

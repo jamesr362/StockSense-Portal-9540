@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {motion} from 'framer-motion';
-import {RiCreditCard2Line,RiCheckLine,RiAlertLine} from 'react-icons/ri';
+import {RiSecurePaymentLine, RiCheckLine, RiAlertLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import {useNavigate} from 'react-router-dom';
 import {supabase} from '../lib/supabase';
@@ -101,7 +101,7 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
       className="bg-gray-800 rounded-lg p-6 shadow-xl"
     >
       <div className="text-center mb-6">
-        <RiCreditCard2Line className="h-12 w-12 text-primary-400 mx-auto mb-4" />
+        <RiSecurePaymentLine className="h-12 w-12 text-primary-400 mx-auto mb-4" />
         <h3 className="text-xl font-semibold text-white">Complete Your Upgrade</h3>
         <p className="text-gray-400 text-sm mt-1">
           Upgrade to {plan.name} Plan

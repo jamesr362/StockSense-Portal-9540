@@ -1,5 +1,5 @@
 import {motion} from 'framer-motion';
-import {RiCheckLine, RiCloseLine, RiCalendarLine, RiCreditCard2Line, RiArrowRightLine} from 'react-icons/ri';
+import {RiCheckLine, RiCloseLine, RiCalendarLine, RiSecurePaymentLine, RiArrowRightLine} from 'react-icons/ri';
 import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
 
 export default function SubscriptionCard({subscription, onUpgrade, onCancel, onReactivate, isLoading = false}) {
@@ -7,7 +7,7 @@ export default function SubscriptionCard({subscription, onUpgrade, onCancel, onR
     return (
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="text-center">
-          <RiCreditCard2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+          <RiSecurePaymentLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">No Active Subscription</h3>
           <p className="text-gray-400 mb-4">You're currently on the Free plan</p>
           <button
