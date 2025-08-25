@@ -9,10 +9,6 @@ export const useFeatureAccess = () => {
   const [loading, setLoading] = useState(true);
   const {user} = useAuth();
 
-  useEffect(() => {
-    loadSubscriptionData();
-  }, [user?.email]);
-
   const loadSubscriptionData = async () => {
     if (!user?.email) {
       setLoading(false);
@@ -33,7 +29,7 @@ export const useFeatureAccess = () => {
 
           if (!error && data) {
             setSubscription(data);
-            
+
             // Get plan limits based on subscription
             const planName = data.plan_id ? data.plan_id.split('_')[1] : 'free';
             const plan = SUBSCRIPTION_PLANS[planName] || SUBSCRIPTION_PLANS.free;
@@ -58,6 +54,10 @@ export const useFeatureAccess = () => {
     }
   };
 
+  useEffect(() => {
+    loadSubscriptionData();
+  }, [user?.email]);
+
   // Feature access checkers
   const canUseFeature = (featureName) => {
     if (!planLimits) return false;
@@ -67,6 +67,10 @@ export const useFeatureAccess = () => {
         return planLimits.receiptScans > 0 || planLimits.receiptScans === -1;
       case 'excelImporter':
         return planLimits.excelImport === true || planLimits.excelImport === -1;
+      case 'taxExports':
+        // Tax exports only available for Professional plan
+        const currentPlan = getCurrentPlan();
+        return currentPlan === 'professional';
       case 'advancedAnalytics':
         return planLimits.features.includes('advanced_analytics');
       case 'customCategories':
@@ -149,21 +153,24 @@ export const useFeatureAccess = () => {
     };
   };
 
+  // Refresh function to reload subscription data
+  const refresh = async () => {
+    await loadSubscriptionData();
+  };
+
   return {
     subscription,
     planLimits,
     loading,
     currentPlan: getCurrentPlan(),
     planInfo: getPlanInfo(),
-    
     // Feature checkers
     canUseFeature,
     canAddInventoryItem,
     canScanReceipt,
     canAddTeamMember,
-    
     // Refresh function
-    refresh: loadSubscriptionData
+    refresh
   };
 };
 

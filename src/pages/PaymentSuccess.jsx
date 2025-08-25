@@ -1,10 +1,11 @@
 import {useEffect, useState} from 'react';
 import {motion} from 'framer-motion';
 import {useSearchParams, useNavigate} from 'react-router-dom';
-import {RiCheckLine, RiArrowRightLine} from 'react-icons/ri';
+import {RiCheckLine, RiArrowRightLine, RiStarLine} from 'react-icons/ri';
 import {logSecurityEvent} from '../utils/security';
 import {SUBSCRIPTION_PLANS} from '../lib/stripe';
 import {useAuth} from '../context/AuthContext';
+import {supabase} from '../lib/supabase';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -12,23 +13,94 @@ export default function PaymentSuccess() {
   const {user} = useAuth();
   const [planDetails, setPlanDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isUpdatingSubscription, setIsUpdatingSubscription] = useState(false);
 
   useEffect(() => {
-    const planId = searchParams.get('plan');
-    
-    if (planId && SUBSCRIPTION_PLANS[planId]) {
-      setPlanDetails(SUBSCRIPTION_PLANS[planId]);
-      logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', {
-        planId,
+    const handlePaymentSuccess = async () => {
+      const planId = searchParams.get('plan');
+      const sessionId = searchParams.get('session_id');
+      
+      if (planId && SUBSCRIPTION_PLANS[planId]) {
+        setPlanDetails(SUBSCRIPTION_PLANS[planId]);
+        logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', {
+          planId,
+          userEmail: user?.email,
+          sessionId
+        });
+
+        // Update subscription in database
+        if (user?.email && supabase) {
+          await updateUserSubscription(planId, sessionId);
+        }
+      } else {
+        // Default to professional plan if no specific plan
+        setPlanDetails(SUBSCRIPTION_PLANS.professional);
+      }
+      
+      setLoading(false);
+    };
+
+    handlePaymentSuccess();
+  }, [searchParams, user?.email]);
+
+  const updateUserSubscription = async (planId, sessionId) => {
+    try {
+      setIsUpdatingSubscription(true);
+
+      // Check if user already has a subscription
+      const {data: existingSubscription, error: fetchError} = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .select('*')
+        .eq('user_email', user.email.toLowerCase())
+        .single();
+
+      const subscriptionData = {
+        user_email: user.email.toLowerCase(),
+        stripe_customer_id: `cus_${Math.random().toString(36).substring(2, 15)}`,
+        stripe_subscription_id: sessionId || `sub_${Math.random().toString(36).substring(2, 15)}`,
+        plan_id: `price_${planId}`,
+        status: 'active',
+        current_period_start: new Date().toISOString(),
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        cancel_at_period_end: false,
+        canceled_at: null,
+        updated_at: new Date().toISOString()
+      };
+
+      if (existingSubscription && !fetchError) {
+        // Update existing subscription
+        const {error: updateError} = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .update(subscriptionData)
+          .eq('user_email', user.email.toLowerCase());
+
+        if (updateError) throw updateError;
+      } else {
+        // Create new subscription
+        subscriptionData.created_at = new Date().toISOString();
+        const {error: insertError} = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .insert([subscriptionData]);
+
+        if (insertError) throw insertError;
+      }
+
+      logSecurityEvent('SUBSCRIPTION_ACTIVATED_FROM_PAYMENT', {
+        userEmail: user.email,
+        planId: `price_${planId}`,
+        sessionId
+      });
+
+    } catch (error) {
+      console.error('Error updating subscription after payment:', error);
+      logSecurityEvent('SUBSCRIPTION_UPDATE_ERROR_AFTER_PAYMENT', {
+        error: error.message,
         userEmail: user?.email
       });
-    } else {
-      // Default to professional plan if no specific plan
-      setPlanDetails(SUBSCRIPTION_PLANS.professional);
+    } finally {
+      setIsUpdatingSubscription(false);
     }
-    
-    setLoading(false);
-  }, [searchParams, user?.email]);
+  };
 
   const handleContinue = () => {
     navigate('/dashboard');
@@ -84,6 +156,20 @@ export default function PaymentSuccess() {
           Thank you for upgrading to {planDetails?.name}! Your subscription has been activated and you now have access to all premium features.
         </motion.p>
 
+        {/* Subscription Update Status */}
+        {isUpdatingSubscription && (
+          <motion.div
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            className="mb-6 p-3 bg-blue-900/30 border border-blue-700 rounded-lg"
+          >
+            <div className="flex items-center justify-center text-blue-300">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 mr-2"></div>
+              Activating your subscription...
+            </div>
+          </motion.div>
+        )}
+
         {/* Plan Details */}
         {planDetails && (
           <motion.div
@@ -93,24 +179,24 @@ export default function PaymentSuccess() {
             className="bg-gray-700 rounded-lg p-4 mb-6 text-left"
           >
             <h3 className="text-white font-semibold mb-2">Your New Plan</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Plan:</span>
-                <span className="text-white">{planDetails.name}</span>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="text-gray-400">Plan:</div>
+                <div className="text-white font-medium">{planDetails.name}</div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Price:</span>
-                <span className="text-white">£{planDetails.price}/month</span>
+              <div>
+                <div className="text-gray-400">Price:</div>
+                <div className="text-white font-medium">£{planDetails.price}/month</div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Status:</span>
-                <span className="text-green-400">Active</span>
+              <div>
+                <div className="text-gray-400">Status:</div>
+                <div className="text-green-400 font-medium">Active</div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Next Billing:</span>
-                <span className="text-white">
+              <div>
+                <div className="text-gray-400">Next Billing:</div>
+                <div className="text-white font-medium">
                   {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
-                </span>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -121,7 +207,7 @@ export default function PaymentSuccess() {
           initial={{opacity: 0, y: 20}}
           animate={{opacity: 1, y: 0}}
           transition={{delay: 0.6}}
-          className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6"
+          className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-6"
         >
           <h3 className="text-blue-400 font-semibold mb-2">Now Available:</h3>
           <ul className="text-blue-300 text-sm space-y-1 text-left">
@@ -145,10 +231,10 @@ export default function PaymentSuccess() {
             onClick={handleContinue}
             className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
           >
-            Continue to Dashboard
+            <RiStarLine className="h-5 w-5 mr-2" />
+            Start Using Premium Features
             <RiArrowRightLine className="h-5 w-5 ml-2" />
           </button>
-          
           <button
             onClick={handleViewBilling}
             className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"

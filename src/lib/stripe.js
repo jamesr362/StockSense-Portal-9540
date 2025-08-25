@@ -33,7 +33,21 @@ export const getStripeConfig = () => {
   };
 };
 
-// Subscription plans configuration with comprehensive features
+// Helper function to build return URLs for Stripe
+export const buildStripeReturnUrls = (planId) => {
+  const baseUrl = window.location.origin;
+  const basePath = window.location.pathname;
+  
+  const successUrl = `${baseUrl}${basePath}#/dashboard?payment_status=success&plan=${planId}`;
+  const cancelUrl = `${baseUrl}${basePath}#/pricing?payment_status=canceled`;
+  
+  return {
+    success_url: successUrl,
+    cancel_url: cancelUrl
+  };
+};
+
+// Subscription plans configuration - SIMPLIFIED PROFESSIONAL PLAN
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -54,42 +68,30 @@ export const SUBSCRIPTION_PLANS = {
       features: ['basic_dashboard', 'manual_entry']
     }
   },
-  basic: {
-    id: 'basic',
-    name: 'Basic',
-    price: 4.99,
-    priceId: 'price_1RxEcJEw1FLYKy8hoghyrJL9',
-    paymentLink: 'https://buy.stripe.com/test_00w00jfc1eOX5Pp2rucjS08',
-    features: [
-      'Up to 1,000 inventory items',
-      'Excel importer',
-      'Receipt scanner (50 scans/month)'
-    ],
-    limits: {
-      inventoryItems: 1000,
-      receiptScans: 50,
-      excelImport: true,
-      teamMembers: 3,
-      features: ['basic_dashboard', 'excel_import', 'receipt_scanner']
-    }
-  },
   professional: {
     id: 'professional',
     name: 'Professional',
     price: 9.99,
     priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
-    paymentLink: 'https://buy.stripe.com/test_9B6fZh4xneOXcdN4zCcjS07',
+    // Updated payment link with return URL parameters
+    paymentLink: 'https://buy.stripe.com/test_9AQfZh4xneOXcdN4zC',
     features: [
       'Unlimited inventory items',
       'Unlimited receipt scans',
-      'Unlimited Excel imports'
+      'Unlimited Excel imports',
+      'Professional tax export reports'
     ],
     limits: {
       inventoryItems: -1, // unlimited
       receiptScans: -1, // unlimited
       excelImport: -1, // unlimited
-      teamMembers: 10,
-      features: ['advanced_analytics', 'priority_support', 'multiple_locations', 'api_access', 'bulk_operations', 'custom_integrations', 'custom_categories']
+      teamMembers: 1,
+      features: [
+        'receipt_scanner',
+        'excel_importer',
+        'tax_exports',
+        'unlimited_items'
+      ]
     },
     highlighted: true
   }
@@ -98,6 +100,7 @@ export const SUBSCRIPTION_PLANS = {
 // Helper functions
 export const formatPrice = (amount, currency = 'gbp') => {
   if (typeof amount === 'string') return amount;
+  
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
     currency: currency.toUpperCase(),
@@ -123,6 +126,7 @@ export const canUserAccessFeature = (userPlan, feature) => {
 export const isWithinLimit = (userPlan, limitType, currentCount) => {
   const limits = getUserPlanLimits(userPlan);
   if (!limits) return false;
+  
   const limit = limits[limitType];
   if (limit === -1) return true; // unlimited
   return currentCount < limit;
@@ -134,6 +138,8 @@ export const isFeatureAvailable = (userPlan, feature) => {
       return getUserPlanLimits(userPlan).excelImport;
     case 'receiptScanner':
       return getUserPlanLimits(userPlan).receiptScans > 0;
+    case 'taxExports':
+      return userPlan === 'professional';
     default:
       return canUserAccessFeature(userPlan, feature);
   }
@@ -142,6 +148,7 @@ export const isFeatureAvailable = (userPlan, feature) => {
 export const hasReachedLimit = (userPlan, limitType, currentUsage) => {
   const limits = getUserPlanLimits(userPlan);
   if (!limits) return true;
+  
   const limit = limits[limitType];
   if (limit === -1) return false; // unlimited
   if (limit === 0) return true; // not available on this plan
@@ -191,7 +198,6 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
   
   const dailyCurrentCost = currentPlan.price / 30;
   const dailyNewCost = newPlan.price / 30;
-  
   const refund = dailyCurrentCost * daysRemaining;
   const newCharge = dailyNewCost * daysRemaining;
   

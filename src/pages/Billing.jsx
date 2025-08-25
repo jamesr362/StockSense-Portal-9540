@@ -117,7 +117,7 @@ export default function Billing() {
                         {currentPlanDetails?.name || 'Professional'}
                       </h4>
                       <p className="text-3xl font-bold text-primary-400">
-                        £{currentPlanDetails?.price || 35}
+                        £{currentPlanDetails?.price || 9.99}
                       </p>
                       <p className="text-gray-400 text-sm">per month</p>
                     </div>
@@ -151,7 +151,7 @@ export default function Billing() {
                   <div className="flex items-center">
                     <RiSecurePaymentLine className="h-8 w-8 text-green-400 mr-3" />
                     <div>
-                      <div className="text-2xl font-bold text-white">£{currentPlanDetails?.price || 35}</div>
+                      <div className="text-2xl font-bold text-white">£{currentPlanDetails?.price || 9.99}</div>
                       <div className="text-gray-400 text-sm">Monthly Cost</div>
                     </div>
                   </div>

@@ -1,22 +1,22 @@
-import { motion } from 'framer-motion';
-import { RiCheckLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
-import { formatPrice } from '../lib/stripe';
+import {motion} from 'framer-motion';
+import {RiCheckLine, RiStarLine, RiArrowRightLine} from 'react-icons/ri';
+import {formatPrice} from '../lib/stripe';
 
-export default function PricingCard({ 
-  plan, 
-  isPopular = false, 
-  onSelectPlan, 
-  currentPlan = null, 
+export default function PricingCard({
+  plan,
+  isPopular = false,
+  onSelectPlan,
+  currentPlan = null,
   isLoading = false,
-  buttonText = null 
+  buttonText = null
 }) {
   const isCurrentPlan = currentPlan === plan.id;
   const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
 
   const handleSelectPlan = () => {
     if (plan.paymentLink && !isCurrentPlan) {
-      // Open Stripe payment link in new tab
-      window.open(plan.paymentLink, '_blank');
+      // For external payment links, let the parent component handle it
+      onSelectPlan(plan);
     } else if (onSelectPlan) {
       onSelectPlan(plan);
     }
@@ -24,9 +24,9 @@ export default function PricingCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      initial={{opacity: 0, y: 20}}
+      animate={{opacity: 1, y: 0}}
+      transition={{duration: 0.5}}
       className={`relative rounded-lg shadow-lg overflow-hidden ${
         isPopular || plan.highlighted
           ? 'border-2 border-primary-500 bg-gray-800'
@@ -69,9 +69,9 @@ export default function PricingCard({
           {plan.features.map((feature, index) => (
             <motion.div
               key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
+              initial={{opacity: 0, x: -20}}
+              animate={{opacity: 1, x: 0}}
+              transition={{duration: 0.3, delay: index * 0.1}}
               className="flex items-start"
             >
               <div className="flex-shrink-0 mr-3">
@@ -106,6 +106,15 @@ export default function PricingCard({
             </>
           )}
         </button>
+
+        {/* Instant Access Notice */}
+        {!isCurrentPlan && plan.price > 0 && (
+          <div className="mt-4 text-center">
+            <p className="text-green-400 text-xs font-medium">
+              ⚡ Instant access after payment
+            </p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

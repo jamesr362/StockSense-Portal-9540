@@ -1,20 +1,27 @@
-import { motion } from 'framer-motion';
-import { RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine } from 'react-icons/ri';
-import { useState, useEffect } from 'react';
-import { getInventoryItems } from '../services/db';
-import { useAuth } from '../context/AuthContext';
+import {motion} from 'framer-motion';
+import {RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine, RiCalculatorLine, RiCloseLine} from 'react-icons/ri';
+import {useState, useEffect} from 'react';
+import {getInventoryItems} from '../services/db';
+import {useAuth} from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
-import { Link } from 'react-router-dom';
+import useSubscriptionVerification from '../hooks/useSubscriptionVerification';
+import {Link} from 'react-router-dom';
 import SubscriptionStatus from '../components/SubscriptionStatus';
 import UsageLimitGate from '../components/UsageLimitGate';
 import FeatureGate from '../components/FeatureGate';
+import PaymentVerificationBanner from '../components/PaymentVerificationBanner';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inventoryCount, setInventoryCount] = useState(0);
-  const { user } = useAuth();
-  const { subscription, planLimits, currentPlan, planInfo } = useFeatureAccess();
+  const {user} = useAuth();
+  const {subscription, planLimits, currentPlan, planInfo, canUseFeature, refresh} = useFeatureAccess();
+  const {
+    isVerifying,
+    verificationStatus,
+    dismissVerificationStatus
+  } = useSubscriptionVerification();
 
   useEffect(() => {
     const loadData = async () => {
@@ -22,7 +29,6 @@ export default function Dashboard() {
 
       try {
         setIsLoading(true);
-        
         // Load inventory data
         const items = await getInventoryItems(user.email);
         const totalItems = items.length;
@@ -65,6 +71,14 @@ export default function Dashboard() {
     loadData();
   }, [user?.email]);
 
+  // Refresh feature access when verification completes
+  useEffect(() => {
+    if (verificationStatus?.success) {
+      // Refresh feature access to get updated subscription
+      refresh();
+    }
+  }, [verificationStatus, refresh]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -75,10 +89,18 @@ export default function Dashboard() {
 
   return (
     <div>
+      {/* Payment Verification Banner */}
+      <PaymentVerificationBanner
+        isVerifying={isVerifying}
+        verificationStatus={verificationStatus}
+        onDismiss={dismissVerificationStatus}
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
+        transition={{duration: 0.5}}
+        className={isVerifying || verificationStatus ? 'mt-16' : ''}
       >
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between">
@@ -97,17 +119,44 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Subscription Banner (if free plan) */}
-        {currentPlan === 'free' && (
+        {/* Success Message for New Professional Users */}
+        {verificationStatus?.success && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
+            className="mb-6 bg-gradient-to-r from-green-600/20 to-primary-600/20 rounded-lg p-4 border border-green-500/30"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center">
+                <RiStarLine className="h-6 w-6 text-green-400 mr-3" />
+                <div>
+                  <h3 className="text-green-400 font-semibold">🎉 Welcome to Professional!</h3>
+                  <p className="text-gray-300 text-sm mt-1">
+                    Your subscription is now active. All premium features are unlocked and ready to use!
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={dismissVerificationStatus}
+                className="text-green-400 hover:text-green-300"
+              >
+                <RiCloseLine className="h-5 w-5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Subscription Banner (if free plan) */}
+        {currentPlan === 'free' && !verificationStatus?.success && (
+          <motion.div
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
             className="mb-6 bg-gradient-to-r from-primary-600/20 to-blue-600/20 rounded-lg p-4 border border-primary-500/30"
           >
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-white font-medium">Upgrade to unlock premium features</h3>
-                <p className="text-gray-300 text-sm mt-1">Get access to receipt scanning, Excel imports, and more!</p>
+                <p className="text-gray-300 text-sm mt-1">Get access to receipt scanning, Excel imports, tax exports, and more!</p>
               </div>
               <Link
                 to="/pricing"
@@ -126,9 +175,9 @@ export default function Dashboard() {
               {stats.map((stat, index) => (
                 <motion.div
                   key={stat.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  initial={{opacity: 0, y: 20}}
+                  animate={{opacity: 1, y: 0}}
+                  transition={{duration: 0.5, delay: index * 0.1}}
                   className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
                 >
                   <div className="p-4 sm:p-5">
@@ -163,8 +212,8 @@ export default function Dashboard() {
             </div>
           ) : (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0, y: 20}}
+              animate={{opacity: 1, y: 0}}
               className="bg-gray-800 overflow-hidden rounded-lg shadow p-6 sm:p-8 text-center text-gray-400"
             >
               <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
@@ -177,12 +226,12 @@ export default function Dashboard() {
         </UsageLimitGate>
 
         {/* Feature Cards */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Receipt Scanner Card */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            initial={{opacity: 0, y: 20}}
+            animate={{opacity: 1, y: 0}}
+            transition={{delay: 0.2}}
             className="bg-gray-800 rounded-lg p-6"
           >
             <div className="flex items-center mb-4">
@@ -200,17 +249,18 @@ export default function Dashboard() {
                   to="/receipt-scanner"
                   className="inline-flex items-center text-primary-400 hover:text-primary-300"
                 >
-                  Scan Receipt
-                  <RiArrowRightIcon className="ml-1 h-4 w-4" />
+                  Scan Receipt <RiArrowRightIcon className="ml-1 h-4 w-4" />
                 </Link>
               </FeatureGate>
-              
               <FeatureGate
                 feature="receiptScanner"
                 fallback={
                   <div className="flex items-center">
-                    <span className="text-red-400 text-sm">Available in Basic & Professional plans</span>
-                    <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
+                    <span className="text-red-400 text-sm">Available in Professional plan</span>
+                    <Link
+                      to="/pricing"
+                      className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                    >
                       Upgrade
                     </Link>
                   </div>
@@ -222,9 +272,9 @@ export default function Dashboard() {
 
           {/* Excel Import Card */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            initial={{opacity: 0, y: 20}}
+            animate={{opacity: 1, y: 0}}
+            transition={{delay: 0.3}}
             className="bg-gray-800 rounded-lg p-6"
           >
             <div className="flex items-center mb-4">
@@ -242,17 +292,18 @@ export default function Dashboard() {
                   to="/excel-importer"
                   className="inline-flex items-center text-green-400 hover:text-green-300"
                 >
-                  Import Data
-                  <RiArrowRightIcon className="ml-1 h-4 w-4" />
+                  Import Data <RiArrowRightIcon className="ml-1 h-4 w-4" />
                 </Link>
               </FeatureGate>
-              
               <FeatureGate
                 feature="excelImporter"
                 fallback={
                   <div className="flex items-center">
-                    <span className="text-red-400 text-sm">Available in Basic & Professional plans</span>
-                    <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
+                    <span className="text-red-400 text-sm">Available in Professional plan</span>
+                    <Link
+                      to="/pricing"
+                      className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                    >
                       Upgrade
                     </Link>
                   </div>
@@ -261,12 +312,50 @@ export default function Dashboard() {
               />
             </div>
           </motion.div>
+
+          {/* Tax Exports Card */}
+          <motion.div
+            initial={{opacity: 0, y: 20}}
+            animate={{opacity: 1, y: 0}}
+            transition={{delay: 0.4}}
+            className="bg-gray-800 rounded-lg p-6"
+          >
+            <div className="flex items-center mb-4">
+              <div className="bg-yellow-900/30 p-3 rounded-lg">
+                <RiCalculatorLine className="h-6 w-6 text-yellow-400" />
+              </div>
+              <h3 className="ml-3 text-lg font-medium text-white">Tax Exports</h3>
+            </div>
+            <p className="text-gray-400 mb-4">
+              Generate professional tax reports ready for your accountant.
+            </p>
+            <div className="mt-2">
+              {canUseFeature('taxExports') ? (
+                <Link
+                  to="/tax-exports"
+                  className="inline-flex items-center text-yellow-400 hover:text-yellow-300"
+                >
+                  Export for Accountant <RiArrowRightIcon className="ml-1 h-4 w-4" />
+                </Link>
+              ) : (
+                <div className="flex items-center">
+                  <span className="text-red-400 text-sm">Available in Professional plan only</span>
+                  <Link
+                    to="/pricing"
+                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                  >
+                    Upgrade
+                  </Link>
+                </div>
+              )}
+            </div>
+          </motion.div>
         </div>
 
         {/* Inventory Usage Warning */}
         <div className="mt-6">
-          <UsageLimitGate 
-            limitType="inventoryItems" 
+          <UsageLimitGate
+            limitType="inventoryItems"
             currentUsage={inventoryCount}
             customMessage={`You're using ${inventoryCount} of ${planLimits?.inventoryItems || 0} available inventory slots.`}
           />
@@ -277,7 +366,7 @@ export default function Dashboard() {
 }
 
 // Helper icon component
-function RiArrowRightIcon({ className }) {
+function RiArrowRightIcon({className}) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className={className}>
       <path fill="none" d="M0 0h24v24H0z" />

@@ -11,7 +11,7 @@ const mockStripeServices = {
     id: 'sub_demo',
     status: 'active',
     price_id: 'price_professional',
-    amount: 1499, // £14.99 in pence
+    amount: 999, // £9.99 in pence
     currency: 'gbp',
     current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60) // 30 days
   }),
@@ -116,7 +116,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
   const getPlanAmountFromId = (planId) => {
     // Extract the plan name from the price ID (e.g., "price_professional" -> "professional")
     const planName = planId?.split('_')[1];
-    return SUBSCRIPTION_PLANS[planName]?.price || 14.99; // Default to Professional plan amount
+    return SUBSCRIPTION_PLANS[planName]?.price || 9.99; // Default to Professional plan amount
   };
 
   const handleCancelSubscription = async () => {
@@ -453,25 +453,21 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
         )}
       </div>
 
-      {/* Plan Upgrade Options */}
+      {/* Plan Upgrade Options - Only show Professional if on Free */}
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Upgrade Options</h3>
           <span className="text-sm text-gray-400">Monthly billing only</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           {Object.values(SUBSCRIPTION_PLANS)
             .filter(plan => {
-              // If current plan is free, show Basic and Professional
+              // If current plan is free, show only Professional
               if (!currentPlan || currentPlan.id === 'free') {
-                return plan.id === 'basic' || plan.id === 'professional';
-              }
-              // If current plan is basic, show only Professional
-              else if (currentPlan.id === 'basic') {
                 return plan.id === 'professional';
               }
-              // Otherwise, don't show upgrade options
+              // Otherwise, don't show upgrade options (already on highest plan)
               return false;
             })
             .map(plan => (
@@ -483,12 +479,17 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                   </span>
                 </div>
                 <div className="space-y-2 mb-3">
-                  {plan.features.slice(0, 3).map((feature, idx) => (
+                  {plan.features.slice(0, 4).map((feature, idx) => (
                     <div key={idx} className="flex items-start">
                       <RiCheckLine className="h-4 w-4 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
                       <span className="text-gray-300 text-sm">{feature}</span>
                     </div>
                   ))}
+                  {plan.features.length > 4 && (
+                    <p className="text-gray-400 text-sm">
+                      +{plan.features.length - 4} more features
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => handleUpdateSubscription(`price_${plan.id}`)}

@@ -1,47 +1,48 @@
 import {NavLink} from 'react-router-dom';
-import {RiDashboardLine, RiStore2Line, RiCloseLine, RiAdminLine, RiGlobalLine, RiScanLine, RiFileExcelLine, RiSettingsLine, RiMoneyDollarCircleLine} from 'react-icons/ri';
-import {motion, AnimatePresence} from 'framer-motion';
+import {RiDashboardLine,RiStore2Line,RiCloseLine,RiAdminLine,RiGlobalLine,RiScanLine,RiFileExcelLine,RiSettingsLine,RiMoneyDollarCircleLine,RiCalculatorLine} from 'react-icons/ri';
+import {motion,AnimatePresence} from 'framer-motion';
 import {useAuth} from '../context/AuthContext';
 
-export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
-  const {user} = useAuth();
+export default function Sidebar({isMobileMenuOpen,onMobileMenuClose}) {
+  const {user}=useAuth();
 
   console.log('===Sidebar Debug===');
-  console.log('Current user:', user);
-  console.log('User role:', user?.role);
-  console.log('Is admin?', user?.role === 'admin');
-  console.log('Is platform admin?', user?.role === 'platformadmin');
+  console.log('Current user:',user);
+  console.log('User role:',user?.role);
+  console.log('Is admin?',user?.role==='admin');
+  console.log('Is platform admin?',user?.role==='platformadmin');
   console.log('====================');
 
   // Navigation based on user role
-  const getNavigation = () => {
-    if (user?.role === 'platformadmin') {
+  const getNavigation=()=> {
+    if (user?.role==='platformadmin') {
       return [
-        {name: 'Platform Admin', to: '/platform-admin', icon: RiGlobalLine}
+        {name: 'Platform Admin',to: '/platform-admin',icon: RiGlobalLine}
       ];
-    } else if (user?.role === 'admin') {
+    } else if (user?.role==='admin') {
       return [
-        {name: 'Admin Panel', to: '/admin', icon: RiAdminLine}
+        {name: 'Admin Panel',to: '/admin',icon: RiAdminLine}
       ];
     } else {
       return [
-        {name: 'Dashboard', to: '/dashboard', icon: RiDashboardLine},
-        {name: 'Inventory', to: '/inventory', icon: RiStore2Line},
-        {name: 'Receipt Scanner', to: '/receipt-scanner', icon: RiScanLine},
-        {name: 'Excel Importer', to: '/excel-importer', icon: RiFileExcelLine},
-        {name: 'Pricing', to: '/pricing', icon: RiMoneyDollarCircleLine},
-        {name: 'Settings', to: '/settings', icon: RiSettingsLine}
+        {name: 'Dashboard',to: '/dashboard',icon: RiDashboardLine},
+        {name: 'Inventory',to: '/inventory',icon: RiStore2Line},
+        {name: 'Receipt Scanner',to: '/receipt-scanner',icon: RiScanLine},
+        {name: 'Excel Importer',to: '/excel-importer',icon: RiFileExcelLine},
+        {name: 'Tax Exports',to: '/tax-exports',icon: RiCalculatorLine},
+        {name: 'Pricing',to: '/pricing',icon: RiMoneyDollarCircleLine},
+        {name: 'Settings',to: '/settings',icon: RiSettingsLine}
       ];
     }
   };
 
-  const navigation = getNavigation();
+  const navigation=getNavigation();
 
-  const handleNavClick = () => {
+  const handleNavClick=()=> {
     onMobileMenuClose();
   };
 
-  const getRoleInfo = () => {
+  const getRoleInfo=()=> {
     switch (user?.role) {
       case 'platformadmin':
         return {
@@ -62,7 +63,7 @@ export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
     }
   };
 
-  const roleInfo = getRoleInfo();
+  const roleInfo=getRoleInfo();
 
   return (
     <AnimatePresence>
@@ -71,7 +72,7 @@ export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
           initial={{x: -280}}
           animate={{x: 0}}
           exit={{x: -280}}
-          transition={{type: "spring", stiffness: 300, damping: 30}}
+          transition={{type: "spring",stiffness: 300,damping: 30}}
           className="fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-gray-800 shadow-xl lg:translate-x-0 lg:static lg:inset-0"
         >
           {/* Mobile close button */}
@@ -94,11 +95,11 @@ export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-2 px-4 py-4 overflow-y-auto">
-            {navigation.map((item) => (
+            {navigation.map((item)=> (
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({isActive}) =>
+                className={({isActive})=>
                   `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-gray-900 text-white shadow-sm'
@@ -159,11 +160,11 @@ export default function Sidebar({isMobileMenuOpen, onMobileMenuClose}) {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-2 px-4 py-4 overflow-y-auto">
-            {navigation.map((item) => (
+            {navigation.map((item)=> (
               <NavLink
                 key={item.name}
                 to={item.to}
-                className={({isActive}) =>
+                className={({isActive})=>
                   `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive
                       ? 'bg-gray-900 text-white shadow-sm'

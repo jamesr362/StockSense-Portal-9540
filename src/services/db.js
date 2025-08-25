@@ -1,19 +1,7 @@
 import { openDB } from 'idb';
-import { 
-  supabaseAvailable,
-  createUserSupabase,
-  getUserByEmailSupabase,
-  getAllUsersSupabase,
-  deleteUserSupabase,
-  updateUserRoleSupabase,
-  updateUserLastLoginSupabase,
-  getInventoryItemsSupabase,
-  addInventoryItemSupabase,
-  updateInventoryItemSupabase,
-  deleteInventoryItemSupabase,
-  searchInventoryItemsSupabase,
-  getPlatformStatsSupabase
-} from './supabaseDb';
+import { supabaseAvailable, createUserSupabase, getUserByEmailSupabase, getAllUsersSupabase, deleteUserSupabase, updateUserRoleSupabase, updateUserLastLoginSupabase, getInventoryItemsSupabase, addInventoryItemSupabase, updateInventoryItemSupabase, deleteInventoryItemSupabase, searchInventoryItemsSupabase, getPlatformStatsSupabase } from './supabaseDb';
+import { DatabaseSync } from './databaseSync';
+import { logSecurityEvent } from '../utils/security';
 
 const DB_NAME = 'trackio_db';
 const DB_VERSION = 2;
@@ -59,6 +47,9 @@ async function initDB() {
     // Create default platform admin if it doesn't exist
     await createDefaultPlatformAdmin();
 
+    // Check and ensure Supabase tables exist
+    await DatabaseSync.ensureTablesExist();
+
     return dbInstance;
   } catch (error) {
     console.error('Error initializing database:', error);
@@ -69,7 +60,7 @@ async function initDB() {
 const createDefaultPlatformAdmin = async () => {
   try {
     const platformAdminEmail = 'platformadmin@trackio.com';
-    
+
     // Try Supabase first
     if (supabaseAvailable()) {
       try {
@@ -103,6 +94,7 @@ const createDefaultPlatformAdmin = async () => {
         createdAt: new Date().toISOString(),
         lastLogin: null
       };
+
       await store.add(platformAdmin);
       console.log('Created default platform admin account in IndexedDB');
     }
@@ -113,13 +105,17 @@ const createDefaultPlatformAdmin = async () => {
   }
 };
 
-// Hybrid functions that try Supabase first, then fallback to IndexedDB
-
+// Enhanced hybrid functions with forced database sync
 export const getAllUsers = async () => {
   try {
-    // Try Supabase first
+    // Always try Supabase first for admin operations
     if (supabaseAvailable()) {
-      return await getAllUsersSupabase();
+      const users = await getAllUsersSupabase();
+      logSecurityEvent('USERS_LOADED_FROM_DATABASE', { 
+        source: 'supabase', 
+        count: users?.length 
+      });
+      return users;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -140,6 +136,10 @@ export const getAllUsers = async () => {
     await tx.done;
 
     console.log('Retrieved users from IndexedDB:', users?.length, 'users found');
+    logSecurityEvent('USERS_LOADED_FROM_DATABASE', { 
+      source: 'indexeddb', 
+      count: users?.length 
+    });
     return users || [];
   } catch (error) {
     console.error('Error getting all users from IndexedDB:', error);
@@ -151,7 +151,14 @@ export const getUserByEmail = async (email) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await getUserByEmailSupabase(email);
+      const user = await getUserByEmailSupabase(email);
+      if (user) {
+        logSecurityEvent('USER_LOADED_FROM_DATABASE', { 
+          email, 
+          source: 'supabase' 
+        });
+      }
+      return user;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -164,6 +171,13 @@ export const getUserByEmail = async (email) => {
     const store = tx.objectStore(USERS_STORE);
     const user = await store.get(email.toLowerCase());
     await tx.done;
+
+    if (user) {
+      logSecurityEvent('USER_LOADED_FROM_DATABASE', { 
+        email, 
+        source: 'indexeddb' 
+      });
+    }
     return user;
   } catch (error) {
     console.error('Error getting user from IndexedDB:', error);
@@ -177,9 +191,15 @@ export const createUser = async (userData) => {
   }
 
   try {
-    // Try Supabase first
+    // Always try Supabase first for user creation
     if (supabaseAvailable()) {
-      return await createUserSupabase(userData);
+      const newUser = await createUserSupabase(userData);
+      logSecurityEvent('USER_CREATED_IN_DATABASE', { 
+        email: newUser.email, 
+        source: 'supabase',
+        role: newUser.role 
+      });
+      return newUser;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -219,6 +239,12 @@ export const createUser = async (userData) => {
     await store.add(newUser);
     await tx.done;
 
+    logSecurityEvent('USER_CREATED_IN_DATABASE', { 
+      email: newUser.email, 
+      source: 'indexeddb',
+      role: newUser.role 
+    });
+
     // Return user data without password
     const { password, ...userWithoutPassword } = newUser;
     return userWithoutPassword;
@@ -232,7 +258,12 @@ export const deleteUser = async (email) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await deleteUserSupabase(email);
+      const result = await deleteUserSupabase(email);
+      logSecurityEvent('USER_DELETED_FROM_DATABASE', { 
+        email, 
+        source: 'supabase' 
+      });
+      return result;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -246,11 +277,11 @@ export const deleteUser = async (email) => {
     }
 
     const db = await initDB();
-    
+
     // Start transactions for both stores
     const userTx = db.transaction(USERS_STORE, 'readwrite');
     const inventoryTx = db.transaction(INVENTORY_STORE, 'readwrite');
-    
+
     const userStore = userTx.objectStore(USERS_STORE);
     const inventoryStore = inventoryTx.objectStore(INVENTORY_STORE);
 
@@ -271,6 +302,23 @@ export const deleteUser = async (email) => {
     await inventoryTx.done;
 
     console.log('Deleted user and all associated data from IndexedDB:', email);
+    logSecurityEvent('USER_DELETED_FROM_DATABASE', { 
+      email, 
+      source: 'indexeddb' 
+    });
+
+    // Also clear localStorage data for this user
+    const keysToRemove = [
+      `taxExportHistory_${email}`,
+      `scanHistory_${email}`,
+      `importHistory_${email}`,
+      `inventory_${email}`
+    ];
+
+    keysToRemove.forEach(key => {
+      localStorage.removeItem(key);
+    });
+
     return true;
   } catch (error) {
     console.error('Error deleting user from IndexedDB:', error);
@@ -282,7 +330,13 @@ export const updateUserRole = async (email, newRole) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await updateUserRoleSupabase(email, newRole);
+      const result = await updateUserRoleSupabase(email, newRole);
+      logSecurityEvent('USER_ROLE_UPDATED_IN_DATABASE', { 
+        email, 
+        newRole, 
+        source: 'supabase' 
+      });
+      return result;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -298,7 +352,7 @@ export const updateUserRole = async (email, newRole) => {
     const db = await initDB();
     const tx = db.transaction(USERS_STORE, 'readwrite');
     const store = tx.objectStore(USERS_STORE);
-    
+
     const user = await store.get(email.toLowerCase());
     if (!user) {
       throw new Error('User not found');
@@ -316,11 +370,16 @@ export const updateUserRole = async (email, newRole) => {
 
     user.role = newRole;
     user.updatedAt = new Date().toISOString();
-    
+
     await store.put(user);
     await tx.done;
 
     console.log('Updated user role in IndexedDB:', email, newRole);
+    logSecurityEvent('USER_ROLE_UPDATED_IN_DATABASE', { 
+      email, 
+      newRole, 
+      source: 'indexeddb' 
+    });
 
     const { password, ...userWithoutPassword } = user;
     return userWithoutPassword;
@@ -335,6 +394,10 @@ export const updateUserLastLogin = async (email) => {
     // Try Supabase first
     if (supabaseAvailable()) {
       await updateUserLastLoginSupabase(email);
+      logSecurityEvent('USER_LAST_LOGIN_UPDATED', { 
+        email, 
+        source: 'supabase' 
+      });
       return;
     }
   } catch (error) {
@@ -346,24 +409,41 @@ export const updateUserLastLogin = async (email) => {
     const db = await initDB();
     const tx = db.transaction(USERS_STORE, 'readwrite');
     const store = tx.objectStore(USERS_STORE);
-    
+
     const user = await store.get(email.toLowerCase());
     if (user) {
       user.lastLogin = new Date().toISOString();
       await store.put(user);
+      logSecurityEvent('USER_LAST_LOGIN_UPDATED', { 
+        email, 
+        source: 'indexeddb' 
+      });
     }
-    
+
     await tx.done;
   } catch (error) {
     console.error('Error updating last login in IndexedDB:', error);
   }
 };
 
+// Enhanced inventory operations with forced database sync
 export const getInventoryItems = async (userEmail) => {
   try {
-    // Try Supabase first
+    // Always try database first for inventory
     if (supabaseAvailable()) {
-      return await getInventoryItemsSupabase(userEmail);
+      const items = await getInventoryItemsSupabase(userEmail);
+      
+      // Sync to localStorage as backup
+      if (items && items.length > 0) {
+        localStorage.setItem(`inventory_${userEmail}`, JSON.stringify(items));
+      }
+      
+      logSecurityEvent('INVENTORY_LOADED_FROM_DATABASE', { 
+        userEmail, 
+        source: 'supabase',
+        count: items?.length 
+      });
+      return items;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -377,6 +457,12 @@ export const getInventoryItems = async (userEmail) => {
     const index = store.index('userEmail');
     const items = await index.getAll(userEmail.toLowerCase());
     await tx.done;
+
+    logSecurityEvent('INVENTORY_LOADED_FROM_DATABASE', { 
+      userEmail, 
+      source: 'indexeddb',
+      count: items?.length 
+    });
     return items;
   } catch (error) {
     console.error('Error getting inventory items from IndexedDB:', error);
@@ -386,102 +472,67 @@ export const getInventoryItems = async (userEmail) => {
 
 export const addInventoryItem = async (itemData, userEmail) => {
   try {
-    // Try Supabase first
-    if (supabaseAvailable()) {
-      return await addInventoryItemSupabase(itemData, userEmail);
-    }
-  } catch (error) {
-    console.log('Supabase failed, falling back to IndexedDB:', error.message);
-  }
+    // Force save to database first
+    const result = await DatabaseSync.saveInventoryItem(itemData, userEmail, true);
+    
+    // Trigger immediate sync to localStorage
+    const allItems = await getInventoryItems(userEmail);
+    localStorage.setItem(`inventory_${userEmail}`, JSON.stringify(allItems));
+    
+    logSecurityEvent('INVENTORY_ITEM_ADDED_WITH_SYNC', {
+      userEmail,
+      itemName: itemData.name,
+      syncedToDatabase: true
+    });
 
-  // Fallback to IndexedDB
-  try {
-    const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
-    
-    const newItem = {
-      ...itemData,
-      userEmail: userEmail.toLowerCase(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    const id = await store.add(newItem);
-    await tx.done;
-    
-    return { ...newItem, id };
+    return result;
   } catch (error) {
-    console.error('Error adding inventory item to IndexedDB:', error);
+    console.error('Error adding inventory item with sync:', error);
     throw error;
   }
 };
 
 export const updateInventoryItem = async (itemData, userEmail) => {
   try {
-    // Try Supabase first
-    if (supabaseAvailable()) {
-      return await updateInventoryItemSupabase(itemData, userEmail);
-    }
-  } catch (error) {
-    console.log('Supabase failed, falling back to IndexedDB:', error.message);
-  }
+    // Force update to database first
+    const result = await DatabaseSync.updateInventoryItem(itemData, userEmail, true);
+    
+    // Trigger immediate sync to localStorage
+    const allItems = await getInventoryItems(userEmail);
+    localStorage.setItem(`inventory_${userEmail}`, JSON.stringify(allItems));
+    
+    logSecurityEvent('INVENTORY_ITEM_UPDATED_WITH_SYNC', {
+      userEmail,
+      itemId: itemData.id,
+      itemName: itemData.name,
+      syncedToDatabase: true
+    });
 
-  // Fallback to IndexedDB
-  try {
-    const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
-    
-    const updatedItem = {
-      ...itemData,
-      userEmail: userEmail.toLowerCase(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    await store.put(updatedItem);
-    await tx.done;
-    
-    return updatedItem;
+    return result;
   } catch (error) {
-    console.error('Error updating inventory item in IndexedDB:', error);
+    console.error('Error updating inventory item with sync:', error);
     throw error;
   }
 };
 
 export const deleteInventoryItem = async (itemId, userEmail) => {
   try {
-    // Try Supabase first
-    if (supabaseAvailable()) {
-      return await deleteInventoryItemSupabase(itemId, userEmail);
-    }
+    // Force delete from database first
+    const result = await DatabaseSync.deleteInventoryItem(itemId, userEmail, true);
+    
+    // Trigger immediate sync to localStorage
+    const allItems = await getInventoryItems(userEmail);
+    localStorage.setItem(`inventory_${userEmail}`, JSON.stringify(allItems));
+    
+    logSecurityEvent('INVENTORY_ITEM_DELETED_WITH_SYNC', {
+      userEmail,
+      itemId,
+      syncedToDatabase: true
+    });
+
+    return result;
   } catch (error) {
-    console.log('Supabase failed, falling back to IndexedDB:', error.message);
-  }
-
-  // Fallback to IndexedDB
-  try {
-    const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
-
-    // First verify the item belongs to the user
-    const item = await store.get(itemId);
-    if (!item) {
-      throw new Error('Item not found');
-    }
-
-    if (item.userEmail !== userEmail.toLowerCase()) {
-      throw new Error('You do not have permission to delete this item');
-    }
-
-    await store.delete(itemId);
-    await tx.done;
-
-    console.log('Deleted inventory item from IndexedDB:', itemId);
-    return true;
-  } catch (error) {
-    console.error('Error deleting inventory item from IndexedDB:', error);
+    console.error('Error deleting inventory item with sync:', error);
     throw error;
   }
 };
@@ -513,12 +564,154 @@ export const searchInventoryItems = async (searchTerm, userEmail) => {
   }
 };
 
-// Platform admin specific functions
+// Enhanced history operations with database sync
+export const saveExportHistory = async (exportRecord, userEmail) => {
+  try {
+    // Save to database first
+    await DatabaseSync.saveToHistory('export_history', exportRecord, userEmail);
+    
+    // Update localStorage
+    const existingHistory = JSON.parse(localStorage.getItem(`taxExportHistory_${userEmail}`) || '[]');
+    const newHistory = [exportRecord, ...existingHistory].slice(0, 50);
+    localStorage.setItem(`taxExportHistory_${userEmail}`, JSON.stringify(newHistory));
+    
+    logSecurityEvent('EXPORT_HISTORY_SAVED_WITH_SYNC', {
+      userEmail,
+      recordId: exportRecord.id,
+      syncedToDatabase: true
+    });
+
+    return newHistory;
+  } catch (error) {
+    console.error('Error saving export history with sync:', error);
+    throw error;
+  }
+};
+
+export const saveScanHistory = async (scanRecord, userEmail) => {
+  try {
+    // Save to database first
+    await DatabaseSync.saveToHistory('scan_history', scanRecord, userEmail);
+    
+    // Update localStorage
+    const existingHistory = JSON.parse(localStorage.getItem(`scanHistory_${userEmail}`) || '[]');
+    const newHistory = [scanRecord, ...existingHistory].slice(0, 50);
+    localStorage.setItem(`scanHistory_${userEmail}`, JSON.stringify(newHistory));
+    
+    logSecurityEvent('SCAN_HISTORY_SAVED_WITH_SYNC', {
+      userEmail,
+      recordId: scanRecord.id,
+      syncedToDatabase: true
+    });
+
+    return newHistory;
+  } catch (error) {
+    console.error('Error saving scan history with sync:', error);
+    throw error;
+  }
+};
+
+export const saveImportHistory = async (importRecord, userEmail) => {
+  try {
+    // Save to database first
+    await DatabaseSync.saveToHistory('import_history', importRecord, userEmail);
+    
+    // Update localStorage
+    const existingHistory = JSON.parse(localStorage.getItem(`importHistory_${userEmail}`) || '[]');
+    const newHistory = [importRecord, ...existingHistory].slice(0, 50);
+    localStorage.setItem(`importHistory_${userEmail}`, JSON.stringify(newHistory));
+    
+    logSecurityEvent('IMPORT_HISTORY_SAVED_WITH_SYNC', {
+      userEmail,
+      recordId: importRecord.id,
+      syncedToDatabase: true
+    });
+
+    return newHistory;
+  } catch (error) {
+    console.error('Error saving import history with sync:', error);
+    throw error;
+  }
+};
+
+// Load history with database priority
+export const loadExportHistory = async (userEmail) => {
+  try {
+    // Try database first
+    const dbHistory = await DatabaseSync.loadFromDatabase('export_history', userEmail);
+    if (dbHistory && dbHistory.length > 0) {
+      // Sync to localStorage
+      localStorage.setItem(`taxExportHistory_${userEmail}`, JSON.stringify(dbHistory));
+      return dbHistory;
+    }
+  } catch (error) {
+    console.error('Error loading export history from database:', error);
+  }
+
+  // Fallback to localStorage
+  try {
+    return JSON.parse(localStorage.getItem(`taxExportHistory_${userEmail}`) || '[]');
+  } catch (error) {
+    console.error('Error loading export history from localStorage:', error);
+    return [];
+  }
+};
+
+export const loadScanHistory = async (userEmail) => {
+  try {
+    // Try database first
+    const dbHistory = await DatabaseSync.loadFromDatabase('scan_history', userEmail);
+    if (dbHistory && dbHistory.length > 0) {
+      // Sync to localStorage
+      localStorage.setItem(`scanHistory_${userEmail}`, JSON.stringify(dbHistory));
+      return dbHistory;
+    }
+  } catch (error) {
+    console.error('Error loading scan history from database:', error);
+  }
+
+  // Fallback to localStorage
+  try {
+    return JSON.parse(localStorage.getItem(`scanHistory_${userEmail}`) || '[]');
+  } catch (error) {
+    console.error('Error loading scan history from localStorage:', error);
+    return [];
+  }
+};
+
+export const loadImportHistory = async (userEmail) => {
+  try {
+    // Try database first
+    const dbHistory = await DatabaseSync.loadFromDatabase('import_history', userEmail);
+    if (dbHistory && dbHistory.length > 0) {
+      // Sync to localStorage
+      localStorage.setItem(`importHistory_${userEmail}`, JSON.stringify(dbHistory));
+      return dbHistory;
+    }
+  } catch (error) {
+    console.error('Error loading import history from database:', error);
+  }
+
+  // Fallback to localStorage
+  try {
+    return JSON.parse(localStorage.getItem(`importHistory_${userEmail}`) || '[]');
+  } catch (error) {
+    console.error('Error loading import history from localStorage:', error);
+    return [];
+  }
+};
+
+// Platform admin specific functions with database sync
 export const getPlatformStats = async () => {
   try {
-    // Try Supabase first
+    // Always try Supabase first for platform stats
     if (supabaseAvailable()) {
-      return await getPlatformStatsSupabase();
+      const stats = await getPlatformStatsSupabase();
+      logSecurityEvent('PLATFORM_STATS_LOADED_FROM_DATABASE', { 
+        source: 'supabase',
+        totalUsers: stats?.totalUsers 
+      });
+      return stats;
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -529,7 +722,7 @@ export const getPlatformStats = async () => {
     const db = await initDB();
     const userTx = db.transaction(USERS_STORE, 'readonly');
     const inventoryTx = db.transaction(INVENTORY_STORE, 'readonly');
-    
+
     const userStore = userTx.objectStore(USERS_STORE);
     const inventoryStore = inventoryTx.objectStore(INVENTORY_STORE);
 
@@ -555,10 +748,37 @@ export const getPlatformStats = async () => {
       recentUsersCount: stats.recentUsers.length
     });
 
+    logSecurityEvent('PLATFORM_STATS_LOADED_FROM_DATABASE', { 
+      source: 'indexeddb',
+      totalUsers: stats.totalUsers 
+    });
+
     return stats;
   } catch (error) {
     console.error('Error getting platform stats from IndexedDB:', error);
     return null;
+  }
+};
+
+// Auto-sync function to be called periodically
+export const performAutoSync = async (userEmail) => {
+  if (!userEmail) return;
+
+  try {
+    logSecurityEvent('AUTO_SYNC_STARTED', { userEmail });
+
+    // Perform full sync of all user data
+    await DatabaseSync.performFullSync(userEmail);
+
+    logSecurityEvent('AUTO_SYNC_COMPLETED', { userEmail });
+    return true;
+  } catch (error) {
+    console.error('Auto-sync error:', error);
+    logSecurityEvent('AUTO_SYNC_ERROR', { 
+      userEmail, 
+      error: error.message 
+    });
+    return false;
   }
 };
 

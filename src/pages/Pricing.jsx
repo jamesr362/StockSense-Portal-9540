@@ -10,6 +10,8 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import PricingCard from '../components/PricingCard';
 import PlanUpgradeModal from '../components/PlanUpgradeModal';
+import PaymentVerificationBanner from '../components/PaymentVerificationBanner';
+import useSubscriptionVerification from '../hooks/useSubscriptionVerification';
 
 export default function Pricing() {
   const [isLoading, setIsLoading] = useState(false);
@@ -20,10 +22,15 @@ export default function Pricing() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const {user} = useAuth();
   const navigate = useNavigate();
+  const {
+    isVerifying,
+    verificationStatus,
+    dismissVerificationStatus
+  } = useSubscriptionVerification();
 
   useEffect(() => {
     logSecurityEvent('PRICING_PAGE_VIEW', {userEmail: user?.email});
-
+    
     // Load user's current subscription plan
     const loadUserPlan = async () => {
       if (user?.email) {
@@ -64,20 +71,35 @@ export default function Pricing() {
 
     setError(null);
     setSelectedPlan(plan);
-    
+
     // For free plan, just redirect to dashboard
     if (plan.id === 'free') {
       navigate('/dashboard');
       return;
     }
 
-    // For paid plans, show upgrade modal
-    setShowUpgradeModal(true);
+    // For paid plans, open Stripe payment link with return URL
+    if (plan.paymentLink) {
+      // Add return URL parameters to track payment completion
+      const returnUrl = encodeURIComponent(window.location.origin + window.location.pathname + `#/dashboard?payment_status=success&plan=${plan.id}`);
+      const cancelUrl = encodeURIComponent(window.location.origin + window.location.pathname + '#/pricing?payment_status=canceled');
+      const paymentUrl = `${plan.paymentLink}?success_url=${returnUrl}&cancel_url=${cancelUrl}`;
+      
+      logSecurityEvent('STRIPE_PAYMENT_INITIATED', {
+        planId: plan.id,
+        userEmail: user.email,
+        paymentUrl: plan.paymentLink,
+        returnUrl: returnUrl
+      });
 
-    logSecurityEvent('PLAN_SELECTION', {
-      planId: plan.id,
-      userEmail: user.email
-    });
+      // Open payment link in same window
+      window.location.href = paymentUrl;
+      return;
+    }
+
+    // Fallback to upgrade modal
+    setShowUpgradeModal(true);
+    logSecurityEvent('PLAN_SELECTION', {planId: plan.id, userEmail: user.email});
   };
 
   const handleUpgrade = async (plan) => {
@@ -95,10 +117,9 @@ export default function Pricing() {
           setCurrentPlanId(planName);
         }
       }
-      
+
       setShowUpgradeModal(false);
       setSelectedPlan(null);
-      
     } catch (error) {
       console.error('Upgrade error:', error);
       setError('Failed to complete upgrade. Please try again.');
@@ -123,22 +144,29 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-gray-900">
+      {/* Payment Verification Banner */}
+      <PaymentVerificationBanner
+        isVerifying={isVerifying}
+        verificationStatus={verificationStatus}
+        onDismiss={dismissVerificationStatus}
+      />
+
       {user && (
         <>
-          <Sidebar 
-            isMobileMenuOpen={isMobileMenuOpen} 
-            onMobileMenuClose={handleMobileMenuClose} 
+          <Sidebar
+            isMobileMenuOpen={isMobileMenuOpen}
+            onMobileMenuClose={handleMobileMenuClose}
           />
           <div className="lg:pl-72">
-            <Header 
-              onMobileMenuToggle={handleMobileMenuToggle} 
-              isMobileMenuOpen={isMobileMenuOpen} 
+            <Header
+              onMobileMenuToggle={handleMobileMenuToggle}
+              isMobileMenuOpen={isMobileMenuOpen}
             />
           </div>
         </>
       )}
 
-      <div className="py-12 px-4 sm:px-6 lg:px-8 lg:pl-72">
+      <div className={`py-12 px-4 sm:px-6 lg:px-8 ${user ? 'lg:pl-72' : ''} ${isVerifying || verificationStatus ? 'mt-16' : ''}`}>
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <motion.div
@@ -186,7 +214,7 @@ export default function Pricing() {
           )}
 
           {/* Pricing Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-4xl mx-auto">
             {plans.map((plan, index) => (
               <PricingCard
                 key={plan.id}
@@ -195,10 +223,44 @@ export default function Pricing() {
                 onSelectPlan={handlePlanSelect}
                 currentPlan={currentPlanId}
                 isLoading={isLoading}
-                billingInterval="monthly"
+                buttonText={
+                  plan.id === currentPlanId
+                    ? 'Current Plan'
+                    : plan.price === 0
+                    ? 'Get Started Free'
+                    : 'Upgrade Now'
+                }
               />
             ))}
           </div>
+
+          {/* Payment Security Notice */}
+          <motion.div
+            initial={{opacity: 0, y: 20}}
+            animate={{opacity: 1, y: 0}}
+            className="max-w-2xl mx-auto text-center"
+          >
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <h3 className="text-white font-semibold mb-3">Secure Payment Processing</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-gray-300">
+                <div className="flex items-center justify-center">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                  SSL Encrypted
+                </div>
+                <div className="flex items-center justify-center">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                  Stripe Secure
+                </div>
+                <div className="flex items-center justify-center">
+                  <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
+                  Instant Access
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm mt-3">
+                Your payment is processed securely by Stripe. You'll get immediate access to all premium features after payment completion.
+              </p>
+            </div>
+          </motion.div>
         </div>
       </div>
 
