@@ -1,14 +1,17 @@
-import { Outlet } from 'react-router-dom';
-import { useState } from 'react';
+import {Outlet} from 'react-router-dom';
+import {useState} from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import PaymentVerificationBanner from './PaymentVerificationBanner';
-import DataSyncStatus from './DataSyncStatus';
 import useSubscriptionVerification from '../hooks/useSubscriptionVerification';
 
 export default function Layout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
+  const {
+    isVerifying,
+    verificationStatus,
+    dismissVerificationStatus
+  } = useSubscriptionVerification();
 
   const handleMobileMenuToggle = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -26,10 +29,7 @@ export default function Layout() {
         verificationStatus={verificationStatus}
         onDismiss={dismissVerificationStatus}
       />
-
-      {/* Data Sync Status */}
-      <DataSyncStatus />
-
+      
       {/* Main Layout */}
       <div className={isVerifying || verificationStatus ? 'mt-16' : ''}>
         <Sidebar
@@ -47,7 +47,6 @@ export default function Layout() {
             </div>
           </main>
         </div>
-
         {/* Mobile menu backdrop */}
         {isMobileMenuOpen && (
           <div
