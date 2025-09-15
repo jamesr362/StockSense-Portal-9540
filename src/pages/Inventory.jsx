@@ -1,15 +1,15 @@
-import { motion } from 'framer-motion';
-import { useState, useEffect, useCallback } from 'react';
-import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine } from 'react-icons/ri';
-import { Link } from 'react-router-dom';
+import {motion} from 'framer-motion';
+import {useState, useEffect, useCallback} from 'react';
+import {RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine} from 'react-icons/ri';
+import {Link} from 'react-router-dom';
 import AddItemModal from '../components/AddItemModal';
 import EditItemModal from '../components/EditItemModal';
 import DeleteItemModal from '../components/DeleteItemModal';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import UsageLimitGate from '../components/UsageLimitGate';
 import FeatureGate from '../components/FeatureGate';
-import { getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, searchInventoryItems } from '../services/db';
-import { useAuth } from '../context/AuthContext';
+import {getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, searchInventoryItems} from '../services/db';
+import {useAuth} from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
 export default function Inventory() {
@@ -23,17 +23,22 @@ export default function Inventory() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
-  const { user } = useAuth();
-  const { canAddInventoryItem, canUseFeature } = useFeatureAccess();
+  const {user} = useAuth();
+  const {canAddInventoryItem, canUseFeature} = useFeatureAccess();
 
   const loadInventoryItems = useCallback(async () => {
     if (!user?.email) return;
-
+    
     try {
       setIsLoading(true);
       setError(null);
+      console.log('=== Loading inventory items for user:', user.email, '===');
+      
       const items = await getInventoryItems(user.email);
-      setInventoryItems(items);
+      console.log('=== Loaded inventory items:', items?.length, 'items ===');
+      console.log('Items:', items);
+      
+      setInventoryItems(items || []);
     } catch (error) {
       console.error('Error loading inventory items:', error);
       setError('Failed to load inventory items');
@@ -47,7 +52,14 @@ export default function Inventory() {
   }, [loadInventoryItems]);
 
   const handleAddItem = async (newItem) => {
-    if (!user?.email) return;
+    if (!user?.email) {
+      setError('User not authenticated');
+      return;
+    }
+
+    console.log('=== handleAddItem called ===');
+    console.log('User email:', user.email);
+    console.log('New item data:', newItem);
 
     // Check if user can add more items
     const limitCheck = canAddInventoryItem(inventoryItems.length);
@@ -58,14 +70,27 @@ export default function Inventory() {
 
     try {
       setError(null);
-      await addInventoryItem(newItem, user.email);
+      console.log('=== Calling addInventoryItem ===');
+      
+      // Call the database function to add the item
+      const savedItem = await addInventoryItem(newItem, user.email);
+      console.log('=== Item saved to database:', savedItem, '===');
+      
+      // Reload the inventory to get the latest data from database
       await loadInventoryItems();
+      
+      // Close modal and show success message
       setIsAddModalOpen(false);
-      setSuccessMessage('Item added successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setSuccessMessage(`Successfully added "${newItem.name}" to inventory!`);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(''), 5000);
+      
+      console.log('=== Add item process completed successfully ===');
+      
     } catch (error) {
-      console.error('Error adding inventory item:', error);
-      setError('Failed to add item');
+      console.error('=== Error in handleAddItem ===', error);
+      setError(error.message || 'Failed to add item to inventory');
     }
   };
 
@@ -97,7 +122,7 @@ export default function Inventory() {
     try {
       setError(null);
       let addedCount = 0;
-      
+
       // Add each scanned item to inventory
       for (const item of scannedItems) {
         try {
@@ -108,7 +133,9 @@ export default function Inventory() {
         }
       }
 
+      // Reload inventory to reflect changes
       await loadInventoryItems();
+
       if (addedCount > 0) {
         setSuccessMessage(`Successfully added ${addedCount} items from receipt scan!`);
         setTimeout(() => setSuccessMessage(''), 5000);
@@ -136,10 +163,17 @@ export default function Inventory() {
 
     try {
       setError(null);
+      console.log('=== Deleting item:', itemId, '===');
+      
       await deleteInventoryItem(itemId, user.email);
+      
+      // Reload inventory to reflect changes
       await loadInventoryItems();
+      
       setSuccessMessage('Item deleted successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
+      
+      console.log('=== Item deleted successfully ===');
     } catch (error) {
       console.error('Error deleting inventory item:', error);
       setError('Failed to delete item');
@@ -151,27 +185,39 @@ export default function Inventory() {
 
     try {
       setError(null);
+      console.log('=== Updating item:', updatedItem, '===');
+      
       await updateInventoryItem(updatedItem, user.email);
+      
+      // Reload inventory to reflect changes
       await loadInventoryItems();
+      
       setIsEditModalOpen(false);
       setSelectedItem(null);
       setSuccessMessage('Item updated successfully!');
       setTimeout(() => setSuccessMessage(''), 3000);
+      
+      console.log('=== Item updated successfully ===');
     } catch (error) {
       console.error('Error updating inventory item:', error);
       setError('Failed to update item');
     }
   };
 
+  // Search functionality with debouncing
   useEffect(() => {
     const searchItems = async () => {
       if (!user?.email) return;
-
+      
       try {
         setIsLoading(true);
         setError(null);
+        console.log('=== Searching items with term:', searchTerm, '===');
+        
         const results = await searchInventoryItems(searchTerm, user.email);
-        setInventoryItems(results);
+        console.log('=== Search results:', results?.length, 'items ===');
+        
+        setInventoryItems(results || []);
       } catch (error) {
         console.error('Error searching items:', error);
         setError('Failed to search items');
@@ -235,9 +281,9 @@ export default function Inventory() {
   return (
     <div>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
+        transition={{duration: 0.5}}
       >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -257,7 +303,6 @@ export default function Inventory() {
                 Receipt Scanner
               </Link>
             </FeatureGate>
-            
             <button
               type="button"
               onClick={handleQuickScanClick}
@@ -266,7 +311,6 @@ export default function Inventory() {
               <RiScanLine className="mr-2 h-4 w-4" />
               Quick Scan
             </button>
-            
             <button
               type="button"
               onClick={handleAddItemClick}
@@ -281,8 +325,8 @@ export default function Inventory() {
         {/* Success Message */}
         {successMessage && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
             className="mb-4 rounded-md bg-green-900/50 p-4"
           >
             <div className="text-sm text-green-200">{successMessage}</div>
@@ -292,8 +336,8 @@ export default function Inventory() {
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
             className="mb-4 rounded-md bg-red-900/50 p-4"
           >
             <div className="text-sm text-red-200">{error}</div>
@@ -330,7 +374,10 @@ export default function Inventory() {
                 {searchTerm ? 'No items found' : 'No inventory items'}
               </h3>
               <p className="text-gray-400 text-sm mb-6">
-                {searchTerm ? 'Try adjusting your search terms' : 'Add some items to get started with your inventory'}
+                {searchTerm
+                  ? 'Try adjusting your search terms'
+                  : 'Add some items to get started with your inventory'
+                }
               </p>
               {!searchTerm && (
                 <div className="flex flex-col sm:flex-row justify-center gap-3">
@@ -343,7 +390,6 @@ export default function Inventory() {
                       Scan Receipt
                     </Link>
                   </FeatureGate>
-                  
                   <button
                     onClick={handleAddItemClick}
                     className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -361,9 +407,9 @@ export default function Inventory() {
                 {inventoryItems.map((item) => (
                   <motion.div
                     key={item.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3 }}
+                    initial={{opacity: 0}}
+                    animate={{opacity: 1}}
+                    transition={{duration: 0.3}}
                     className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
                   >
                     {/* Card Header */}
@@ -478,9 +524,9 @@ export default function Inventory() {
                         {inventoryItems.map((item) => (
                           <motion.tr
                             key={item.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.3 }}
+                            initial={{opacity: 0}}
+                            animate={{opacity: 1}}
+                            transition={{duration: 0.3}}
                           >
                             <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-6">
                               <div className="max-w-[150px] truncate" title={item.name}>

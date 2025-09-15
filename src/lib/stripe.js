@@ -47,7 +47,7 @@ export const buildStripeReturnUrls = (planId) => {
   };
 };
 
-// Subscription plans configuration - SIMPLIFIED PROFESSIONAL PLAN
+// Subscription plans configuration - UPDATED FREE PLAN WITH EXCEL IMPORTS
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -58,14 +58,16 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 100 inventory items',
       'Basic dashboard',
-      'Manual item entry'
+      'Manual item entry',
+      '1 receipt scan per month',
+      '1 Excel import per month'
     ],
     limits: {
       inventoryItems: 100,
-      receiptScans: 0,
-      excelImport: false,
+      receiptScans: 1,
+      excelImport: 1, // Updated from false to 1
       teamMembers: 1,
-      features: ['basic_dashboard', 'manual_entry']
+      features: ['basic_dashboard', 'manual_entry', 'receipt_scanner', 'excel_importer']
     }
   },
   professional: {
@@ -73,7 +75,7 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Professional',
     price: 9.99,
     priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
-    // Updated payment link with return URL parameters
+    // Updated payment link with proper return URL parameters
     paymentLink: 'https://buy.stripe.com/test_9AQfZh4xneOXcdN4zC',
     features: [
       'Unlimited inventory items',
@@ -135,7 +137,7 @@ export const isWithinLimit = (userPlan, limitType, currentCount) => {
 export const isFeatureAvailable = (userPlan, feature) => {
   switch (feature) {
     case 'excelImport':
-      return getUserPlanLimits(userPlan).excelImport;
+      return getUserPlanLimits(userPlan).excelImport > 0 || getUserPlanLimits(userPlan).excelImport === -1;
     case 'receiptScanner':
       return getUserPlanLimits(userPlan).receiptScans > 0;
     case 'taxExports':
@@ -188,6 +190,7 @@ export const getDaysUntilRenewal = (subscriptionData) => {
   const now = new Date();
   const diffTime = nextBilling - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
   return diffDays;
 };
 
@@ -198,6 +201,7 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
   
   const dailyCurrentCost = currentPlan.price / 30;
   const dailyNewCost = newPlan.price / 30;
+  
   const refund = dailyCurrentCost * daysRemaining;
   const newCharge = dailyNewCost * daysRemaining;
   

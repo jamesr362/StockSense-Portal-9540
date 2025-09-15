@@ -12,6 +12,9 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
     dateAdded: new Date().toISOString().split('T')[0], // Default to today
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
   const categories = [
     {value: '', label: 'Select a category'},
     {value: 'Electronics', label: '📱 Electronics'},
@@ -43,29 +46,34 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
       ...prev,
       [name]: value
     }));
+    // Clear error when user starts typing
+    if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Clear any previous errors
+    setError('');
     
     // Validate required fields
     if (!formData.name.trim()) {
-      alert('Item name is required');
+      setError('Item name is required');
       return;
     }
     
     if (!formData.category) {
-      alert('Please select a category');
+      setError('Please select a category');
       return;
     }
     
     if (!formData.quantity || formData.quantity === '') {
-      alert('Quantity is required');
+      setError('Quantity is required');
       return;
     }
     
     if (!formData.unitPrice || formData.unitPrice === '') {
-      alert('Unit price is required');
+      setError('Unit price is required');
       return;
     }
 
@@ -74,12 +82,12 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
     const unitPrice = parseFloat(formData.unitPrice);
     
     if (isNaN(quantity) || quantity < 0) {
-      alert('Please enter a valid quantity');
+      setError('Please enter a valid quantity (0 or greater)');
       return;
     }
     
     if (isNaN(unitPrice) || unitPrice < 0) {
-      alert('Please enter a valid unit price');
+      setError('Please enter a valid unit price (0 or greater)');
       return;
     }
 
@@ -91,34 +99,63 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
       status = 'Limited Stock';
     }
 
-    // Create the item object with proper structure
-    const newItem = {
-      name: formData.name.trim(),
-      category: formData.category,
-      quantity: quantity,
-      unitPrice: unitPrice,
-      description: formData.description.trim() || '',
-      status: status,
-      dateAdded: formData.dateAdded
-    };
+    try {
+      setIsSubmitting(true);
+      
+      // Create the item object with proper structure
+      const newItem = {
+        name: formData.name.trim(),
+        category: formData.category,
+        quantity: quantity,
+        unitPrice: unitPrice,
+        description: formData.description.trim() || '',
+        status: status,
+        dateAdded: formData.dateAdded
+      };
 
-    console.log('Adding item:', newItem); // Debug log
+      console.log('=== AddItemModal: Submitting item ===');
+      console.log('Form data:', formData);
+      console.log('Processed item:', newItem);
+      console.log('=====================================');
 
-    // Call the onAdd function with the properly structured item
-    onAdd(newItem);
+      // Call the onAdd function - this should handle database saving
+      await onAdd(newItem);
 
-    // Reset form
-    setFormData({
-      name: '',
-      category: '',
-      quantity: '',
-      description: '',
-      unitPrice: '',
-      dateAdded: new Date().toISOString().split('T')[0],
-    });
+      // Reset form only after successful submission
+      setFormData({
+        name: '',
+        category: '',
+        quantity: '',
+        description: '',
+        unitPrice: '',
+        dateAdded: new Date().toISOString().split('T')[0],
+      });
 
-    // Close modal
-    onClose();
+      // Close modal
+      onClose();
+      
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      setError(error.message || 'Failed to add item. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!isSubmitting) {
+      // Reset form when closing
+      setFormData({
+        name: '',
+        category: '',
+        quantity: '',
+        description: '',
+        unitPrice: '',
+        dateAdded: new Date().toISOString().split('T')[0],
+      });
+      setError('');
+      onClose();
+    }
   };
 
   return (
@@ -131,7 +168,7 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
           className="fixed inset-0 z-50 overflow-y-auto"
         >
           <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" onClick={onClose} />
+            <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" onClick={handleClose} />
             
             <span className="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">
               &#8203;
@@ -147,7 +184,8 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                 <button
                   type="button"
                   className="rounded-md bg-gray-800 text-gray-400 hover:text-gray-300 focus:outline-none"
-                  onClick={onClose}
+                  onClick={handleClose}
+                  disabled={isSubmitting}
                 >
                   <span className="sr-only">Close</span>
                   <RiCloseLine className="h-6 w-6" />
@@ -157,6 +195,17 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
               <div className="sm:flex sm:items-start">
                 <div className="mt-3 w-full text-center sm:mt-0 sm:text-left">
                   <h3 className="text-lg font-medium leading-6 text-white">Add New Item</h3>
+                  
+                  {/* Error Message */}
+                  {error && (
+                    <motion.div
+                      initial={{opacity: 0, y: -10}}
+                      animate={{opacity: 1, y: 0}}
+                      className="mt-3 p-3 bg-red-900/50 border border-red-700 rounded-md"
+                    >
+                      <p className="text-red-300 text-sm">{error}</p>
+                    </motion.div>
+                  )}
                   
                   <form onSubmit={handleSubmit} className="mt-6 space-y-4 sm:space-y-6">
                     <div>
@@ -168,10 +217,12 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                         name="name"
                         id="name"
                         required
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                        disabled={isSubmitting}
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 disabled:opacity-50"
                         value={formData.name}
                         onChange={handleChange}
                         placeholder="Enter item name"
+                        maxLength={100}
                       />
                     </div>
 
@@ -183,7 +234,8 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                         id="category"
                         name="category"
                         required
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                        disabled={isSubmitting}
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 disabled:opacity-50"
                         value={formData.category}
                         onChange={handleChange}
                       >
@@ -205,8 +257,10 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                           name="quantity"
                           id="quantity"
                           min="0"
+                          max="1000000"
                           required
-                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                          disabled={isSubmitting}
+                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 disabled:opacity-50"
                           value={formData.quantity}
                           onChange={handleChange}
                           placeholder="0"
@@ -225,7 +279,8 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                           name="dateAdded"
                           id="dateAdded"
                           required
-                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                          disabled={isSubmitting}
+                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 disabled:opacity-50"
                           value={formData.dateAdded}
                           onChange={handleChange}
                           max={new Date().toISOString().split('T')[0]} // Prevent future dates
@@ -246,9 +301,11 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                           name="unitPrice"
                           id="unitPrice"
                           min="0"
+                          max="1000000"
                           step="0.01"
                           required
-                          className="block w-full rounded-md border-gray-700 bg-gray-700 pl-7 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2"
+                          disabled={isSubmitting}
+                          className="block w-full rounded-md border-gray-700 bg-gray-700 pl-7 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 disabled:opacity-50"
                           value={formData.unitPrice}
                           onChange={handleChange}
                           placeholder="0.00"
@@ -264,26 +321,37 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                         id="description"
                         name="description"
                         rows={3}
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                        disabled={isSubmitting}
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 disabled:opacity-50"
                         value={formData.description}
                         onChange={handleChange}
                         placeholder="Optional description"
+                        maxLength={500}
                       />
                     </div>
 
                     <div className="mt-5 sm:mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                       <button
                         type="button"
-                        className="inline-flex w-full justify-center rounded-md border border-gray-600 bg-gray-700 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto sm:text-sm"
-                        onClick={onClose}
+                        className="inline-flex w-full justify-center rounded-md border border-gray-600 bg-gray-700 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto sm:text-sm disabled:opacity-50"
+                        onClick={handleClose}
+                        disabled={isSubmitting}
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
-                        className="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto sm:text-sm"
+                        className="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:w-auto sm:text-sm disabled:opacity-50"
+                        disabled={isSubmitting}
                       >
-                        Add Item
+                        {isSubmitting ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Adding...
+                          </>
+                        ) : (
+                          'Add Item'
+                        )}
                       </button>
                     </div>
                   </form>

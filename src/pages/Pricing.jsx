@@ -1,11 +1,11 @@
-import {useState, useEffect} from 'react';
-import {motion} from 'framer-motion';
-import {RiCheckLine, RiArrowRightLine, RiStarLine} from 'react-icons/ri';
-import {useAuth} from '../context/AuthContext';
-import {useNavigate} from 'react-router-dom';
-import {logSecurityEvent} from '../utils/security';
-import {SUBSCRIPTION_PLANS, formatPrice} from '../lib/stripe';
-import {getUserSubscriptionSupabase} from '../services/supabaseDb';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { RiCheckLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { logSecurityEvent } from '../utils/security';
+import { SUBSCRIPTION_PLANS, formatPrice, buildStripeReturnUrls } from '../lib/stripe';
+import { getUserSubscriptionSupabase } from '../services/supabaseDb';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import PricingCard from '../components/PricingCard';
@@ -20,17 +20,13 @@ export default function Pricing() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
-  const {user} = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const {
-    isVerifying,
-    verificationStatus,
-    dismissVerificationStatus
-  } = useSubscriptionVerification();
+  const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
 
   useEffect(() => {
-    logSecurityEvent('PRICING_PAGE_VIEW', {userEmail: user?.email});
-    
+    logSecurityEvent('PRICING_PAGE_VIEW', { userEmail: user?.email });
+
     // Load user's current subscription plan
     const loadUserPlan = async () => {
       if (user?.email) {
@@ -80,16 +76,22 @@ export default function Pricing() {
 
     // For paid plans, open Stripe payment link with return URL
     if (plan.paymentLink) {
-      // Add return URL parameters to track payment completion
-      const returnUrl = encodeURIComponent(window.location.origin + window.location.pathname + `#/dashboard?payment_status=success&plan=${plan.id}`);
-      const cancelUrl = encodeURIComponent(window.location.origin + window.location.pathname + '#/pricing?payment_status=canceled');
-      const paymentUrl = `${plan.paymentLink}?success_url=${returnUrl}&cancel_url=${cancelUrl}`;
+      // Build proper return URLs
+      const returnUrls = buildStripeReturnUrls(plan.id);
       
+      // Construct the payment URL with return parameters
+      const urlParams = new URLSearchParams({
+        'success_url': returnUrls.success_url,
+        'cancel_url': returnUrls.cancel_url
+      });
+      
+      const paymentUrl = `${plan.paymentLink}?${urlParams.toString()}`;
+
       logSecurityEvent('STRIPE_PAYMENT_INITIATED', {
         planId: plan.id,
         userEmail: user.email,
         paymentUrl: plan.paymentLink,
-        returnUrl: returnUrl
+        returnUrl: returnUrls.success_url
       });
 
       // Open payment link in same window
@@ -99,16 +101,19 @@ export default function Pricing() {
 
     // Fallback to upgrade modal
     setShowUpgradeModal(true);
-    logSecurityEvent('PLAN_SELECTION', {planId: plan.id, userEmail: user.email});
+    logSecurityEvent('PLAN_SELECTION', {
+      planId: plan.id,
+      userEmail: user.email
+    });
   };
 
   const handleUpgrade = async (plan) => {
     try {
       setIsLoading(true);
-      
+
       // The upgrade logic is handled in the StripePaymentForm component
       // This is called after successful payment
-      
+
       // Reload the current plan
       const subscription = await getUserSubscriptionSupabase(user.email);
       if (subscription && subscription.planId) {
@@ -170,8 +175,8 @@ export default function Pricing() {
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <motion.div
-            initial={{opacity: 0, y: 20}}
-            animate={{opacity: 1, y: 0}}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             className="text-center mb-12"
           >
             <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
@@ -185,8 +190,8 @@ export default function Pricing() {
           {/* Error Message */}
           {error && (
             <motion.div
-              initial={{opacity: 0, y: -10}}
-              animate={{opacity: 1, y: 0}}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mb-8 max-w-md mx-auto"
             >
               <div className="bg-red-900/50 border border-red-700 rounded-lg p-4">
@@ -198,8 +203,8 @@ export default function Pricing() {
           {/* Current Plan Info */}
           {user && (
             <motion.div
-              initial={{opacity: 0, y: -10}}
-              animate={{opacity: 1, y: 0}}
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
               className="mb-8 max-w-md mx-auto"
             >
               <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-4 text-center">
@@ -236,8 +241,8 @@ export default function Pricing() {
 
           {/* Payment Security Notice */}
           <motion.div
-            initial={{opacity: 0, y: 20}}
-            animate={{opacity: 1, y: 0}}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             className="max-w-2xl mx-auto text-center"
           >
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">

@@ -1,17 +1,17 @@
-import {motion, AnimatePresence} from 'framer-motion';
-import {RiLockLine, RiArrowRightLine, RiStarLine, RiAlertLine} from 'react-icons/ri';
-import {Link} from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiLockLine, RiArrowRightLine, RiStarLine, RiAlertLine } from 'react-icons/ri';
+import { Link } from 'react-router-dom';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
-export default function FeatureGate({
-  feature,
-  children,
-  fallback = null,
-  showUpgradePrompt = true,
-  customMessage = null,
-  requiredPlan = null
+export default function FeatureGate({ 
+  feature, 
+  children, 
+  fallback = null, 
+  showUpgradePrompt = true, 
+  customMessage = null, 
+  requiredPlan = null 
 }) {
-  const {canUseFeature, currentPlan, planInfo, loading} = useFeatureAccess();
+  const { canUseFeature, currentPlan, planInfo, loading } = useFeatureAccess();
 
   if (loading) {
     return (
@@ -37,8 +37,8 @@ export default function FeatureGate({
 
   return (
     <motion.div
-      initial={{opacity: 0, scale: 0.95}}
-      animate={{opacity: 1, scale: 1}}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
       className="bg-gray-800 rounded-lg p-6 border border-gray-700"
     >
       <div className="flex items-start">
@@ -54,6 +54,7 @@ export default function FeatureGate({
           <p className="text-gray-300 mb-4">
             {customMessage || getFeatureMessage(feature)}
           </p>
+
           <div className="bg-gray-700 rounded-lg p-3 mb-4">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-gray-400">Current Plan:</span>
@@ -66,6 +67,7 @@ export default function FeatureGate({
               </span>
             </div>
           </div>
+
           <Link
             to="/pricing"
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
@@ -82,8 +84,8 @@ export default function FeatureGate({
 
 function getFeatureMessage(feature) {
   const messages = {
-    receiptScanner: 'Receipt scanning allows you to automatically extract items from receipts and add them to your inventory.',
-    excelImporter: 'Excel import lets you bulk import inventory data from spreadsheets.',
+    receiptScanner: 'Receipt scanning allows you to automatically extract items from receipts and add them to your inventory. Free users get 1 scan per month, Professional users get unlimited scans.',
+    excelImporter: 'Excel import lets you bulk import inventory data from spreadsheets. Free users get 1 import per month, Professional users get unlimited imports.',
     taxExports: 'Tax export functionality generates professional, accountant-ready reports with comprehensive VAT calculations and business information.',
     unlimitedItems: 'Remove the 100 item limit and store unlimited inventory items.'
   };
@@ -92,10 +94,10 @@ function getFeatureMessage(feature) {
 }
 
 function getRequiredPlan(feature) {
-  // All premium features require Professional plan
+  // All premium features require Professional plan for unlimited access
   const requirements = {
-    receiptScanner: 'Professional Plan',
-    excelImporter: 'Professional Plan',
+    receiptScanner: 'Professional Plan (for unlimited)',
+    excelImporter: 'Professional Plan (for unlimited)',
     taxExports: 'Professional Plan',
     unlimitedItems: 'Professional Plan'
   };
