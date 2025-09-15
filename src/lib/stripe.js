@@ -38,7 +38,8 @@ export const buildStripeReturnUrls = (planId) => {
   const baseUrl = window.location.origin;
   const basePath = window.location.pathname;
   
-  const successUrl = `${baseUrl}${basePath}#/dashboard?payment_status=success&plan=${planId}`;
+  // Use hash routing for return URLs
+  const successUrl = `${baseUrl}${basePath}#/payment-success?payment_status=success&plan=${planId}`;
   const cancelUrl = `${baseUrl}${basePath}#/pricing?payment_status=canceled`;
   
   return {
@@ -47,7 +48,7 @@ export const buildStripeReturnUrls = (planId) => {
   };
 };
 
-// Subscription plans configuration - UPDATED FREE PLAN WITH EXCEL IMPORTS
+// Subscription plans configuration - UPDATED WITH WORKING STRIPE LINKS
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -75,11 +76,11 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Professional',
     price: 9.99,
     priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
-    // Updated payment link with proper return URL parameters
-    paymentLink: 'https://buy.stripe.com/test_9AQfZh4xneOXcdN4zC',
+    // Updated with working Stripe payment link - using Buy Button
+    paymentLink: 'https://buy.stripe.com/test_00g3cF2pf6it5Zx289',
     features: [
       'Unlimited inventory items',
-      'Unlimited receipt scans',
+      'Unlimited receipt scans', 
       'Unlimited Excel imports',
       'Professional tax export reports'
     ],
@@ -90,7 +91,7 @@ export const SUBSCRIPTION_PLANS = {
       teamMembers: 1,
       features: [
         'receipt_scanner',
-        'excel_importer',
+        'excel_importer', 
         'tax_exports',
         'unlimited_items'
       ]
@@ -190,7 +191,6 @@ export const getDaysUntilRenewal = (subscriptionData) => {
   const now = new Date();
   const diffTime = nextBilling - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
   return diffDays;
 };
 

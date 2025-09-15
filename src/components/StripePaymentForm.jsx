@@ -1,14 +1,14 @@
 import {useState} from 'react';
 import {motion} from 'framer-motion';
-import {RiSecurePaymentLine, RiCheckLine, RiAlertLine} from 'react-icons/ri';
+import {RiSecurePaymentLine,RiCheckLine,RiAlertLine,RiExternalLinkLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import {useNavigate} from 'react-router-dom';
 import {supabase} from '../lib/supabase';
 import {logSecurityEvent} from '../utils/security';
 
-export default function StripePaymentForm({plan, onSuccess, onCancel}) {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState('');
+export default function StripePaymentForm({plan,onSuccess,onCancel}) {
+  const [isProcessing,setIsProcessing] = useState(false);
+  const [error,setError] = useState('');
   const {user} = useAuth();
   const navigate = useNavigate();
 
@@ -19,28 +19,47 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
       setIsProcessing(true);
       setError('');
 
-      logSecurityEvent('PAYMENT_INITIATED', {
+      logSecurityEvent('PAYMENT_INITIATED',{
         planId: plan.id,
         userEmail: user.email,
         amount: plan.price
       });
 
-      // Simulate payment processing delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // If plan has a payment link, open it in new tab
+      if (plan.paymentLink) {
+        logSecurityEvent('STRIPE_EXTERNAL_PAYMENT_INITIATED',{
+          planId: plan.id,
+          userEmail: user.email,
+          paymentUrl: plan.paymentLink,
+          openMethod: 'new_tab'
+        });
+
+        // Open payment link in NEW TAB
+        window.open(plan.paymentLink, '_blank', 'noopener,noreferrer');
+        
+        // Show success message for opening new tab
+        if (onSuccess) {
+          onSuccess();
+        }
+        return;
+      }
+
+      // Simulate payment processing delay for demo
+      await new Promise(resolve => setTimeout(resolve,2000));
 
       // Update subscription in Supabase
       if (supabase) {
         // Check if user already has a subscription
-        const {data: existingSubscription, error: fetchError} = await supabase
+        const {data: existingSubscription,error: fetchError} = await supabase
           .from('subscriptions_tb2k4x9p1m')
           .select('*')
-          .eq('user_email', user.email.toLowerCase())
+          .eq('user_email',user.email.toLowerCase())
           .single();
 
         const subscriptionData = {
           user_email: user.email.toLowerCase(),
-          stripe_customer_id: `cus_${Math.random().toString(36).substring(2, 15)}`,
-          stripe_subscription_id: `sub_${Math.random().toString(36).substring(2, 15)}`,
+          stripe_customer_id: `cus_${Math.random().toString(36).substring(2,15)}`,
+          stripe_subscription_id: `sub_${Math.random().toString(36).substring(2,15)}`,
           plan_id: `price_${plan.id}`,
           status: 'active',
           current_period_start: new Date().toISOString(),
@@ -53,7 +72,7 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
           const {error: updateError} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update(subscriptionData)
-            .eq('user_email', user.email.toLowerCase());
+            .eq('user_email',user.email.toLowerCase());
 
           if (updateError) throw updateError;
         } else {
@@ -67,7 +86,7 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
         }
       }
 
-      logSecurityEvent('PAYMENT_SUCCESS', {
+      logSecurityEvent('PAYMENT_SUCCESS',{
         planId: plan.id,
         userEmail: user.email
       });
@@ -79,12 +98,10 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
 
       // Navigate to success page
       navigate('/payment-success?plan=' + plan.id);
-
     } catch (error) {
-      console.error('Payment processing error:', error);
+      console.error('Payment processing error:',error);
       setError('Payment failed. Please try again.');
-      
-      logSecurityEvent('PAYMENT_FAILED', {
+      logSecurityEvent('PAYMENT_FAILED',{
         planId: plan.id,
         userEmail: user.email,
         error: error.message
@@ -96,8 +113,8 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
 
   return (
     <motion.div
-      initial={{opacity: 0, y: 20}}
-      animate={{opacity: 1, y: 0}}
+      initial={{opacity: 0,y: 20}}
+      animate={{opacity: 1,y: 0}}
       className="bg-gray-800 rounded-lg p-6 shadow-xl"
     >
       <div className="text-center mb-6">
@@ -117,64 +134,69 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
           </span>
         </div>
         <div className="text-gray-300 text-sm">
-          <p>• {plan.features.slice(0, 3).join(' • ')}</p>
+          <p>• {plan.features.slice(0,3).join(' • ')}</p>
           {plan.features.length > 3 && (
             <p className="mt-1">• And {plan.features.length - 3} more features</p>
           )}
         </div>
       </div>
 
-      {/* Simulated Payment Form */}
-      <div className="space-y-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">
-            Card Number (Demo)
-          </label>
-          <input
-            type="text"
-            value="4242 4242 4242 4242"
-            readOnly
-            className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-          />
+      {/* Payment Method Notice */}
+      {plan.paymentLink ? (
+        <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-center mb-2">
+            <RiExternalLinkLine className="h-5 w-5 text-blue-400 mr-2" />
+            <span className="text-blue-300 font-medium">Secure Payment Portal</span>
+          </div>
+          <p className="text-blue-300 text-sm text-center">
+            Payment will open in a new tab via Stripe's secure checkout. Complete your purchase and return here to continue.
+          </p>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+      ) : (
+        <div className="space-y-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              Expiry
+              Card Number (Demo)
             </label>
             <input
               type="text"
-              value="12/25"
+              value="4242 4242 4242 4242"
               readOnly
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              CVC
-            </label>
-            <input
-              type="text"
-              value="123"
-              readOnly
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Expiry
+              </label>
+              <input
+                type="text"
+                value="12/25"
+                readOnly
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                CVC
+              </label>
+              <input
+                type="text"
+                value="123"
+                readOnly
+                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+              />
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Demo Notice */}
-      <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 mb-6">
-        <p className="text-blue-300 text-sm text-center">
-          <strong>Demo Mode:</strong> This is a simulated payment. Your subscription will be activated immediately.
-        </p>
-      </div>
+      )}
 
       {/* Error Message */}
       {error && (
         <motion.div
-          initial={{opacity: 0, y: -10}}
-          animate={{opacity: 1, y: 0}}
+          initial={{opacity: 0,y: -10}}
+          animate={{opacity: 1,y: 0}}
           className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg"
         >
           <div className="flex items-center">
@@ -201,12 +223,21 @@ export default function StripePaymentForm({plan, onSuccess, onCancel}) {
           {isProcessing ? (
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Processing...
+              {plan.paymentLink ? 'Opening...' : 'Processing...'}
             </div>
           ) : (
             <>
-              <RiCheckLine className="h-4 w-4 mr-2" />
-              Pay £{plan.price}/month
+              {plan.paymentLink ? (
+                <>
+                  <RiExternalLinkLine className="h-4 w-4 mr-2" />
+                  Open Secure Payment
+                </>
+              ) : (
+                <>
+                  <RiCheckLine className="h-4 w-4 mr-2" />
+                  Pay £{plan.price}/month
+                </>
+              )}
             </>
           )}
         </button>

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { RiCheckLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { logSecurityEvent } from '../utils/security';
-import { SUBSCRIPTION_PLANS, formatPrice, buildStripeReturnUrls } from '../lib/stripe';
-import { getUserSubscriptionSupabase } from '../services/supabaseDb';
+import {useState,useEffect} from 'react';
+import {motion} from 'framer-motion';
+import {RiCheckLine,RiArrowRightLine,RiStarLine} from 'react-icons/ri';
+import {useAuth} from '../context/AuthContext';
+import {useNavigate} from 'react-router-dom';
+import {logSecurityEvent} from '../utils/security';
+import {SUBSCRIPTION_PLANS,formatPrice} from '../lib/stripe';
+import {getUserSubscriptionSupabase} from '../services/supabaseDb';
 import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import PricingCard from '../components/PricingCard';
@@ -14,100 +14,89 @@ import PaymentVerificationBanner from '../components/PaymentVerificationBanner';
 import useSubscriptionVerification from '../hooks/useSubscriptionVerification';
 
 export default function Pricing() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [currentPlanId, setCurrentPlanId] = useState('free');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
+  const [isLoading,setIsLoading]=useState(false);
+  const [error,setError]=useState(null);
+  const [currentPlanId,setCurrentPlanId]=useState('free');
+  const [isMobileMenuOpen,setIsMobileMenuOpen]=useState(false);
+  const [showUpgradeModal,setShowUpgradeModal]=useState(false);
+  const [selectedPlan,setSelectedPlan]=useState(null);
+  const {user}=useAuth();
+  const navigate=useNavigate();
+  const {isVerifying,verificationStatus,dismissVerificationStatus}=useSubscriptionVerification();
 
-  useEffect(() => {
-    logSecurityEvent('PRICING_PAGE_VIEW', { userEmail: user?.email });
+  useEffect(()=> {
+    logSecurityEvent('PRICING_PAGE_VIEW',{userEmail: user?.email});
 
     // Load user's current subscription plan
-    const loadUserPlan = async () => {
+    const loadUserPlan=async ()=> {
       if (user?.email) {
         try {
-          const subscription = await getUserSubscriptionSupabase(user.email);
+          const subscription=await getUserSubscriptionSupabase(user.email);
           if (subscription && subscription.planId) {
-            // Extract plan name from price ID (e.g., "price_professional" -> "professional")
-            const planName = subscription.planId.split('_')[1];
+            // Extract plan name from price ID (e.g.,"price_professional" -> "professional")
+            const planName=subscription.planId.split('_')[1];
             if (planName && SUBSCRIPTION_PLANS[planName]) {
               setCurrentPlanId(planName);
             }
           }
         } catch (error) {
-          console.error('Error loading subscription:', error);
+          console.error('Error loading subscription:',error);
         }
       }
     };
 
     loadUserPlan();
-  }, [user]);
+  },[user]);
 
-  const handlePlanSelect = (plan) => {
+  const handlePlanSelect=(plan)=> {
     if (!user) {
       navigate('/login');
       return;
     }
 
     // Don't allow selecting current plan
-    if (plan.id === currentPlanId) {
+    if (plan.id===currentPlanId) {
       return;
     }
 
     // Don't allow downgrading from the UI (would need to go through subscription management)
     if (SUBSCRIPTION_PLANS[currentPlanId]?.price > plan.price) {
-      setError("To downgrade your plan, please go to Settings > Subscription");
+      setError("To downgrade your plan,please go to Settings > Subscription");
       return;
     }
 
     setError(null);
     setSelectedPlan(plan);
 
-    // For free plan, just redirect to dashboard
-    if (plan.id === 'free') {
+    // For free plan,just redirect to dashboard
+    if (plan.id==='free') {
       navigate('/dashboard');
       return;
     }
 
-    // For paid plans, open Stripe payment link with return URL
+    // For paid plans,open Stripe payment link in NEW TAB
     if (plan.paymentLink) {
-      // Build proper return URLs
-      const returnUrls = buildStripeReturnUrls(plan.id);
-      
-      // Construct the payment URL with return parameters
-      const urlParams = new URLSearchParams({
-        'success_url': returnUrls.success_url,
-        'cancel_url': returnUrls.cancel_url
-      });
-      
-      const paymentUrl = `${plan.paymentLink}?${urlParams.toString()}`;
-
-      logSecurityEvent('STRIPE_PAYMENT_INITIATED', {
+      logSecurityEvent('STRIPE_PAYMENT_INITIATED',{
         planId: plan.id,
         userEmail: user.email,
         paymentUrl: plan.paymentLink,
-        returnUrl: returnUrls.success_url
+        openMethod: 'new_tab'
       });
 
-      // Open payment link in same window
-      window.location.href = paymentUrl;
+      // Open payment link in NEW TAB
+      window.open(plan.paymentLink,'_blank','noopener,noreferrer');
       return;
     }
 
     // Fallback to upgrade modal
     setShowUpgradeModal(true);
-    logSecurityEvent('PLAN_SELECTION', {
+    logSecurityEvent('PLAN_SELECTION',{
       planId: plan.id,
       userEmail: user.email
     });
   };
 
-  const handleUpgrade = async (plan) => {
+  const handleUpgrade=async (plan)=> {
     try {
       setIsLoading(true);
 
@@ -115,9 +104,9 @@ export default function Pricing() {
       // This is called after successful payment
 
       // Reload the current plan
-      const subscription = await getUserSubscriptionSupabase(user.email);
+      const subscription=await getUserSubscriptionSupabase(user.email);
       if (subscription && subscription.planId) {
-        const planName = subscription.planId.split('_')[1];
+        const planName=subscription.planId.split('_')[1];
         if (planName && SUBSCRIPTION_PLANS[planName]) {
           setCurrentPlanId(planName);
         }
@@ -126,9 +115,9 @@ export default function Pricing() {
       setShowUpgradeModal(false);
       setSelectedPlan(null);
     } catch (error) {
-      console.error('Upgrade error:', error);
+      console.error('Upgrade error:',error);
       setError('Failed to complete upgrade. Please try again.');
-      logSecurityEvent('PLAN_UPGRADE_ERROR', {
+      logSecurityEvent('PLAN_UPGRADE_ERROR',{
         error: error.message,
         planId: plan?.id
       });
@@ -137,15 +126,15 @@ export default function Pricing() {
     }
   };
 
-  const handleMobileMenuToggle = () => {
+  const handleMobileMenuToggle=()=> {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  const handleMobileMenuClose = () => {
+  const handleMobileMenuClose=()=> {
     setIsMobileMenuOpen(false);
   };
 
-  const plans = Object.values(SUBSCRIPTION_PLANS);
+  const plans=Object.values(SUBSCRIPTION_PLANS);
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -175,8 +164,8 @@ export default function Pricing() {
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0,y: 20}}
+            animate={{opacity: 1,y: 0}}
             className="text-center mb-12"
           >
             <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
@@ -190,8 +179,8 @@ export default function Pricing() {
           {/* Error Message */}
           {error && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0,y: -10}}
+              animate={{opacity: 1,y: 0}}
               className="mb-8 max-w-md mx-auto"
             >
               <div className="bg-red-900/50 border border-red-700 rounded-lg p-4">
@@ -203,8 +192,8 @@ export default function Pricing() {
           {/* Current Plan Info */}
           {user && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0,y: -10}}
+              animate={{opacity: 1,y: 0}}
               className="mb-8 max-w-md mx-auto"
             >
               <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-4 text-center">
@@ -220,7 +209,7 @@ export default function Pricing() {
 
           {/* Pricing Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-4xl mx-auto">
-            {plans.map((plan, index) => (
+            {plans.map((plan,index)=> (
               <PricingCard
                 key={plan.id}
                 plan={plan}
@@ -229,9 +218,9 @@ export default function Pricing() {
                 currentPlan={currentPlanId}
                 isLoading={isLoading}
                 buttonText={
-                  plan.id === currentPlanId
+                  plan.id===currentPlanId
                     ? 'Current Plan'
-                    : plan.price === 0
+                    : plan.price===0
                     ? 'Get Started Free'
                     : 'Upgrade Now'
                 }
@@ -241,8 +230,8 @@ export default function Pricing() {
 
           {/* Payment Security Notice */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{opacity: 0,y: 20}}
+            animate={{opacity: 1,y: 0}}
             className="max-w-2xl mx-auto text-center"
           >
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -258,11 +247,11 @@ export default function Pricing() {
                 </div>
                 <div className="flex items-center justify-center">
                   <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                  Instant Access
+                  PCI Compliant
                 </div>
               </div>
               <p className="text-gray-400 text-sm mt-3">
-                Your payment is processed securely by Stripe. You'll get immediate access to all premium features after payment completion.
+                All payments are processed securely through Stripe. Your payment information is encrypted and never stored on our servers.
               </p>
             </div>
           </motion.div>
@@ -280,7 +269,7 @@ export default function Pricing() {
       {/* Upgrade Modal */}
       <PlanUpgradeModal
         isOpen={showUpgradeModal}
-        onClose={() => {
+        onClose={()=> {
           setShowUpgradeModal(false);
           setSelectedPlan(null);
         }}
