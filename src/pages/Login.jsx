@@ -1,90 +1,76 @@
 import {useState} from 'react';
-import {useNavigate,Link,useLocation} from 'react-router-dom';
+import {useNavigate, Link, useLocation} from 'react-router-dom';
 import {useAuth} from '../context/AuthContext';
 import {motion} from 'framer-motion';
-import {getUserByEmail,updateUserLastLogin} from '../services/db';
-import {validateEmail,verifyPassword,checkRateLimit,recordFailedAttempt,clearFailedAttempts,logSecurityEvent,sanitizeInput} from '../utils/security';
-import {RiAlertLine,RiEyeLine,RiEyeOffLine} from 'react-icons/ri';
+import {getUserByEmail, updateUserLastLogin} from '../services/db';
+import {validateEmail, verifyPassword, checkRateLimit, recordFailedAttempt, clearFailedAttempts, logSecurityEvent, sanitizeInput} from '../utils/security';
+import {RiAlertLine, RiEyeLine, RiEyeOffLine} from 'react-icons/ri';
 import {supabase} from '../lib/supabase';
 
 export default function Login() {
-  const [email,setEmail]=useState('');
-  const [password,setPassword]=useState('');
-  const [showPassword,setShowPassword]=useState(false);
-  const [error,setError]=useState('');
-  const [isLoading,setIsLoading]=useState(false);
-  const [rateLimited,setRateLimited]=useState(false);
-  const [remainingTime,setRemainingTime]=useState(0);
-  const navigate=useNavigate();
-  const location=useLocation();
-  const {login}=useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
+  const [remainingTime, setRemainingTime] = useState(0);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const {login} = useAuth();
 
-  const handleSubmit=async (e)=> {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
     try {
-      console.log('===Login Form Submitted===');
-      console.log('Email:',email);
-
       // Sanitize inputs
-      const sanitizedEmail=sanitizeInput(email.toLowerCase().trim());
-      console.log('Sanitized email:',sanitizedEmail);
+      const sanitizedEmail = sanitizeInput(email.toLowerCase().trim());
 
       // Validate email format
       if (!validateEmail(sanitizedEmail)) {
         setError('Please enter a valid email address');
-        logSecurityEvent('INVALID_EMAIL_FORMAT',{email: sanitizedEmail});
+        logSecurityEvent('INVALID_EMAIL_FORMAT', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
 
       // Check rate limiting
-      const rateCheck=checkRateLimit(sanitizedEmail);
+      const rateCheck = checkRateLimit(sanitizedEmail);
       if (!rateCheck.allowed) {
         setRateLimited(true);
         setRemainingTime(rateCheck.remainingTime);
         setError(`Too many failed attempts. Please try again in ${rateCheck.remainingTime} minutes.`);
-        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT',{email: sanitizedEmail});
+        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
 
-      console.log('Looking up user in database...');
-      
       // Get user from database first (our primary source of truth)
-      const user=await getUserByEmail(sanitizedEmail);
-      console.log('User lookup result:',user ? {email: user.email,role: user.role,businessName: user.businessName} : null);
-
+      const user = await getUserByEmail(sanitizedEmail);
       if (!user) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL',{email: sanitizedEmail});
+        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
 
-      console.log('User found, verifying password...');
-
       // Verify password
-      let passwordValid=false;
+      let passwordValid = false;
       if (user.salt) {
         // New hashed password system
-        console.log('Using hashed password verification');
-        passwordValid=verifyPassword(password,user.password,user.salt);
+        passwordValid = verifyPassword(password, user.password, user.salt);
       } else {
         // Legacy plain text passwords (for backward compatibility)
-        console.log('Using legacy password verification');
-        passwordValid=user.password===password;
+        passwordValid = user.password === password;
       }
-
-      console.log('Password verification result:',passwordValid);
 
       if (!passwordValid) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD',{email: sanitizedEmail});
+        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
@@ -92,20 +78,19 @@ export default function Login() {
       // Try to sign in with Supabase Auth (if available) - but don't fail login if this fails
       if (supabase) {
         try {
-          console.log('Attempting Supabase auth signin...');
-          const {data: authData,error: authError}=await supabase.auth.signInWithPassword({
+          const {data: authData, error: authError} = await supabase.auth.signInWithPassword({
             email: sanitizedEmail,
             password: password
           });
 
           if (authError) {
-            console.log('Supabase auth login failed:',authError.message);
+            console.log('Supabase auth login failed:', authError.message);
             // Continue with local login - don't fail here
           } else {
             console.log('Supabase auth login successful');
           }
         } catch (err) {
-          console.log('Error during Supabase login:',err);
+          console.log('Error during Supabase login:', err);
           // Continue with local login
         }
       }
@@ -117,38 +102,34 @@ export default function Login() {
       await updateUserLastLogin(sanitizedEmail);
 
       // Create user session
-      const userData={
+      const userData = {
         email: user.email,
         businessName: user.businessName,
         role: user.role
       };
 
-      logSecurityEvent('SUCCESSFUL_LOGIN',{
+      logSecurityEvent('SUCCESSFUL_LOGIN', {
         email: sanitizedEmail,
         role: user.role,
         businessName: user.businessName
       });
 
-      console.log('Logging in user:',userData);
-
       // Login and wait for state to update
       await login(userData);
 
-      console.log('Login successful, navigating based on role:',user.role);
-
       // Navigate based on role
-      if (user.role==='platformadmin') {
-        navigate('/platform-admin',{replace: true});
-      } else if (user.role==='admin') {
-        navigate('/admin',{replace: true});
+      if (user.role === 'platformadmin') {
+        navigate('/platform-admin', {replace: true});
+      } else if (user.role === 'admin') {
+        navigate('/admin', {replace: true});
       } else {
-        navigate('/dashboard',{replace: true});
+        navigate('/dashboard', {replace: true});
       }
 
     } catch (error) {
-      console.error('Login error:',error);
+      console.error('Login error:', error);
       setError('An error occurred during login. Please try again.');
-      logSecurityEvent('LOGIN_ERROR',{
+      logSecurityEvent('LOGIN_ERROR', {
         email: sanitizeInput(email),
         error: error.message
       });
@@ -157,13 +138,13 @@ export default function Login() {
     }
   };
 
-  const handleEmailChange=(value)=> {
+  const handleEmailChange = (value) => {
     setEmail(value);
     setError('');
     setRateLimited(false);
   };
 
-  const handlePasswordChange=(value)=> {
+  const handlePasswordChange = (value) => {
     setPassword(value);
     setError('');
   };
@@ -171,14 +152,14 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{opacity: 0,y: 20}}
-        animate={{opacity: 1,y: 0}}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
         className="max-w-md w-full space-y-8"
       >
         <div className="text-center">
           <motion.div
-            initial={{opacity: 0,scale: 0.9}}
-            animate={{opacity: 1,scale: 1}}
+            initial={{opacity: 0, scale: 0.9}}
+            animate={{opacity: 1, scale: 1}}
             transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
@@ -187,7 +168,6 @@ export default function Login() {
             </h1>
             <p className="text-sm text-gray-400 mt-2">Inventory Management System</p>
           </motion.div>
-
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white">
             Sign in to your account
           </h2>
@@ -196,19 +176,13 @@ export default function Login() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <motion.div
-              initial={{opacity: 0,y: -10}}
-              animate={{opacity: 1,y: 0}}
-              className={`rounded-md p-4 ${
-                rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'
-              }`}
+              initial={{opacity: 0, y: -10}}
+              animate={{opacity: 1, y: 0}}
+              className={`rounded-md p-4 ${rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'}`}
             >
               <div className="flex items-center">
-                <RiAlertLine className={`h-5 w-5 mr-2 ${
-                  rateLimited ? 'text-orange-400' : 'text-red-400'
-                }`} />
-                <div className={`text-sm ${
-                  rateLimited ? 'text-orange-200' : 'text-red-200'
-                }`}>
+                <RiAlertLine className={`h-5 w-5 mr-2 ${rateLimited ? 'text-orange-400' : 'text-red-400'}`} />
+                <div className={`text-sm ${rateLimited ? 'text-orange-200' : 'text-red-200'}`}>
                   {error}
                 </div>
               </div>
@@ -230,11 +204,10 @@ export default function Login() {
                 className="appearance-none relative block w-full px-3 py-3 sm:py-2 border border-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm bg-gray-800"
                 placeholder="Email address"
                 value={email}
-                onChange={(e)=> handleEmailChange(e.target.value)}
+                onChange={(e) => handleEmailChange(e.target.value)}
                 disabled={isLoading || rateLimited}
               />
             </div>
-
             <div className="relative">
               <label htmlFor="password" className="sr-only">
                 Password
@@ -249,12 +222,12 @@ export default function Login() {
                 className="appearance-none relative block w-full px-3 py-3 sm:py-2 pr-10 border border-gray-700 placeholder-gray-400 text-white rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm bg-gray-800"
                 placeholder="Password"
                 value={password}
-                onChange={(e)=> handlePasswordChange(e.target.value)}
+                onChange={(e) => handlePasswordChange(e.target.value)}
                 disabled={isLoading || rateLimited}
               />
               <button
                 type="button"
-                onClick={()=> setShowPassword(!showPassword)}
+                onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-300"
                 disabled={isLoading || rateLimited}
               >
@@ -279,9 +252,24 @@ export default function Login() {
             >
               {isLoading ? (
                 <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <svg
+                    className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Signing in...
                 </span>
