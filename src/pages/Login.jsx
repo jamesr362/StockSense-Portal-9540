@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { motion } from 'framer-motion';
-import { getUserByEmail, updateUserLastLogin } from '../services/db';
-import { validateEmail, verifyPassword, checkRateLimit, recordFailedAttempt, clearFailedAttempts, logSecurityEvent, sanitizeInput } from '../utils/security';
-import { RiAlertLine, RiEyeLine, RiEyeOffLine } from 'react-icons/ri';
-import { supabase } from '../lib/supabase';
+import {useState} from 'react';
+import {useNavigate, Link, useLocation} from 'react-router-dom';
+import {useAuth} from '../context/AuthContext';
+import {motion} from 'framer-motion';
+import {getUserByEmail, updateUserLastLogin} from '../services/db';
+import {validateEmail, verifyPassword, checkRateLimit, recordFailedAttempt, clearFailedAttempts, logSecurityEvent, sanitizeInput} from '../utils/security';
+import {RiAlertLine, RiEyeLine, RiEyeOffLine} from 'react-icons/ri';
+import {supabase} from '../lib/supabase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -15,109 +15,48 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [rateLimited, setRateLimited] = useState(false);
   const [remainingTime, setRemainingTime] = useState(0);
-  
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const {login} = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    
+
     try {
       // Sanitize inputs
       const sanitizedEmail = sanitizeInput(email.toLowerCase().trim());
-      
+
       // Validate email format
       if (!validateEmail(sanitizedEmail)) {
         setError('Please enter a valid email address');
-        logSecurityEvent('INVALID_EMAIL_FORMAT', { email: sanitizedEmail });
+        logSecurityEvent('INVALID_EMAIL_FORMAT', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
-      
+
       // Check rate limiting
       const rateCheck = checkRateLimit(sanitizedEmail);
       if (!rateCheck.allowed) {
         setRateLimited(true);
         setRemainingTime(rateCheck.remainingTime);
         setError(`Too many failed attempts. Please try again in ${rateCheck.remainingTime} minutes.`);
-        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT', { email: sanitizedEmail });
+        logSecurityEvent('RATE_LIMITED_LOGIN_ATTEMPT', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
-      
-      // Try to sign in with Supabase if available
-      if (supabase) {
-        try {
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email: sanitizedEmail,
-            password: password
-          });
-          
-          if (!authError && authData) {
-            console.log('Supabase auth login successful:', authData);
-            
-            // Get user data from our custom table
-            const { data: userData, error: userError } = await supabase
-              .from('users_tb2k4x9p1m')
-              .select('email, business_name, role, created_at, last_login')
-              .eq('email', sanitizedEmail)
-              .single();
-            
-            if (!userError && userData) {
-              // Clear failed attempts on successful login
-              clearFailedAttempts(sanitizedEmail);
-              
-              // Update last login
-              await supabase
-                .from('users_tb2k4x9p1m')
-                .update({ last_login: new Date().toISOString() })
-                .eq('email', sanitizedEmail);
-              
-              // Create user session
-              const userObj = {
-                email: userData.email,
-                businessName: userData.business_name,
-                role: userData.role
-              };
-              
-              logSecurityEvent('SUCCESSFUL_LOGIN', {
-                email: sanitizedEmail,
-                role: userData.role,
-                businessName: userData.business_name
-              });
-              
-              login(userObj);
-              
-              // Navigate based on role
-              if (userData.role === 'platformadmin') {
-                navigate('/platform-admin', { replace: true });
-              } else if (userData.role === 'admin') {
-                navigate('/admin', { replace: true });
-              } else {
-                navigate('/dashboard', { replace: true });
-              }
-              
-              return;
-            }
-          }
-        } catch (err) {
-          console.error('Error during Supabase login:', err);
-          // Continue with local login fallback
-        }
-      }
-      
-      // Get user from database (fallback to local)
+
+      // Get user from database first (our primary source of truth)
       const user = await getUserByEmail(sanitizedEmail);
       if (!user) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL', { email: sanitizedEmail });
+        logSecurityEvent('FAILED_LOGIN_INVALID_EMAIL', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
-      
+
       // Verify password
       let passwordValid = false;
       if (user.salt) {
@@ -127,51 +66,74 @@ export default function Login() {
         // Legacy plain text passwords (for backward compatibility)
         passwordValid = user.password === password;
       }
-      
+
       if (!passwordValid) {
         recordFailedAttempt(sanitizedEmail);
         setError('Invalid email or password');
-        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD', { email: sanitizedEmail });
+        logSecurityEvent('FAILED_LOGIN_INVALID_PASSWORD', {email: sanitizedEmail});
         setIsLoading(false);
         return;
       }
-      
+
+      // Try to sign in with Supabase Auth (if available) - but don't fail login if this fails
+      if (supabase) {
+        try {
+          const {data: authData, error: authError} = await supabase.auth.signInWithPassword({
+            email: sanitizedEmail,
+            password: password
+          });
+
+          if (authError) {
+            console.log('Supabase auth login failed:', authError.message);
+            // Continue with local login - don't fail here
+          } else {
+            console.log('Supabase auth login successful');
+          }
+        } catch (err) {
+          console.log('Error during Supabase login:', err);
+          // Continue with local login
+        }
+      }
+
       // Clear failed attempts on successful login
       clearFailedAttempts(sanitizedEmail);
-      
+
       // Update last login
       await updateUserLastLogin(sanitizedEmail);
-      
+
       // Create user session
       const userData = {
         email: user.email,
         businessName: user.businessName,
         role: user.role
       };
-      
+
       logSecurityEvent('SUCCESSFUL_LOGIN', {
         email: sanitizedEmail,
         role: user.role,
         businessName: user.businessName
       });
-      
-      login(userData);
-      
+
+      // Login and wait for state to update
+      await login(userData);
+
       // Navigate based on role
       if (user.role === 'platformadmin') {
-        navigate('/platform-admin', { replace: true });
+        navigate('/platform-admin', {replace: true});
       } else if (user.role === 'admin') {
-        navigate('/admin', { replace: true });
+        navigate('/admin', {replace: true});
       } else {
-        navigate('/dashboard', { replace: true });
+        navigate('/dashboard', {replace: true});
       }
+
     } catch (error) {
       console.error('Login error:', error);
       setError('An error occurred during login. Please try again.');
-      logSecurityEvent('LOGIN_ERROR', { 
-        email: sanitizeInput(email), 
-        error: error.message 
+      logSecurityEvent('LOGIN_ERROR', {
+        email: sanitizeInput(email),
+        error: error.message
       });
+    } finally {
       setIsLoading(false);
     }
   };
@@ -190,15 +152,15 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
         className="max-w-md w-full space-y-8"
       >
         <div className="text-center">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
+            initial={{opacity: 0, scale: 0.9}}
+            animate={{opacity: 1, scale: 1}}
+            transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
             <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
@@ -214,14 +176,12 @@ export default function Login() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{opacity: 0, y: -10}}
+              animate={{opacity: 1, y: 0}}
               className={`rounded-md p-4 ${rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'}`}
             >
               <div className="flex items-center">
-                <RiAlertLine
-                  className={`h-5 w-5 mr-2 ${rateLimited ? 'text-orange-400' : 'text-red-400'}`}
-                />
+                <RiAlertLine className={`h-5 w-5 mr-2 ${rateLimited ? 'text-orange-400' : 'text-red-400'}`} />
                 <div className={`text-sm ${rateLimited ? 'text-orange-200' : 'text-red-200'}`}>
                   {error}
                 </div>
@@ -248,7 +208,6 @@ export default function Login() {
                 disabled={isLoading || rateLimited}
               />
             </div>
-            
             <div className="relative">
               <label htmlFor="password" className="sr-only">
                 Password
@@ -323,7 +282,10 @@ export default function Login() {
           </div>
 
           <div className="text-center">
-            <Link to="/register" className="font-medium text-primary-400 hover:text-primary-300">
+            <Link
+              to="/register"
+              className="font-medium text-primary-400 hover:text-primary-300"
+            >
               Don't have an account? Sign up
             </Link>
           </div>
