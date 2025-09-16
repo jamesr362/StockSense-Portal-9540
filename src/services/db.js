@@ -74,10 +74,31 @@ const createDefaultPlatformAdmin=async ()=> {
           console.log('✅ Created default platform admin account in Supabase');
         } else {
           console.log('✅ Platform admin already exists in Supabase');
+          // Ensure the password is correct
+          console.log('Updating platform admin password to ensure it is correct...');
+          const {supabase} = await import('../lib/supabase');
+          if (supabase) {
+            try {
+              const {error: updateError} = await supabase
+                .from('users_tb2k4x9p1m')
+                .update({
+                  password: 'admin123',
+                  business_name: 'Trackio Platform',
+                  role: 'platformadmin'
+                })
+                .eq('email', platformAdminEmail);
+              
+              if (!updateError) {
+                console.log('✅ Updated platform admin credentials');
+              }
+            } catch (updateErr) {
+              console.log('Could not update platform admin in Supabase:', updateErr);
+            }
+          }
         }
         return;
       } catch (error) {
-        console.log('Supabase not available, falling back to IndexedDB:', error.message);
+        console.log('Supabase not available, falling back to IndexedDB:',error.message);
       }
     }
 

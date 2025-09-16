@@ -15,7 +15,6 @@ export default function Login() {
   const [isLoading,setIsLoading]=useState(false);
   const [rateLimited,setRateLimited]=useState(false);
   const [remainingTime,setRemainingTime]=useState(0);
-  
   const navigate=useNavigate();
   const location=useLocation();
   const {login}=useAuth();
@@ -50,12 +49,13 @@ export default function Login() {
 
       console.log('===Login Attempt===');
       console.log('Email:',sanitizedEmail);
+      console.log('Password provided:',!!password);
       console.log('Attempting to get user from database...');
 
       // Get user from database first (our primary source of truth)
       const user=await getUserByEmail(sanitizedEmail);
-      
       console.log('User found in database:',user ? 'YES' : 'NO');
+
       if (user) {
         console.log('User details:',{
           email: user.email,
@@ -81,7 +81,12 @@ export default function Login() {
       console.log('Stored password exists:',!!user.password);
       console.log('Salt exists:',!!user.salt);
 
-      if (user.salt) {
+      // Special handling for platform admin - use plain text comparison
+      if (user.email === 'platformadmin@trackio.com' && user.role === 'platformadmin') {
+        console.log('Platform admin login - using direct password comparison');
+        passwordValid = user.password === password;
+        console.log('Platform admin password match:', passwordValid);
+      } else if (user.salt) {
         // New hashed password system
         console.log('Using hashed password verification');
         passwordValid=verifyPassword(password,user.password,user.salt);
@@ -105,7 +110,7 @@ export default function Login() {
       console.log('Password verification successful!');
 
       // Try to sign in with Supabase Auth (if available) - but don't fail login if this fails
-      if (supabase) {
+      if (supabase && user.email !== 'platformadmin@trackio.com') {
         try {
           const {data: authData,error: authError}=await supabase.auth.signInWithPassword({
             email: sanitizedEmail,
@@ -188,14 +193,14 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <motion.div
-        initial={{opacity: 0, y: 20}}
-        animate={{opacity: 1, y: 0}}
+        initial={{opacity: 0,y: 20}}
+        animate={{opacity: 1,y: 0}}
         className="max-w-md w-full space-y-8"
       >
         <div className="text-center">
           <motion.div
-            initial={{opacity: 0, scale: 0.9}}
-            animate={{opacity: 1, scale: 1}}
+            initial={{opacity: 0,scale: 0.9}}
+            animate={{opacity: 1,scale: 1}}
             transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
@@ -212,19 +217,23 @@ export default function Login() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <motion.div
-              initial={{opacity: 0, y: -10}}
-              animate={{opacity: 1, y: 0}}
+              initial={{opacity: 0,y: -10}}
+              animate={{opacity: 1,y: 0}}
               className={`rounded-md p-4 ${
                 rateLimited ? 'bg-orange-900/50' : 'bg-red-900/50'
               }`}
             >
               <div className="flex items-center">
-                <RiAlertLine className={`h-5 w-5 mr-2 ${
-                  rateLimited ? 'text-orange-400' : 'text-red-400'
-                }`} />
-                <div className={`text-sm ${
-                  rateLimited ? 'text-orange-200' : 'text-red-200'
-                }`}>
+                <RiAlertLine
+                  className={`h-5 w-5 mr-2 ${
+                    rateLimited ? 'text-orange-400' : 'text-red-400'
+                  }`}
+                />
+                <div
+                  className={`text-sm ${
+                    rateLimited ? 'text-orange-200' : 'text-red-200'
+                  }`}
+                >
                   {error}
                 </div>
               </div>
