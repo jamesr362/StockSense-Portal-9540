@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine, RiCalculatorLine, RiCloseLine } from 'react-icons/ri';
+import { RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine, RiCalculatorLine, RiCloseLine, RiLockLine } from 'react-icons/ri';
 import { useState, useEffect } from 'react';
 import { getInventoryItems } from '../services/db';
 import { useAuth } from '../context/AuthContext';
@@ -25,7 +25,7 @@ export default function Dashboard() {
 
       try {
         setIsLoading(true);
-
+        
         // Load inventory data
         const items = await getInventoryItems(user.email);
         const totalItems = items.length;
@@ -109,9 +109,10 @@ export default function Dashboard() {
               <SubscriptionStatus subscription={subscription} compact />
               {planLimits && (
                 <div className="text-xs text-gray-500">
-                  {planLimits.inventoryItems === -1
-                    ? 'Unlimited items'
-                    : `${inventoryCount}/${planLimits.inventoryItems} items used`}
+                  {planLimits.inventoryItems === -1 
+                    ? 'Unlimited items' 
+                    : `${inventoryCount}/${planLimits.inventoryItems} items used`
+                  }
                 </div>
               )}
             </div>
@@ -135,7 +136,10 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <button onClick={dismissVerificationStatus} className="text-green-400 hover:text-green-300">
+              <button
+                onClick={dismissVerificationStatus}
+                className="text-green-400 hover:text-green-300"
+              >
                 <RiCloseLine className="h-5 w-5" />
               </button>
             </div>
@@ -153,7 +157,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="text-white font-medium">Upgrade to unlock unlimited features</h3>
                 <p className="text-gray-300 text-sm mt-1">
-                  Get unlimited receipt scanning, Excel imports, tax exports, and more!
+                  Get unlimited inventory items, receipt scanning, Excel imports, tax exports, and more!
                 </p>
               </div>
               <Link
@@ -166,8 +170,65 @@ export default function Dashboard() {
           </motion.div>
         )}
 
+        {/* Free Plan Usage Warning - Show when approaching limit */}
+        {currentPlan === 'free' && inventoryCount >= 80 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-6 rounded-lg p-4 border ${
+              inventoryCount >= 95 
+                ? 'bg-red-900/20 border-red-700' 
+                : 'bg-yellow-900/20 border-yellow-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <RiAlertLine className={`h-5 w-5 mr-2 ${
+                  inventoryCount >= 95 ? 'text-red-400' : 'text-yellow-400'
+                }`} />
+                <div>
+                  <h3 className={`font-medium ${
+                    inventoryCount >= 95 ? 'text-red-300' : 'text-yellow-300'
+                  }`}>
+                    {inventoryCount >= 95 
+                      ? `Critical: ${inventoryCount}/100 inventory items used`
+                      : `Warning: ${inventoryCount}/100 inventory items used`
+                    }
+                  </h3>
+                  <p className="text-gray-300 text-sm mt-1">
+                    {inventoryCount >= 95
+                      ? 'You\'re almost at your limit! Upgrade to Professional for unlimited items.'
+                      : 'You\'re approaching your Free plan limit. Upgrade for unlimited inventory items.'
+                    }
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/pricing"
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+              >
+                Upgrade Now
+              </Link>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-gray-600 rounded-full h-2">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    inventoryCount >= 95 ? 'bg-red-500' : 'bg-yellow-500'
+                  }`}
+                  style={{ width: `${(inventoryCount / 100) * 100}%` }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {/* Stats Grid with Usage Limit Checking */}
-        <UsageLimitGate limitType="inventoryItems" currentUsage={inventoryCount} showUpgradePrompt={false}>
+        <UsageLimitGate
+          limitType="inventoryItems"
+          currentUsage={inventoryCount}
+          showUpgradePrompt={false}
+        >
           {stats && stats.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {stats.map((stat, index) => (
@@ -225,6 +286,38 @@ export default function Dashboard() {
 
         {/* Feature Cards */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Manual Entry Card - Always Available */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-gray-800 rounded-lg p-6"
+          >
+            <div className="flex items-center mb-4">
+              <div className="bg-blue-900/30 p-3 rounded-lg">
+                <RiStore2Line className="h-6 w-6 text-blue-400" />
+              </div>
+              <h3 className="ml-3 text-lg font-medium text-white">Manual Entry</h3>
+            </div>
+            <p className="text-gray-400 mb-4">
+              Add inventory items manually with full control over details.
+            </p>
+            <div className="mt-2">
+              <Link
+                to="/inventory"
+                className="inline-flex items-center text-blue-400 hover:text-blue-300"
+              >
+                Manage Inventory
+                <RiArrowRightIcon className="ml-1 h-4 w-4" />
+              </Link>
+              {currentPlan === 'free' && (
+                <div className="mt-2 text-xs text-gray-500">
+                  {inventoryCount}/100 items used
+                </div>
+              )}
+            </div>
+          </motion.div>
+
           {/* Receipt Scanner Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -252,8 +345,12 @@ export default function Dashboard() {
                 </Link>
               ) : (
                 <div className="flex items-center">
-                  <span className="text-gray-400 text-sm">Free: 1 scan/month • Pro: Unlimited</span>
-                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
+                  <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
+                  <span className="text-gray-500 text-sm">Professional plan only</span>
+                  <Link
+                    to="/pricing"
+                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                  >
                     Upgrade
                   </Link>
                 </div>
@@ -288,8 +385,12 @@ export default function Dashboard() {
                 </Link>
               ) : (
                 <div className="flex items-center">
-                  <span className="text-gray-400 text-sm">Free: 1 import/month • Pro: Unlimited</span>
-                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
+                  <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
+                  <span className="text-gray-500 text-sm">Professional plan only</span>
+                  <Link
+                    to="/pricing"
+                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                  >
                     Upgrade
                   </Link>
                 </div>
@@ -324,8 +425,12 @@ export default function Dashboard() {
                 </Link>
               ) : (
                 <div className="flex items-center">
-                  <span className="text-red-400 text-sm">Available in Professional plan only</span>
-                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
+                  <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
+                  <span className="text-gray-500 text-sm">Professional plan only</span>
+                  <Link
+                    to="/pricing"
+                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
+                  >
                     Upgrade
                   </Link>
                 </div>
@@ -339,9 +444,7 @@ export default function Dashboard() {
           <UsageLimitGate
             limitType="inventoryItems"
             currentUsage={inventoryCount}
-            customMessage={`You're using ${inventoryCount} of ${
-              planLimits?.inventoryItems || 0
-            } available inventory slots.`}
+            customMessage={`You're using ${inventoryCount} of ${planLimits?.inventoryItems || 0} available inventory slots.`}
           />
         </div>
       </motion.div>
