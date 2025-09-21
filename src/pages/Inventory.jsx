@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
-import {useState,useEffect,useCallback} from 'react';
-import {RiAddLine,RiSearchLine,RiEditLine,RiDeleteBin6Line,RiCalendarLine,RiStore2Line,RiScanLine} from 'react-icons/ri';
+import {useState, useEffect, useCallback} from 'react';
+import {RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine} from 'react-icons/ri';
 import {Link} from 'react-router-dom';
 import AddItemModal from '../components/AddItemModal';
 import EditItemModal from '../components/EditItemModal';
@@ -8,24 +8,23 @@ import DeleteItemModal from '../components/DeleteItemModal';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import UsageLimitGate from '../components/UsageLimitGate';
 import FeatureGate from '../components/FeatureGate';
-import {getInventoryItems,addInventoryItem,updateInventoryItem,deleteInventoryItem,searchInventoryItems} from '../services/db';
+import {getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, searchInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
 export default function Inventory() {
-  const [searchTerm,setSearchTerm] = useState('');
-  const [isAddModalOpen,setIsAddModalOpen] = useState(false);
-  const [isEditModalOpen,setIsEditModalOpen] = useState(false);
-  const [isDeleteModalOpen,setIsDeleteModalOpen] = useState(false);
-  const [isScannerOpen,setIsScannerOpen] = useState(false);
-  const [selectedItem,setSelectedItem] = useState(null);
-  const [inventoryItems,setInventoryItems] = useState([]);
-  const [isLoading,setIsLoading] = useState(true);
-  const [error,setError] = useState(null);
-  const [successMessage,setSuccessMessage] = useState('');
-  const [refreshTrigger,setRefreshTrigger] = useState(0); // Add refresh trigger
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [inventoryItems, setInventoryItems] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
   const {user} = useAuth();
-  const {canAddInventoryItem,canUseFeature} = useFeatureAccess();
+  const {canAddInventoryItem, canUseFeature} = useFeatureAccess();
 
   const loadInventoryItems = useCallback(async () => {
     if (!user?.email) return;
@@ -33,34 +32,24 @@ export default function Inventory() {
     try {
       setIsLoading(true);
       setError(null);
+      console.log('=== Loading inventory items for user:', user.email, '===');
       
-      console.log('===Loading inventory items for user:',user.email,'===');
-      
-      // Force a fresh load from database
       const items = await getInventoryItems(user.email);
-      
-      console.log('===Loaded inventory items:',items?.length,'items===');
-      console.log('Items:',items);
+      console.log('=== Loaded inventory items:', items?.length, 'items ===');
+      console.log('Items:', items);
       
       setInventoryItems(items || []);
     } catch (error) {
-      console.error('Error loading inventory items:',error);
+      console.error('Error loading inventory items:', error);
       setError('Failed to load inventory items');
     } finally {
       setIsLoading(false);
     }
-  },[user?.email,refreshTrigger]); // Add refreshTrigger as dependency
+  }, [user?.email]);
 
-  // Load items on mount and when refreshTrigger changes
   useEffect(() => {
     loadInventoryItems();
-  },[loadInventoryItems]);
-
-  // Trigger refresh function
-  const triggerRefresh = () => {
-    console.log('===Triggering inventory refresh===');
-    setRefreshTrigger(prev => prev + 1);
-  };
+  }, [loadInventoryItems]);
 
   const handleAddItem = async (newItem) => {
     if (!user?.email) {
@@ -68,9 +57,9 @@ export default function Inventory() {
       return;
     }
 
-    console.log('===handleAddItem called===');
-    console.log('User email:',user.email);
-    console.log('New item data:',newItem);
+    console.log('=== handleAddItem called ===');
+    console.log('User email:', user.email);
+    console.log('New item data:', newItem);
 
     // Check if user can add more items
     const limitCheck = canAddInventoryItem(inventoryItems.length);
@@ -81,27 +70,26 @@ export default function Inventory() {
 
     try {
       setError(null);
-      console.log('===Calling addInventoryItem===');
+      console.log('=== Calling addInventoryItem ===');
       
       // Call the database function to add the item
-      const savedItem = await addInventoryItem(newItem,user.email);
-      console.log('===Item saved to database:',savedItem,'===');
-
-      // Close modal first
-      setIsAddModalOpen(false);
+      const savedItem = await addInventoryItem(newItem, user.email);
+      console.log('=== Item saved to database:', savedItem, '===');
       
-      // Show success message
+      // Reload the inventory to get the latest data from database
+      await loadInventoryItems();
+      
+      // Close modal and show success message
+      setIsAddModalOpen(false);
       setSuccessMessage(`Successfully added "${newItem.name}" to inventory!`);
       
-      // Force refresh the inventory list
-      triggerRefresh();
-      
       // Clear success message after 5 seconds
-      setTimeout(() => setSuccessMessage(''),5000);
+      setTimeout(() => setSuccessMessage(''), 5000);
       
-      console.log('===Add item process completed successfully===');
+      console.log('=== Add item process completed successfully ===');
+      
     } catch (error) {
-      console.error('===Error in handleAddItem===',error);
+      console.error('=== Error in handleAddItem ===', error);
       setError(error.message || 'Failed to add item to inventory');
     }
   };
@@ -120,14 +108,14 @@ export default function Inventory() {
     const limitCheck = canAddInventoryItem(totalItemsAfter - 1); // Check for the last item
     
     if (!limitCheck.allowed && limitCheck.limit !== -1) {
-      const itemsCanAdd = Math.max(0,limitCheck.limit - inventoryItems.length);
+      const itemsCanAdd = Math.max(0, limitCheck.limit - inventoryItems.length);
       if (itemsCanAdd === 0) {
         setError('Cannot add items: You have reached your inventory limit');
         return;
       } else {
         setError(`Can only add ${itemsCanAdd} more items due to plan limits. Consider upgrading your plan.`);
         // Proceed with adding only the allowed number of items
-        scannedItems = scannedItems.slice(0,itemsCanAdd);
+        scannedItems = scannedItems.slice(0, itemsCanAdd);
       }
     }
 
@@ -138,24 +126,24 @@ export default function Inventory() {
       // Add each scanned item to inventory
       for (const item of scannedItems) {
         try {
-          await addInventoryItem(item,user.email);
+          await addInventoryItem(item, user.email);
           addedCount++;
         } catch (itemError) {
-          console.error('Error adding scanned item:',itemError);
+          console.error('Error adding scanned item:', itemError);
         }
       }
 
-      // Force refresh inventory to reflect changes
-      triggerRefresh();
+      // Reload inventory to reflect changes
+      await loadInventoryItems();
 
       if (addedCount > 0) {
         setSuccessMessage(`Successfully added ${addedCount} items from receipt scan!`);
-        setTimeout(() => setSuccessMessage(''),5000);
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         setError('Failed to add items from receipt scan');
       }
     } catch (error) {
-      console.error('Error processing scanned items:',error);
+      console.error('Error processing scanned items:', error);
       setError('Failed to process scanned items');
     }
   };
@@ -175,19 +163,19 @@ export default function Inventory() {
 
     try {
       setError(null);
-      console.log('===Deleting item:',itemId,'===');
+      console.log('=== Deleting item:', itemId, '===');
       
-      await deleteInventoryItem(itemId,user.email);
-
-      // Force refresh inventory to reflect changes
-      triggerRefresh();
-
+      await deleteInventoryItem(itemId, user.email);
+      
+      // Reload inventory to reflect changes
+      await loadInventoryItems();
+      
       setSuccessMessage('Item deleted successfully!');
-      setTimeout(() => setSuccessMessage(''),3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
       
-      console.log('===Item deleted successfully===');
+      console.log('=== Item deleted successfully ===');
     } catch (error) {
-      console.error('Error deleting inventory item:',error);
+      console.error('Error deleting inventory item:', error);
       setError('Failed to delete item');
     }
   };
@@ -197,23 +185,21 @@ export default function Inventory() {
 
     try {
       setError(null);
-      console.log('===Updating item:',updatedItem,'===');
+      console.log('=== Updating item:', updatedItem, '===');
       
-      await updateInventoryItem(updatedItem,user.email);
-
-      // Close modal
+      await updateInventoryItem(updatedItem, user.email);
+      
+      // Reload inventory to reflect changes
+      await loadInventoryItems();
+      
       setIsEditModalOpen(false);
       setSelectedItem(null);
-
-      // Force refresh inventory to reflect changes
-      triggerRefresh();
-
       setSuccessMessage('Item updated successfully!');
-      setTimeout(() => setSuccessMessage(''),3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
       
-      console.log('===Item updated successfully===');
+      console.log('=== Item updated successfully ===');
     } catch (error) {
-      console.error('Error updating inventory item:',error);
+      console.error('Error updating inventory item:', error);
       setError('Failed to update item');
     }
   };
@@ -222,28 +208,27 @@ export default function Inventory() {
   useEffect(() => {
     const searchItems = async () => {
       if (!user?.email) return;
-
+      
       try {
         setIsLoading(true);
         setError(null);
+        console.log('=== Searching items with term:', searchTerm, '===');
         
-        console.log('===Searching items with term:',searchTerm,'===');
-        
-        const results = await searchInventoryItems(searchTerm,user.email);
-        console.log('===Search results:',results?.length,'items===');
+        const results = await searchInventoryItems(searchTerm, user.email);
+        console.log('=== Search results:', results?.length, 'items ===');
         
         setInventoryItems(results || []);
       } catch (error) {
-        console.error('Error searching items:',error);
+        console.error('Error searching items:', error);
         setError('Failed to search items');
       } finally {
         setIsLoading(false);
       }
     };
 
-    const debounceSearch = setTimeout(searchItems,300);
+    const debounceSearch = setTimeout(searchItems, 300);
     return () => clearTimeout(debounceSearch);
-  },[searchTerm,user?.email,refreshTrigger]); // Add refreshTrigger here too
+  }, [searchTerm, user?.email]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -257,7 +242,7 @@ export default function Inventory() {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
-      return new Date(dateString).toLocaleDateString('en-GB',{
+      return new Date(dateString).toLocaleDateString('en-GB', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -268,7 +253,7 @@ export default function Inventory() {
   };
 
   const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-GB',{
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: 'GBP',
       minimumFractionDigits: 2,
@@ -296,8 +281,8 @@ export default function Inventory() {
   return (
     <div>
       <motion.div
-        initial={{opacity: 0,y: 20}}
-        animate={{opacity: 1,y: 0}}
+        initial={{opacity: 0, y: 20}}
+        animate={{opacity: 1, y: 0}}
         transition={{duration: 0.5}}
       >
         {/* Header */}
@@ -340,8 +325,8 @@ export default function Inventory() {
         {/* Success Message */}
         {successMessage && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
             className="mb-4 rounded-md bg-green-900/50 p-4"
           >
             <div className="text-sm text-green-200">{successMessage}</div>
@@ -351,8 +336,8 @@ export default function Inventory() {
         {/* Error Message */}
         {error && (
           <motion.div
-            initial={{opacity: 0,y: -10}}
-            animate={{opacity: 1,y: 0}}
+            initial={{opacity: 0, y: -10}}
+            animate={{opacity: 1, y: 0}}
             className="mb-4 rounded-md bg-red-900/50 p-4"
           >
             <div className="text-sm text-red-200">{error}</div>
@@ -360,10 +345,7 @@ export default function Inventory() {
         )}
 
         {/* Usage Limit Gate for Inventory */}
-        <UsageLimitGate
-          limitType="inventoryItems"
-          currentUsage={inventoryItems.length}
-        >
+        <UsageLimitGate limitType="inventoryItems" currentUsage={inventoryItems.length}>
           {/* Search */}
           <div className="mb-6">
             <div className="relative rounded-md shadow-sm">
@@ -394,7 +376,8 @@ export default function Inventory() {
               <p className="text-gray-400 text-sm mb-6">
                 {searchTerm
                   ? 'Try adjusting your search terms'
-                  : 'Add some items to get started with your inventory'}
+                  : 'Add some items to get started with your inventory'
+                }
               </p>
               {!searchTerm && (
                 <div className="flex flex-col sm:flex-row justify-center gap-3">

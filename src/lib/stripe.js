@@ -59,16 +59,16 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 100 manual inventory entries',
       'Basic dashboard',
-      'Manual item entry only',
-      'No receipt scanning',
-      'No Excel imports'
+      '1 receipt scan per month',
+      'Manual item entry',
+      'Basic reporting'
     ],
     limits: {
-      inventoryItems: 100, // Limited to 100 manual entries only
-      receiptScans: 0, // No receipt scanning
+      inventoryItems: 100, // Limited to 100 manual entries
+      receiptScans: 1, // 1 receipt scan per month
       excelImport: 0, // No Excel imports
       teamMembers: 1,
-      features: ['basic_dashboard', 'manual_entry']
+      features: ['basic_dashboard', 'manual_entry', 'receipt_scanner_limited']
     }
   },
   professional: {
@@ -91,7 +91,7 @@ export const SUBSCRIPTION_PLANS = {
       teamMembers: 1,
       features: [
         'receipt_scanner',
-        'excel_importer', 
+        'excel_importer',
         'tax_exports',
         'unlimited_items'
       ]
