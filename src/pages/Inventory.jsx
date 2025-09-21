@@ -276,12 +276,12 @@ export default function Inventory() {
   };
 
   return (
-    <div className="h-full">
+    <div className="h-full overflow-hidden">
       <motion.div
         initial={{opacity: 0,y: 20}}
         animate={{opacity: 1,y: 0}}
         transition={{duration: 0.5}}
-        className="h-full flex flex-col"
+        className="h-full flex flex-col overflow-hidden"
       >
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 flex-shrink-0">
@@ -344,7 +344,7 @@ export default function Inventory() {
 
         {/* Usage Limit Gate for Inventory */}
         <UsageLimitGate limitType="inventoryItems" currentUsage={inventoryItems.length}>
-          <div className="flex flex-col h-full min-h-0">
+          <div className="flex flex-col h-full min-h-0 overflow-hidden">
             {/* Search */}
             <div className="mb-6 flex-shrink-0">
               <div className="relative rounded-md shadow-sm">
@@ -362,7 +362,7 @@ export default function Inventory() {
             </div>
 
             {/* Content Area - Fixed height to prevent scrolling */}
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 overflow-hidden">
               {isLoading ? (
                 <div className="flex items-center justify-center h-64">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -478,118 +478,114 @@ export default function Inventory() {
                     ))}
                   </div>
 
-                  {/* Desktop Table View - Fixed height container */}
-                  <div className="hidden lg:block h-full">
-                    <div className="h-full flex flex-col bg-gray-800 rounded-lg shadow overflow-hidden">
-                      {/* Table Header - Fixed */}
-                      <div className="flex-shrink-0 bg-gray-800">
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full">
-                            <thead className="bg-gray-700">
-                              <tr>
-                                <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white sm:pl-6 min-w-[150px]">
-                                  Name
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
-                                  Category
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[80px]">
-                                  Quantity
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
-                                  Unit Price
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
-                                  Total Value
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
-                                  Status
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[120px]">
-                                  <div className="flex items-center">
-                                    <RiCalendarLine className="h-4 w-4 mr-1" />
-                                    Date Added
+                  {/* Desktop Table View - Completely contained */}
+                  <div className="hidden lg:block h-full w-full overflow-hidden">
+                    <div className="h-full w-full flex flex-col bg-gray-800 rounded-lg shadow">
+                      {/* Table Container - Fixed height and width */}
+                      <div className="flex-1 min-h-0 w-full overflow-auto">
+                        <table className="w-full table-fixed">
+                          <thead className="bg-gray-700 sticky top-0 z-10">
+                            <tr>
+                              <th className="w-32 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
+                                Name
+                              </th>
+                              <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Category
+                              </th>
+                              <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Qty
+                              </th>
+                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Price
+                              </th>
+                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Total
+                              </th>
+                              <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Status
+                              </th>
+                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                <div className="flex items-center">
+                                  <RiCalendarLine className="h-4 w-4 mr-1" />
+                                  Date
+                                </div>
+                              </th>
+                              <th className="w-32 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Description
+                              </th>
+                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-700 bg-gray-800">
+                            {inventoryItems.map((item) => (
+                              <motion.tr
+                                key={item.id}
+                                initial={{opacity: 0}}
+                                animate={{opacity: 1}}
+                                transition={{duration: 0.3}}
+                              >
+                                <td className="w-32 py-4 pl-4 pr-3 text-sm font-medium text-white">
+                                  <div className="truncate" title={item.name}>
+                                    {item.name}
                                   </div>
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[200px]">
-                                  Description
-                                </th>
-                                <th className="px-3 py-3.5 text-left text-sm font-semibold text-white min-w-[100px]">
-                                  Actions
-                                </th>
-                              </tr>
-                            </thead>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Table Body - Scrollable */}
-                      <div className="flex-1 min-h-0 overflow-y-auto">
-                        <div className="overflow-x-auto h-full">
-                          <table className="min-w-full">
-                            <tbody className="divide-y divide-gray-700 bg-gray-800">
-                              {inventoryItems.map((item) => (
-                                <motion.tr
-                                  key={item.id}
-                                  initial={{opacity: 0}}
-                                  animate={{opacity: 1}}
-                                  transition={{duration: 0.3}}
-                                >
-                                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-6">
-                                    <div className="max-w-[150px] truncate" title={item.name}>
-                                      {item.name}
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300">
-                                    <div className="max-w-[120px] truncate" title={item.category}>
-                                      {item.category}
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300">
-                                    {item.quantity}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300">
+                                </td>
+                                <td className="w-24 px-3 py-4 text-sm text-gray-300">
+                                  <div className="truncate" title={item.category}>
+                                    {item.category}
+                                  </div>
+                                </td>
+                                <td className="w-16 px-3 py-4 text-sm text-gray-300">
+                                  {item.quantity}
+                                </td>
+                                <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                                  <div className="truncate">
                                     {formatCurrency(item.unitPrice)}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300 font-medium">
+                                  </div>
+                                </td>
+                                <td className="w-20 px-3 py-4 text-sm text-gray-300 font-medium">
+                                  <div className="truncate">
                                     {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                    <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
-                                      {item.status}
-                                    </span>
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-300">
+                                  </div>
+                                </td>
+                                <td className="w-24 px-3 py-4 text-sm">
+                                  <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                                <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                                  <div className="truncate">
                                     {formatDate(item.dateAdded)}
-                                  </td>
-                                  <td className="px-3 py-4 text-sm text-gray-300">
-                                    <div className="max-w-[200px] truncate" title={item.description || 'No description'}>
-                                      {item.description || 'No description'}
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                    <div className="flex space-x-2">
-                                      <button
-                                        onClick={() => handleEditItem(item)}
-                                        className="text-blue-400 hover:text-blue-300"
-                                        title="Edit item"
-                                      >
-                                        <RiEditLine className="h-4 w-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteItem(item)}
-                                        className="text-red-400 hover:text-red-300"
-                                        title="Delete item"
-                                      >
-                                        <RiDeleteBin6Line className="h-4 w-4" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </motion.tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                                  </div>
+                                </td>
+                                <td className="w-32 px-3 py-4 text-sm text-gray-300">
+                                  <div className="truncate" title={item.description || 'No description'}>
+                                    {item.description || 'No description'}
+                                  </div>
+                                </td>
+                                <td className="w-20 px-3 py-4 text-sm">
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => handleEditItem(item)}
+                                      className="text-blue-400 hover:text-blue-300"
+                                      title="Edit item"
+                                    >
+                                      <RiEditLine className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteItem(item)}
+                                      className="text-red-400 hover:text-red-300"
+                                      title="Delete item"
+                                    >
+                                      <RiDeleteBin6Line className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </motion.tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
