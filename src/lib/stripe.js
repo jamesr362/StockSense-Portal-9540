@@ -48,7 +48,7 @@ export const buildStripeReturnUrls = (planId) => {
   };
 };
 
-// Subscription plans configuration - UPDATED WITH FREE PLAN LIMITS
+// Subscription plans configuration - ENFORCING FREE PLAN 100 ITEM LIMIT
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -60,15 +60,16 @@ export const SUBSCRIPTION_PLANS = {
       'Up to 100 manual inventory entries',
       'Basic dashboard',
       '1 receipt scan per month',
+      '1 Excel import per month',
       'Manual item entry',
       'Basic reporting'
     ],
     limits: {
-      inventoryItems: 100, // Limited to 100 manual entries
+      inventoryItems: 100, // CRITICAL: Enforced 100 item limit for Free plan
       receiptScans: 1, // 1 receipt scan per month
-      excelImport: 0, // No Excel imports
+      excelImport: 1, // 1 Excel import per month
       teamMembers: 1,
-      features: ['basic_dashboard', 'manual_entry', 'receipt_scanner_limited']
+      features: ['basic_dashboard', 'manual_entry', 'receipt_scanner_limited', 'excel_importer_limited']
     }
   },
   professional: {
@@ -76,7 +77,6 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Professional',
     price: 9.99,
     priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
-    // Updated with the new Stripe payment link you provided
     paymentLink: 'https://buy.stripe.com/test_9B6fZh4xneOXcdN4zCcjS07',
     features: [
       'Unlimited inventory items',
