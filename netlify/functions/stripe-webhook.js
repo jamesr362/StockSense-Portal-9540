@@ -1,39 +1,67 @@
-exports.handler = async (event) => {
+import { createClient } from "@supabase/supabase-js";
+import Stripe from "stripe";
+
+// Initialize Stripe
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2025-06-30.basil",
+});
+
+// Initialize Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
+
+export const handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
+  const sig = event.headers["stripe-signature"];
   let stripeEvent;
 
   try {
-    stripeEvent = JSON.parse(event.body);
+    stripeEvent = stripe.webhooks.constructEvent(
+      event.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
   } catch (err) {
-    console.error("❌ Error parsing webhook JSON:", err);
-    return { statusCode: 400, body: "Invalid JSON" };
+    console.error("❌ Webhook signature verification failed.", err.message);
+    return { statusCode: 400, body: `Webhook Error: ${err.message}` };
   }
 
-  const eventType = stripeEvent.type;
-  const data = stripeEvent.data.object;
+  console.log("📦 Stripe webhook event received:", stripeEvent.type);
 
-  // Only handle subscription checkout events
-  if (eventType === "checkout.session.completed") {
-    // Your test subscription details
-    const customerId = data.customer || "cus_T48nyVPJbPVEI3";
-    const subscriptionId = data.subscription || 
-"sub_1S80VoEw1FLYKy8hAJdI5t1G";
-    const email = data.customer_details?.email || data.customer_email || 
-"james.rogan@hotmail.com";
+  switch (stripeEvent.type) {
+    case "checkout.session.completed":
+      const session = stripeEvent.data.object;
 
-    console.log("✅ Checkout Session Completed!");
-    console.log("Customer ID:", customerId);
-    console.log("Subscription ID:", subscriptionId);
-    console.log("Email:", email);
+      console.log("💳 Checkout session completed:", session);
 
-    // Example: activating subscription
-    console.log(`Activating subscription for ${email} (Customer ID: 
-${customerId}, Subscription ID: ${subscriptionId})`);
-  } else {
-    console.log(`Ignored event type: ${eventType}`);
+      // Insert subscription into Supabase
+      const { data, error } = await supabase.from("subscriptions").insert([
+        {
+          customer_id: session.customer,
+          subscription_id: session.subscription,
+          email: session.customer_details?.email || null,
+          name: session.customer_details?.name || null,
+          amount: session.amount_total,
+          currency: session.currency,
+          status: "active",
+        },
+      ]);
+
+      if (error) {
+        console.error("❌ Supabase insert error:", error.message);
+        return { statusCode: 500, body: "Database insert failed" };
+      }
+
+      console.log("✅ Subscription saved in Supabase:", data);
+      break;
+
+    default:
+      console.log(`⚠️ Unhandled event type: ${stripeEvent.type}`);
   }
 
   return {
@@ -41,4 +69,3 @@ ${customerId}, Subscription ID: ${subscriptionId})`);
     body: "✅ Webhook received",
   };
 };
-
