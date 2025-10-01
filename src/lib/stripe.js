@@ -48,7 +48,7 @@ export const buildStripeReturnUrls = (planId) => {
   };
 };
 
-// Subscription plans configuration - ENFORCING FREE PLAN 100 ITEM LIMIT
+// Subscription plans configuration - ENFORCED FREE PLAN LIMITS
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -65,7 +65,7 @@ export const SUBSCRIPTION_PLANS = {
       'Basic reporting'
     ],
     limits: {
-      inventoryItems: 100, // CRITICAL: Enforced 100 item limit for Free plan
+      inventoryItems: 100, // STRICT LIMIT: Only 100 manual entries allowed
       receiptScans: 1, // 1 receipt scan per month
       excelImport: 1, // 1 Excel import per month
       teamMembers: 1,
@@ -155,6 +155,34 @@ export const hasReachedLimit = (userPlan, limitType, currentUsage) => {
   if (limit === -1) return false; // unlimited
   if (limit === 0) return true; // not available on this plan
   return currentUsage >= limit;
+};
+
+// STRICT LIMIT CHECKER FOR FREE USERS
+export const checkInventoryLimit = (userPlan, currentCount) => {
+  const limits = getUserPlanLimits(userPlan);
+  const inventoryLimit = limits.inventoryItems;
+  
+  // For unlimited plans (Professional)
+  if (inventoryLimit === -1) {
+    return {
+      allowed: true,
+      unlimited: true,
+      limit: -1,
+      remaining: -1
+    };
+  }
+  
+  // For free plan - STRICT enforcement
+  const allowed = currentCount < inventoryLimit;
+  return {
+    allowed,
+    unlimited: false,
+    limit: inventoryLimit,
+    remaining: Math.max(0, inventoryLimit - currentCount),
+    usage: currentCount,
+    usagePercentage: (currentCount / inventoryLimit) * 100,
+    reason: allowed ? null : `You have reached your ${inventoryLimit} item limit for the Free plan. Upgrade to Professional for unlimited inventory items.`
+  };
 };
 
 // Plan comparison helper
