@@ -1,6 +1,6 @@
 import {useState,useRef,useCallback} from 'react';
 import {motion,AnimatePresence} from 'framer-motion';
-import {RiCameraLine,RiCloseLine,RiScanLine,RiImageLine,RiRefreshLine,RiCheckLine,RiAlertLine,RiSettings3Line,RiEditLine,RiFlashFill} from 'react-icons/ri';
+import {RiCameraLine,RiCloseLine,RiScanLine,RiImageLine,RiRefreshLine,RiCheckLine,RiAlertLine,RiSettings3Line,RiEditLine,RiLightbulbLine} from 'react-icons/ri';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
 
@@ -442,7 +442,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <div className="flex items-center">
-                <RiFlashFill className="h-6 w-6 text-primary-400 mr-2" />
+                <RiLightbulbLine className="h-6 w-6 text-primary-400 mr-2" />
                 <h3 className="text-lg font-medium text-white">Quick Receipt Scanner</h3>
                 <span className="ml-2 px-2 py-1 bg-green-600 text-white text-xs rounded-full">
                   Speed Optimized
@@ -627,7 +627,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                           disabled={isScanning}
                           className="flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <RiFlashFill className="h-5 w-5 mr-2" />
+                          <RiLightbulbLine className="h-5 w-5 mr-2" />
                           Quick Capture
                         </button>
                       </div>
@@ -691,7 +691,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                   {isScanning && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-center">
-                        <RiFlashFill className="h-6 w-6 text-primary-400 mr-2 animate-pulse" />
+                        <RiLightbulbLine className="h-6 w-6 text-primary-400 mr-2 animate-pulse" />
                         <span className="text-white">
                           {scanSettings.quickMode 
                             ? 'Quick scanning in progress...' 
