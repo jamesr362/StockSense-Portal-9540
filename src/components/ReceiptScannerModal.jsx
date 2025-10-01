@@ -1,6 +1,6 @@
 import {useState,useRef,useCallback} from 'react';
 import {motion,AnimatePresence} from 'framer-motion';
-import {RiCameraLine,RiCloseLine,RiScanLine,RiImageLine,RiRefreshLine,RiCheckLine,RiAlertLine,RiSettings3Line,RiEditLine} from 'react-icons/ri';
+import {RiCameraLine,RiCloseLine,RiScanLine,RiImageLine,RiRefreshLine,RiCheckLine,RiAlertLine,RiSettings3Line,RiEditLine,RiFlashFill} from 'react-icons/ri';
 import Webcam from 'react-webcam';
 import Tesseract from 'tesseract.js';
 
@@ -17,134 +17,62 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
   const [scanSettings,setScanSettings]=useState({
     language: 'eng',
     enhanceImage: true,
-    multiPass: true,
-    aggressiveParsing: true,
+    quickMode: true, // NEW: Quick mode for faster scanning
+    aggressiveParsing: false, // Disabled by default for speed
     minPrice: 0.01,
     maxPrice: 2000,
-    minConfidence: 30,
-    debugMode: true
+    smartFiltering: true // NEW: Smarter filtering to reduce false positives
   });
   const [showSettings,setShowSettings]=useState(false);
   const [editingItems,setEditingItems]=useState(false);
-  const [debugInfo,setDebugInfo]=useState([]);
 
   const webcamRef=useRef(null);
   const fileInputRef=useRef(null);
 
-  // Ultra-enhanced video constraints
+  // Optimized video constraints - balanced for speed and quality
   const videoConstraints={
-    width: {min: 1280,ideal: 1920,max: 4096},
-    height: {min: 720,ideal: 1080,max: 2160},
+    width: {min: 720,ideal: 1280,max: 1920}, // Reduced max resolution for speed
+    height: {min: 480,ideal: 720,max: 1080},
     facingMode: {ideal: 'environment'},
     focusMode: 'continuous',
-    whiteBalanceMode: 'continuous',
-    exposureMode: 'continuous'
+    whiteBalanceMode: 'continuous'
   };
 
-  // Advanced image preprocessing with multiple enhancement levels
-  const preprocessImage=async (imageSrc,enhanceLevel='standard')=> {
+  // Fast image preprocessing - optimized for speed
+  const preprocessImageFast=async (imageSrc)=> {
     return new Promise((resolve)=> {
       const img=new Image();
       img.onload=()=> {
         const canvas=document.createElement('canvas');
         const ctx=canvas.getContext('2d');
         
-        // Increase canvas size significantly for better OCR accuracy
-        const scale=enhanceLevel==='aggressive' ? 3 : 2;
+        // Moderate scaling for balance of speed and accuracy
+        const scale=1.2;
         canvas.width=img.width * scale;
         canvas.height=img.height * scale;
-
-        // Enable high-quality image smoothing
+        
         ctx.imageSmoothingEnabled=true;
-        ctx.imageSmoothingQuality='high';
-
-        // Draw scaled image
+        ctx.imageSmoothingQuality='medium'; // Reduced from 'high' for speed
         ctx.drawImage(img,0,0,canvas.width,canvas.height);
-
+        
         if (scanSettings.enhanceImage) {
           const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
           const data=imageData.data;
-
-          // Advanced multi-step image enhancement
+          
+          // Fast contrast enhancement
           for (let i=0;i < data.length;i +=4) {
-            // Convert to grayscale with weighted formula for better text recognition
             const gray=data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            const enhanced=Math.min(255,Math.max(0,gray * 1.3 + 20)); // Simple enhancement
             
-            // Apply gamma correction for better contrast
-            const gamma=enhanceLevel==='aggressive' ? 1.4 : 1.2;
-            let corrected=255 * Math.pow(gray / 255,1 / gamma);
-            
-            // Enhanced contrast and brightness specifically for text
-            const contrast=enhanceLevel==='aggressive' ? 2.2 : 1.8;
-            const brightness=enhanceLevel==='aggressive' ? 30 : 20;
-            let enhanced=(corrected - 128) * contrast + 128 + brightness;
-            
-            // Adaptive thresholding with local context
-            const x=(i / 4) % canvas.width;
-            const y=Math.floor((i / 4) / canvas.width);
-            
-            // Calculate local average for adaptive thresholding
-            let localSum=0;
-            let count=0;
-            const radius=enhanceLevel==='aggressive' ? 5 : 3;
-            
-            for (let dy=-radius;dy <=radius;dy++) {
-              for (let dx=-radius;dx <=radius;dx++) {
-                const nx=x + dx;
-                const ny=y + dy;
-                if (nx >=0 && nx < canvas.width && ny >=0 && ny < canvas.height) {
-                  const idx=((ny * canvas.width + nx) * 4);
-                  if (idx < data.length) {
-                    localSum +=data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
-                    count++;
-                  }
-                }
-              }
-            }
-            
-            const localAverage=count > 0 ? localSum / count : gray;
-            const threshold=localAverage * 0.85; // Adaptive threshold
-            
-            // Apply binary threshold for text clarity
-            enhanced=enhanced > threshold ? 255 : 0;
-            
-            // Apply morphological operations for text enhancement
-            if (enhanceLevel==='aggressive') {
-              // Dilation followed by erosion (closing) to connect text parts
-              const kernelSize=1;
-              let dilated=enhanced;
-              
-              // Simple dilation
-              for (let ky=-kernelSize;ky <=kernelSize;ky++) {
-                for (let kx=-kernelSize;kx <=kernelSize;kx++) {
-                  const nx=x + kx;
-                  const ny=y + ky;
-                  if (nx >=0 && nx < canvas.width && ny >=0 && ny < canvas.height) {
-                    const kidx=((ny * canvas.width + nx) * 4);
-                    if (kidx < data.length) {
-                      const kval=data[kidx] * 0.299 + data[kidx + 1] * 0.587 + data[kidx + 2] * 0.114;
-                      if (kval > threshold) {
-                        dilated=255;
-                        break;
-                      }
-                    }
-                  }
-                }
-                if (dilated===255) break;
-              }
-              enhanced=dilated;
-            }
-
-            data[i]=enhanced;     // Red
-            data[i + 1]=enhanced; // Green
-            data[i + 2]=enhanced; // Blue
-            // Alpha remains unchanged
+            data[i]=enhanced;
+            data[i + 1]=enhanced;
+            data[i + 2]=enhanced;
           }
-
+          
           ctx.putImageData(imageData,0,0);
         }
-
-        resolve(canvas.toDataURL('image/jpeg',0.98));
+        
+        resolve(canvas.toDataURL('image/jpeg',0.85)); // Reduced quality for speed
       };
       img.src=imageSrc;
     });
@@ -153,7 +81,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
   const capture=useCallback(async ()=> {
     const imageSrc=webcamRef.current.getScreenshot();
     setCapturedImage(imageSrc);
-    processReceipt(imageSrc);
+    processReceiptFast(imageSrc);
   },[webcamRef]);
 
   const handleFileUpload=async (event)=> {
@@ -163,353 +91,200 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
       reader.onload=async (e)=> {
         const imageSrc=e.target.result;
         setCapturedImage(imageSrc);
-        processReceipt(imageSrc);
+        processReceiptFast(imageSrc);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const processReceipt=async (imageSrc)=> {
+  // Optimized OCR processing for speed
+  const processReceiptFast=async (imageSrc)=> {
     setIsScanning(true);
     setScanStatus('scanning');
     setScanProgress(0);
     setErrorMessage('');
     setRawOcrText('');
-    setDebugInfo([]);
 
     try {
-      let allText='';
-      let bestResult=null;
-      let maxConfidence=0;
-      const debugSteps=[];
-
-      // Multi-pass OCR with different configurations for maximum accuracy
-      if (scanSettings.multiPass) {
-        const passes=[
-          {
-            enhance: 'none',
-            psm: Tesseract.PSM.AUTO,
-            name: 'Standard Auto Detection'
-          },
-          {
-            enhance: 'standard',
-            psm: Tesseract.PSM.SINGLE_BLOCK,
-            name: 'Single Block Enhanced'
-          },
-          {
-            enhance: 'standard',
-            psm: Tesseract.PSM.SINGLE_COLUMN,
-            name: 'Single Column Enhanced'
-          },
-          {
-            enhance: 'aggressive',
-            psm: Tesseract.PSM.SPARSE_TEXT,
-            name: 'Aggressive Sparse Text'
-          },
-          {
-            enhance: 'aggressive',
-            psm: Tesseract.PSM.SINGLE_WORD,
-            name: 'Aggressive Single Word'
-          }
-        ];
-
-        for (let i=0;i < passes.length;i++) {
-          const pass=passes[i];
-          setScanProgress(Math.round((i / passes.length) * 80));
-          
-          try {
-            debugSteps.push(`Starting ${pass.name}...`);
-            
-            const processedImage=pass.enhance !=='none' ? 
-              await preprocessImage(imageSrc,pass.enhance) : imageSrc;
-
-            const result=await Tesseract.recognize(
-              processedImage,
-              scanSettings.language,
-              {
-                logger: m=> {
-                  if (m.status==='recognizing text') {
-                    const passProgress=(i / passes.length) * 80 + (m.progress * 20 / passes.length);
-                    setScanProgress(Math.round(passProgress));
-                  }
-                },
-                tessedit_pageseg_mode: pass.psm,
-                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,£$€¥₹@#%&*()x×X -+=[]{}|\\:";\'<>?/_ \n\t',
-                preserve_interword_spaces: '1',
-                tessedit_do_invert: '0',
-                classify_bln_numeric_mode: '0',
-                tessedit_write_images: '0'
-              }
-            );
-
-            allText +=`\n---${pass.name.toUpperCase()}---\n${result.data.text}\n`;
-            debugSteps.push(`${pass.name} confidence: ${result.data.confidence.toFixed(1)}%`);
-
-            // Check if this pass has better confidence
-            if (result.data.confidence > maxConfidence) {
-              maxConfidence=result.data.confidence;
-              bestResult=result.data.text;
-              debugSteps.push(`New best result from ${pass.name}`);
-            }
-          } catch (passError) {
-            console.warn(`OCR pass ${i + 1} failed:`,passError);
-            debugSteps.push(`${pass.name} failed: ${passError.message}`);
-          }
-        }
-      } else {
-        // Single pass OCR
-        const processedImage=scanSettings.enhanceImage ? 
-          await preprocessImage(imageSrc,'standard') : imageSrc;
-
+      let ocrText='';
+      
+      if (scanSettings.quickMode) {
+        // Single-pass OCR optimized for speed
+        setScanProgress(20);
+        
+        const processedImage=scanSettings.enhanceImage 
+          ? await preprocessImageFast(imageSrc) 
+          : imageSrc;
+        
+        setScanProgress(40);
+        
         const result=await Tesseract.recognize(
           processedImage,
           scanSettings.language,
           {
             logger: m=> {
               if (m.status==='recognizing text') {
-                setScanProgress(Math.round(m.progress * 80));
+                setScanProgress(40 + (m.progress * 50));
               }
             },
             tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,£$€¥₹@#%&*()x×X -+=[]{}|\\:";\'<>?/_ \n\t'
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,£$€¥₹@#%&*()x×X -+=[]{}|\\:";\'<>?/_ \n\t',
+            preserve_interword_spaces: '1',
+            tessedit_do_invert: '0'
           }
         );
-
-        allText=result.data.text;
-        bestResult=result.data.text;
-        maxConfidence=result.data.confidence;
+        
+        ocrText=result.data.text;
+      } else {
+        // Reduced multi-pass for better accuracy (only 2 passes instead of 5)
+        const passes=[
+          {enhance: false,psm: Tesseract.PSM.AUTO},
+          {enhance: true,psm: Tesseract.PSM.SINGLE_BLOCK}
+        ];
+        
+        for (let i=0;i < passes.length;i++) {
+          const pass=passes[i];
+          setScanProgress(Math.round((i / passes.length) * 80));
+          
+          try {
+            const processedImage=pass.enhance 
+              ? await preprocessImageFast(imageSrc) 
+              : imageSrc;
+            
+            const result=await Tesseract.recognize(
+              processedImage,
+              scanSettings.language,
+              {
+                logger: m=> {
+                  if (m.status==='recognizing text') {
+                    const passProgress=(i / passes.length) * 80 + (m.progress * 40 / passes.length);
+                    setScanProgress(Math.round(passProgress));
+                  }
+                },
+                tessedit_pageseg_mode: pass.psm,
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,£$€¥₹@#%&*()x×X -+=[]{}|\\:";\'<>?/_ \n\t',
+                preserve_interword_spaces: '1'
+              }
+            );
+            
+            ocrText += result.data.text + '\n';
+          } catch (passError) {
+            console.warn(`OCR pass ${i + 1} failed:`,passError);
+          }
+        }
       }
-
+      
       setScanProgress(90);
-      setRawOcrText(allText);
-      setDebugInfo(debugSteps);
-
-      // Use the best result for parsing with enhanced algorithm
-      const items=parseReceiptTextUltraEnhanced(bestResult || allText);
+      setRawOcrText(ocrText);
+      
+      // Fast text parsing
+      const items=parseReceiptTextFast(ocrText);
       
       setScanProgress(100);
-
+      
       if (items.length > 0) {
         setExtractedItems(items);
         setScanStatus('success');
       } else {
         setScanStatus('error');
-        setErrorMessage(`No items found. Best OCR confidence: ${maxConfidence.toFixed(1)}%. Try adjusting lighting or image angle.`);
+        setErrorMessage('No items found. Try improving lighting or image clarity.');
       }
     } catch (error) {
       console.error('OCR Error:',error);
       setScanStatus('error');
-      setErrorMessage('OCR processing failed. Please try with a clearer image or adjust settings.');
+      setErrorMessage('OCR processing failed. Please try with a clearer image.');
     } finally {
       setIsScanning(false);
       setScanProgress(0);
     }
   };
 
-  const parseReceiptTextUltraEnhanced=(text)=> {
-    const lines=text.split('\n').map(line=> line.trim()).filter(line=> line.length > 0);
+  // Optimized text parsing for speed and accuracy
+  const parseReceiptTextFast=(text)=> {
+    const lines=text.split('\n')
+      .map(line=> line.trim())
+      .filter(line=> line.length > 1 && line.length < 80); // Quick length filter
+    
     const items=[];
-    const debugLog=[];
-
-    debugLog.push(`Processing ${lines.length} lines of text`);
-
-    // Ultra-comprehensive price patterns with more variations
-    const pricePatterns=[
-      // Standard currency formats
+    
+    // Fast price extraction patterns - most common first
+    const quickPricePatterns=[
       /([£$€¥₹])\s*(\d+[.,]\d{2})/g,
-      /(\d+[.,]\d{2})\s*([£$€¥₹])/g,
-      // Decimal with various separators
-      /(\d+[.,]\d{1,3})\b/g,
-      // Price ranges and special formats
-      /(\d+\.\d{2})/g,
-      /(\d+,\d{2})/g,
-      // Multi-digit prices
-      /(\d{1,4}[.,]\d{2})/g,
-      // Prices with spaces
-      /(\d+)\s*[.,]\s*(\d{2})/g
+      /(\d+[.,]\d{2})\s*([£$€¥₹]?)/g,
+      /(\d+\.\d{2})/g
     ];
-
-    // Enhanced item patterns with quantity detection
-    const itemPatterns=[
-      // Standard item + price patterns
-      /^([A-Za-z][\w\s&'.-]{1,50})\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})\s*$/,
-      /^(.{2,50}?)\s+(\d+[.,]\d{2})$/,
-      /^([A-Za-z][\w\s&'.-]{1,50})\s*([£$€¥₹]\d+[.,]\d{1,3})$/,
-      
-      // Quantity patterns with x, X, ×, *
-      /^(\d+)\s*[xX×*]\s*(.{2,50}?)\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})\s*$/,
-      /^(.{2,50}?)\s+(\d+)\s*[xX×*]\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})\s*$/,
-      /^(\d+)\s*[xX×*]\s*([£$€¥₹]?\s*\d+[.,]\d{1,3})\s+(.{2,50}?)$/,
-      
-      // Weight patterns
-      /^(.{2,50}?)\s+(\d+[.,]?\d*)\s*(?:kg|g|lb|oz)\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})$/,
-      
-      // Item at beginning of line, price at end
-      /^([A-Za-z][\w\s&'.-]{1,50}).*?([£$€¥₹]?\s*\d+[.,]\d{1,3})\s*$/,
-      
-      // Multi-line patterns (item name only)
-      /^([A-Za-z][\w\s&'.-]{1,50})$/
+    
+    // Fast item patterns - prioritized by effectiveness
+    const quickItemPatterns=[
+      /^([A-Za-z][\w\s&'.-]{1,40})\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})\s*$/,
+      /^(.{2,40}?)\s+(\d+[.,]\d{2})$/,
+      /^(\d+)\s*[xX×*]\s*(.{2,40}?)\s+([£$€¥₹]?\s*\d+[.,]\d{1,3})$/
     ];
-
-    // Enhanced skip patterns - more comprehensive
+    
+    // Streamlined skip patterns - only essential ones
     const skipPatterns=[
-      // Totals and calculations
-      /(?:sub)?total\s*[:=]?/i,
-      /grand\s*total/i,
-      /final\s*total/i,
-      /tax\s*[:=]?/i,
-      /vat\s*[:=]?/i,
-      /gst\s*[:=]?/i,
-      /discount\s*[:=]?/i,
-      /change\s*[:=]?/i,
-      /cash\s*[:=]?/i,
-      /card\s*[:=]?/i,
-      /credit/i,
-      /debit/i,
-      
-      // Receipt metadata
-      /receipt/i,
-      /invoice/i,
-      /thank\s*you/i,
-      /welcome/i,
-      /store/i,
-      /shop/i,
-      /date\s*[:=]?/i,
-      /time\s*[:=]?/i,
-      /till/i,
-      /operator/i,
-      /transaction/i,
-      
-      // Common non-items
-      /qty/i,
-      /quantity/i,
-      /each/i,
-      /per/i,
-      /unit/i,
-      /sku/i,
-      /barcode/i,
-      
-      // Symbols and separators
-      /^\*+$/,
-      /^-+$/,
-      /^=+$/,
-      /^\s*$/,
-      /^[.]+$/,
-      
-      // Opening hours and policies
-      /open/i,
-      /hours/i,
-      /policy/i,
-      /return/i
+      /total|tax|vat|change|cash|card|receipt|thank|welcome|date|time/i,
+      /^\*+$|^-+$|^=+$/,
+      /^\d+$/
     ];
-
-    // Process lines with multiple strategies
+    
+    // Fast processing loop
     for (let i=0;i < lines.length;i++) {
       const line=lines[i];
-      debugLog.push(`Processing line ${i + 1}: "${line}"`);
-
-      // Skip obvious non-items
-      if (skipPatterns.some(pattern=> pattern.test(line)) || 
-          line.length < 2 || 
-          line.length > 100) {
-        debugLog.push(`Skipped line ${i + 1}: matched skip pattern or invalid length`);
+      
+      // Quick skip check
+      if (skipPatterns.some(pattern=> pattern.test(line))) {
         continue;
       }
-
-      // Strategy 1: Direct item + price matching with quantity detection
+      
+      // Try direct matching first (fastest)
       let matched=false;
-      for (const pattern of itemPatterns) {
+      for (const pattern of quickItemPatterns) {
         const match=line.match(pattern);
-        if (match) {
-          debugLog.push(`Line ${i + 1} matched pattern: ${pattern}`);
+        if (match && match.length >= 3) {
+          let itemName,priceStr,quantity=1;
           
-          if (match.length >=3) {
-            let itemName,priceStr,quantity=1;
-            
-            // Check if this is a quantity pattern
-            if (pattern.source.includes('[xX×*]')) {
-              if (match.length >=4) {
-                // Pattern: quantity x item price or item quantity x price
-                const [,first,second,third]=match;
-                if (/^\d+$/.test(first)) {
-                  // quantity x item price
-                  quantity=parseInt(first);
-                  itemName=second;
-                  priceStr=third;
-                } else if (/^\d+$/.test(second)) {
-                  // item quantity x price
-                  itemName=first;
-                  quantity=parseInt(second);
-                  priceStr=third;
-                } else {
-                  // quantity x price item
-                  quantity=parseInt(first);
-                  priceStr=second;
-                  itemName=third;
-                }
-              }
-            } else {
-              // Regular item + price pattern
-              const [,name,price]=match;
-              itemName=name;
-              priceStr=price;
-            }
-            
-            const price=extractPrice(priceStr);
-            debugLog.push(`Extracted: name="${itemName}", price=${price}, quantity=${quantity}`);
-            
-            if (isValidPrice(price) && isValidItemName(itemName)) {
-              const unitPrice=quantity > 1 ? price / quantity : price;
-              const item=createInventoryItem(itemName,unitPrice,line);
-              item.quantity=quantity;
-              item.totalPrice=price;
-              items.push(item);
-              matched=true;
-              debugLog.push(`Added item: ${itemName} (${quantity}x ${unitPrice.toFixed(2)} = ${price.toFixed(2)})`);
-              break;
-            }
+          if (match.length >= 4) {
+            // Quantity pattern
+            const [,qty,name,price]=match;
+            quantity=parseInt(qty) || 1;
+            itemName=name;
+            priceStr=price;
+          } else {
+            // Regular pattern
+            const [,name,price]=match;
+            itemName=name;
+            priceStr=price;
+          }
+          
+          const price=extractPriceFast(priceStr);
+          if (isValidPriceFast(price) && isValidItemNameFast(itemName)) {
+            const unitPrice=quantity > 1 ? price / quantity : price;
+            items.push(createInventoryItemFast(itemName,unitPrice,quantity));
+            matched=true;
+            break;
           }
         }
       }
-
+      
       if (matched) continue;
-
-      // Strategy 2: Look ahead for price on next line
-      if (i < lines.length - 1) {
+      
+      // Look ahead for price (only check next line for speed)
+      if (i < lines.length - 1 && !matched) {
         const nextLine=lines[i + 1];
         const currentLineClean=line.replace(/[^\w\s&'.-]/g,'').trim();
         
-        if (isValidItemName(currentLineClean)) {
-          const price=findPriceInLine(nextLine);
-          if (price && isValidPrice(price)) {
-            debugLog.push(`Found item "${currentLineClean}" with price ${price} on next line`);
-            items.push(createInventoryItem(currentLineClean,price,`${line} ${nextLine}`));
+        if (isValidItemNameFast(currentLineClean)) {
+          const price=findPriceInLineFast(nextLine);
+          if (price && isValidPriceFast(price)) {
+            items.push(createInventoryItemFast(currentLineClean,price,1));
             i++; // Skip next line
-            continue;
-          }
-        }
-      }
-
-      // Strategy 3: Look for price anywhere in current line
-      if (isValidItemName(line)) {
-        const priceInLine=findPriceInLine(line);
-        if (priceInLine && isValidPrice(priceInLine)) {
-          // Extract item name by removing price and quantity indicators
-          let nameOnly=line
-            .replace(/[£$€¥₹]?\s*\d+[.,]\d{1,3}/g,'')
-            .replace(/\d+\s*[xX×*]/g,'')
-            .replace(/[xX×*]\s*\d+/g,'')
-            .trim();
-            
-          if (nameOnly.length > 1) {
-            debugLog.push(`Found item "${nameOnly}" with inline price ${priceInLine}`);
-            items.push(createInventoryItem(nameOnly,priceInLine,line));
           }
         }
       }
     }
-
-    // Enhanced duplicate removal and filtering
+    
+    // Fast deduplication and filtering
     const uniqueItems=items
       .filter((item,index,self)=> 
         index===self.findIndex(t=> 
@@ -517,209 +292,89 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
         )
       )
       .filter(item=> 
-        item.unitPrice >=scanSettings.minPrice && 
-        item.unitPrice <=scanSettings.maxPrice
+        item.unitPrice >= scanSettings.minPrice && 
+        item.unitPrice <= scanSettings.maxPrice
       )
-      .slice(0,50); // Limit results
-
-    debugLog.push(`Final result: ${uniqueItems.length} unique items extracted`);
+      .slice(0,25); // Reduced limit for faster processing
     
-    if (scanSettings.debugMode) {
-      console.log('Receipt parsing debug log:',debugLog);
-    }
-
     return uniqueItems;
   };
 
-  const extractPrice=(priceStr)=> {
+  // Fast price extraction
+  const extractPriceFast=(priceStr)=> {
     if (!priceStr) return null;
-    
-    // Remove currency symbols and extract number
     const cleaned=priceStr.replace(/[£$€¥₹\s]/g,'');
-    
-    // Handle different decimal separators
-    let number;
-    if (cleaned.includes(',') && cleaned.includes('.')) {
-      // Both comma and dot - assume comma is thousands separator
-      number=parseFloat(cleaned.replace(/,/g,''));
-    } else if (cleaned.includes(',')) {
-      // Only comma - could be decimal separator in EU format
-      const parts=cleaned.split(',');
-      if (parts.length===2 && parts[1].length <=2) {
-        // Likely decimal separator
-        number=parseFloat(cleaned.replace(',','.'));
-      } else {
-        // Likely thousands separator
-        number=parseFloat(cleaned.replace(/,/g,''));
-      }
-    } else {
-      // Only dots or no separators
-      number=parseFloat(cleaned);
-    }
-    
+    const number=parseFloat(cleaned.replace(',','.'));
     return isNaN(number) ? null : number;
   };
 
-  const findPriceInLine=(line)=> {
-    const pricePatterns=[
-      /([£$€¥₹])\s*(\d+[.,]\d{1,3})/,
-      /(\d+[.,]\d{2})\s*([£$€¥₹]?)/,
-      /(\d+\.\d{2})/,
-      /(\d+,\d{2})/,
-      /(\d+)\s*[.,]\s*(\d{2})/
-    ];
-
-    for (const pattern of pricePatterns) {
-      const match=line.match(pattern);
-      if (match) {
-        // Try to extract price from different match groups
-        for (let i=1;i < match.length;i++) {
-          if (match[i] && /\d/.test(match[i])) {
-            const price=extractPrice(match[i]);
-            if (price && price > 0) {
-              return price;
-            }
-          }
-        }
-      }
-    }
-    return null;
+  // Fast price finding in line
+  const findPriceInLineFast=(line)=> {
+    const priceMatch=line.match(/(\d+[.,]\d{2})/);
+    return priceMatch ? extractPriceFast(priceMatch[1]) : null;
   };
 
-  const isValidPrice=(price)=> {
+  // Fast price validation
+  const isValidPriceFast=(price)=> {
     return price && 
            !isNaN(price) && 
            price > 0 && 
-           price >=scanSettings.minPrice && 
-           price <=scanSettings.maxPrice && 
-           price < 10000; // Reasonable upper limit
+           price >= scanSettings.minPrice && 
+           price <= scanSettings.maxPrice;
   };
 
-  const isValidItemName=(name)=> {
-    if (!name || typeof name !=='string') return false;
-    
+  // Fast item name validation
+  const isValidItemNameFast=(name)=> {
+    if (!name || typeof name !== 'string') return false;
     const cleaned=name.trim();
-    if (cleaned.length < 2 || cleaned.length > 100) return false;
-    
-    // Must contain at least one letter
+    if (cleaned.length < 2 || cleaned.length > 50) return false;
     if (!/[A-Za-z]/.test(cleaned)) return false;
-    
-    // Shouldn't be all numbers
     if (/^\d+$/.test(cleaned)) return false;
     
-    // Enhanced non-item detection
-    const nonItemWords=[
-      'total','subtotal','tax','vat','change','cash','card',
-      'date','time','receipt','invoice','thank','welcome',
-      'store','shop','till','reg','operator','transaction',
-      'balance','amount','due','paid','qty','sku','barcode',
-      'discount','offer','promo','saving'
-    ];
-    
+    // Quick non-item check
+    const nonItemWords=['total','tax','change','cash','receipt','thank'];
     const lowerName=cleaned.toLowerCase();
-    if (nonItemWords.some(word=> lowerName.includes(word))) {
-      return false;
-    }
-    
-    return true;
+    return !nonItemWords.some(word=> lowerName.includes(word));
   };
 
-  const createInventoryItem=(name,price,originalLine)=> {
-    const cleanName=cleanItemName(name);
-    const description=generateDescription(originalLine,cleanName);
-
+  // Fast inventory item creation
+  const createInventoryItemFast=(name,price,quantity=1)=> {
+    const cleanName=name
+      .replace(/[^\w\s&'.-]/g,'')
+      .replace(/\s+/g,' ')
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g,l=> l.toUpperCase());
+    
     return {
       name: cleanName,
       unitPrice: price,
-      quantity: 1,
-      category: guessCategory(cleanName),
+      quantity: quantity,
+      category: guessCategoryFast(cleanName),
       dateAdded: new Date().toISOString().split('T')[0],
       status: 'In Stock',
-      description: description,
-      originalLine: originalLine // Keep for reference
+      description: `Quick scanned on ${new Date().toLocaleDateString()}`
     };
   };
 
-  const generateDescription=(originalLine,itemName)=> {
-    let description=`Scanned from receipt on ${new Date().toLocaleDateString()}`;
-
-    // Look for size/weight indicators
-    const sizePattern=/(\d+(?:[.,]\d+)?)\s*(ml|l|g|kg|oz|lb|pack|ct|count|piece|pc)/i;
-    const sizeMatch=originalLine.match(sizePattern);
-    if (sizeMatch) {
-      description +=` - Size: ${sizeMatch[1]}${sizeMatch[2]}`;
-    }
-
-    // Look for quantity indicators
-    const quantityPattern=/(\d+)\s*[xX×*]/;
-    const quantityMatch=originalLine.match(quantityPattern);
-    if (quantityMatch && parseInt(quantityMatch[1]) > 1) {
-      description +=` - Quantity: ${quantityMatch[1]}`;
-    }
-
-    // Look for brand indicators
-    const brandPattern=/\b([A-Z]{2,}|Coca-Cola|Pepsi|Nike|Adidas|Apple|Samsung)\b/;
-    const brandMatch=originalLine.match(brandPattern);
-    if (brandMatch && brandMatch[1].toLowerCase() !==itemName.toLowerCase()) {
-      description +=` - Brand: ${brandMatch[1]}`;
-    }
-
-    return description;
-  };
-
-  const cleanItemName=(name)=> {
-    return name
-      .replace(/[^\w\s&'.-]/g,'') // Remove special chars except common ones
-      .replace(/\s+/g,' ') // Normalize spaces
-      .trim()
-      .toLowerCase()
-      .replace(/\b\w/g,l=> l.toUpperCase()); // Title case
-  };
-
-  const guessCategory=(itemName)=> {
+  // Fast category guessing with most common categories first
+  const guessCategoryFast=(itemName)=> {
     const name=itemName.toLowerCase();
     
-    const categories={
-      'Food & Beverages': [
-        'bread','milk','cheese','meat','chicken','beef','fish','salmon','tuna',
-        'fruit','apple','banana','orange','grape','berry','strawberry','mango',
-        'vegetable','carrot','potato','tomato','lettuce','cucumber','onion','pepper',
-        'juice','water','coffee','tea','soda','cola','beer','wine','alcohol',
-        'pasta','rice','cereal','yogurt','butter','oil','sugar','flour','salt',
-        'chocolate','biscuit','cookie','cake','candy','sweet','snack','chips',
-        'pizza','sandwich','burger','fries','soup','sauce','spice','herb'
-      ],
-      'Health & Beauty': [
-        'shampoo','soap','cream','lotion','medicine','vitamin','toothpaste',
-        'deodorant','perfume','cosmetic','makeup','lipstick','foundation',
-        'skincare','moisturizer','sunscreen','bandage','pill','tablet'
-      ],
-      'Household': [
-        'detergent','cleaner','tissue','paper','towel','bag','foil','wrap',
-        'toilet','kitchen','bathroom','cleaning','washing','dishwasher',
-        'laundry','bleach','sponge','brush','vacuum','trash'
-      ],
-      'Electronics': [
-        'battery','charger','cable','phone','headphone','speaker','computer',
-        'tablet','camera','tv','radio','electronic','adapter','usb','hdmi'
-      ],
-      'Clothing': [
-        'shirt','pants','dress','shoe','sock','hat','jacket','coat','jeans',
-        'sweater','blouse','skirt','underwear','clothing','tie','belt',
-        'glove','scarf','boot','sandal'
-      ],
-      'Office Supplies': [
-        'pen','pencil','paper','notebook','folder','tape','stapler',
-        'envelope','stamp','ink','printer','office','marker','highlighter'
-      ]
+    // Most common categories first for speed
+    const quickCategories={
+      'Food & Beverages': ['bread','milk','cheese','meat','fruit','juice','coffee','tea','water','beer','wine'],
+      'Household': ['detergent','tissue','paper','soap','cleaner','bag'],
+      'Health & Beauty': ['shampoo','cream','medicine','vitamin','toothpaste'],
+      'Electronics': ['battery','cable','phone','charger']
     };
-
-    for (const [category,keywords] of Object.entries(categories)) {
+    
+    for (const [category,keywords] of Object.entries(quickCategories)) {
       if (keywords.some(keyword=> name.includes(keyword))) {
         return category;
       }
     }
-
+    
     return 'Other';
   };
 
@@ -734,7 +389,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
   };
 
   const handleRemoveItem=(index)=> {
-    const updatedItems=extractedItems.filter((_,i)=> i !==index);
+    const updatedItems=extractedItems.filter((_,i)=> i !== index);
     setExtractedItems(updatedItems);
   };
 
@@ -755,7 +410,6 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
     setEditingItems(false);
     setShowRawText(false);
     setRawOcrText('');
-    setDebugInfo([]);
     onClose();
   };
 
@@ -766,7 +420,6 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
     setErrorMessage('');
     setShowRawText(false);
     setRawOcrText('');
-    setDebugInfo([]);
   };
 
   if (!isOpen) return null;
@@ -784,19 +437,22 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
             initial={{opacity: 0,scale: 0.95}}
             animate={{opacity: 1,scale: 1}}
             exit={{opacity: 0,scale: 0.95}}
-            className="relative w-full max-w-7xl bg-gray-800 rounded-lg shadow-xl overflow-hidden"
+            className="relative w-full max-w-6xl bg-gray-800 rounded-lg shadow-xl overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <div className="flex items-center">
-                <RiScanLine className="h-6 w-6 text-primary-400 mr-2" />
-                <h3 className="text-lg font-medium text-white">Ultra-Accurate Receipt Scanner v2.0</h3>
+                <RiFlashFill className="h-6 w-6 text-primary-400 mr-2" />
+                <h3 className="text-lg font-medium text-white">Quick Receipt Scanner</h3>
+                <span className="ml-2 px-2 py-1 bg-green-600 text-white text-xs rounded-full">
+                  Speed Optimized
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={()=> setShowSettings(!showSettings)}
                   className="text-gray-400 hover:text-gray-300 focus:outline-none p-2"
-                  title="Advanced Settings"
+                  title="Quick Settings"
                 >
                   <RiSettings3Line className="h-5 w-5" />
                 </button>
@@ -804,7 +460,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                   <button
                     onClick={()=> setShowRawText(!showRawText)}
                     className="text-gray-400 hover:text-gray-300 focus:outline-none p-2"
-                    title="Show OCR Debug Info"
+                    title="Show OCR Text"
                   >
                     <RiEditLine className="h-5 w-5" />
                   </button>
@@ -818,7 +474,7 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
               </div>
             </div>
 
-            {/* Advanced Settings Panel */}
+            {/* Quick Settings Panel */}
             {showSettings && (
               <motion.div
                 initial={{height: 0,opacity: 0}}
@@ -826,25 +482,18 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                 exit={{height: 0,opacity: 0}}
                 className="border-b border-gray-700 p-4 bg-gray-750"
               >
-                <h4 className="text-white font-medium mb-3">Ultra-Enhanced OCR Settings</h4>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      OCR Language
-                    </label>
-                    <select
-                      value={scanSettings.language}
-                      onChange={(e)=> setScanSettings(prev=> ({...prev,language: e.target.value}))}
-                      className="w-full rounded-md border-gray-600 bg-gray-700 text-white text-sm p-2"
-                    >
-                      <option value="eng">English</option>
-                      <option value="fra">French</option>
-                      <option value="deu">German</option>
-                      <option value="spa">Spanish</option>
-                      <option value="ita">Italian</option>
-                    </select>
-                  </div>
+                <h4 className="text-white font-medium mb-3">Quick Scan Settings</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
+                    <label className="flex items-center text-sm text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={scanSettings.quickMode}
+                        onChange={(e)=> setScanSettings(prev=> ({...prev,quickMode: e.target.checked}))}
+                        className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600"
+                      />
+                      Quick Mode (faster,single-pass)
+                    </label>
                     <label className="flex items-center text-sm text-gray-300">
                       <input
                         type="checkbox"
@@ -852,25 +501,16 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                         onChange={(e)=> setScanSettings(prev=> ({...prev,enhanceImage: e.target.checked}))}
                         className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600"
                       />
-                      Advanced image enhancement
+                      Basic image enhancement
                     </label>
                     <label className="flex items-center text-sm text-gray-300">
                       <input
                         type="checkbox"
-                        checked={scanSettings.multiPass}
-                        onChange={(e)=> setScanSettings(prev=> ({...prev,multiPass: e.target.checked}))}
+                        checked={scanSettings.smartFiltering}
+                        onChange={(e)=> setScanSettings(prev=> ({...prev,smartFiltering: e.target.checked}))}
                         className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600"
                       />
-                      Multi-pass OCR (5 passes)
-                    </label>
-                    <label className="flex items-center text-sm text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={scanSettings.debugMode}
-                        onChange={(e)=> setScanSettings(prev=> ({...prev,debugMode: e.target.checked}))}
-                        className="mr-2 rounded border-gray-600 bg-gray-700 text-primary-600"
-                      />
-                      Debug mode
+                      Smart item filtering
                     </label>
                   </div>
                   <div className="space-y-2">
@@ -901,15 +541,14 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                     </div>
                   </div>
                   <div>
-                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3">
-                      <h5 className="text-blue-400 font-medium mb-2">v2.0 Enhancements</h5>
-                      <ul className="text-blue-300 text-xs space-y-1">
-                        <li>• Enhanced quantity detection (x, ×, X, *)</li>
-                        <li>• Better price extraction algorithms</li>
-                        <li>• Improved text preprocessing</li>
-                        <li>• Multi-pass OCR with 5 strategies</li>
-                        <li>• Advanced pattern matching</li>
-                        <li>• Debug logging for troubleshooting</li>
+                    <div className="bg-green-900/20 border border-green-700 rounded-lg p-3">
+                      <h5 className="text-green-400 font-medium mb-2">⚡ Speed Optimizations</h5>
+                      <ul className="text-green-300 text-xs space-y-1">
+                        <li>• Single-pass OCR in Quick Mode</li>
+                        <li>• Optimized image preprocessing</li>
+                        <li>• Streamlined text parsing</li>
+                        <li>• Smart pattern matching</li>
+                        <li>• Reduced resolution for speed</li>
                       </ul>
                     </div>
                   </div>
@@ -917,34 +556,18 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
               </motion.div>
             )}
 
-            {/* Debug Info Panel */}
-            {showRawText && (rawOcrText || debugInfo.length > 0) && (
+            {/* Raw OCR Text Panel */}
+            {showRawText && rawOcrText && (
               <motion.div
                 initial={{height: 0,opacity: 0}}
                 animate={{height: 'auto',opacity: 1}}
                 exit={{height: 0,opacity: 0}}
-                className="border-b border-gray-700 p-4 bg-gray-750 max-h-80 overflow-y-auto"
+                className="border-b border-gray-700 p-4 bg-gray-750 max-h-64 overflow-y-auto"
               >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {debugInfo.length > 0 && (
-                    <div>
-                      <h4 className="text-white font-medium mb-3">Processing Debug Log</h4>
-                      <div className="bg-gray-800 p-3 rounded text-xs text-gray-300 space-y-1 max-h-60 overflow-y-auto">
-                        {debugInfo.map((info,index)=> (
-                          <div key={index} className="font-mono">{info}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {rawOcrText && (
-                    <div>
-                      <h4 className="text-white font-medium mb-3">Raw OCR Output</h4>
-                      <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-800 p-3 rounded max-h-60 overflow-y-auto">
-                        {rawOcrText}
-                      </pre>
-                    </div>
-                  )}
-                </div>
+                <h4 className="text-white font-medium mb-3">OCR Text Output</h4>
+                <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-800 p-3 rounded">
+                  {rawOcrText}
+                </pre>
               </motion.div>
             )}
 
@@ -986,14 +609,14 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                           audio={false}
                           ref={webcamRef}
                           screenshotFormat="image/jpeg"
-                          screenshotQuality={0.98}
+                          screenshotQuality={0.85} // Reduced for speed
                           videoConstraints={videoConstraints}
                           className="w-full h-auto max-h-96 object-cover"
                         />
                         <div className="absolute inset-0 border-2 border-dashed border-primary-400 m-4 rounded-lg pointer-events-none">
                           <div className="absolute top-2 left-2 right-2 text-center">
                             <span className="bg-black bg-opacity-50 text-white text-sm px-2 py-1 rounded">
-                              Position receipt within frame - ensure all text is visible and clear
+                              Position receipt clearly - Quick Mode enabled for faster scanning
                             </span>
                           </div>
                         </div>
@@ -1004,8 +627,8 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                           disabled={isScanning}
                           className="flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <RiCameraLine className="h-5 w-5 mr-2" />
-                          Capture Receipt
+                          <RiFlashFill className="h-5 w-5 mr-2" />
+                          Quick Capture
                         </button>
                       </div>
                     </div>
@@ -1014,8 +637,8 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                     <div className="space-y-4">
                       <div className="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center">
                         <RiImageLine className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                        <p className="text-white mb-4">Upload a high-quality image of your receipt</p>
-                        <p className="text-gray-400 text-sm mb-4">Supports JPG, PNG, WebP formats up to 10MB</p>
+                        <p className="text-white mb-4">Upload receipt image for quick processing</p>
+                        <p className="text-gray-400 text-sm mb-4">JPG,PNG,WebP up to 10MB</p>
                         <input
                           type="file"
                           ref={fileInputRef}
@@ -1035,23 +658,19 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                     </div>
                   )}
 
-                  {/* Enhanced Tips */}
+                  {/* Quick Tips */}
                   <div className="bg-gray-700 rounded-lg p-4">
-                    <h4 className="text-white font-medium mb-2">🎯 Ultra-Accurate Scanning Tips (v2.0):</h4>
+                    <h4 className="text-white font-medium mb-2">⚡ Quick Scanning Tips:</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300">
                       <ul className="space-y-1">
-                        <li>• Use bright, even lighting without shadows</li>
-                        <li>• Keep receipt completely flat and straight</li>
-                        <li>• Ensure all text is sharp and in focus</li>
-                        <li>• Avoid reflections and glare on the paper</li>
-                        <li>• Clean any smudges or stains first</li>
+                        <li>• Use good lighting for best results</li>
+                        <li>• Keep receipt flat and straight</li>
+                        <li>• Ensure text is clear and readable</li>
                       </ul>
                       <ul className="space-y-1">
-                        <li>• Capture the entire receipt in frame</li>
-                        <li>• Use multi-pass OCR for difficult receipts</li>
-                        <li>• Enable debug mode to see processing steps</li>
-                        <li>• Try different angles if first scan fails</li>
-                        <li>• Check debug info if items are missed</li>
+                        <li>• Quick Mode is enabled by default</li>
+                        <li>• Processing typically takes 5-10 seconds</li>
+                        <li>• Edit results before confirming</li>
                       </ul>
                     </div>
                   </div>
@@ -1072,18 +691,27 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                   {isScanning && (
                     <div className="space-y-4">
                       <div className="flex items-center justify-center">
-                        <RiScanLine className="h-6 w-6 text-primary-400 mr-2 animate-pulse" />
+                        <RiFlashFill className="h-6 w-6 text-primary-400 mr-2 animate-pulse" />
                         <span className="text-white">
-                          {scanSettings.multiPass ? 'Ultra-accurate 5-pass OCR scanning...' : 'Processing with enhanced OCR...'}
+                          {scanSettings.quickMode 
+                            ? 'Quick scanning in progress...' 
+                            : 'Processing with enhanced accuracy...'}
                         </span>
                       </div>
                       <div className="w-full bg-gray-700 rounded-full h-3">
-                        <div
+                        <div 
                           className="bg-primary-600 h-3 rounded-full transition-all duration-300"
                           style={{width: `${scanProgress}%`}}
                         />
                       </div>
-                      <p className="text-center text-gray-300 text-sm">{scanProgress}% complete</p>
+                      <p className="text-center text-gray-300 text-sm">
+                        {scanProgress}% complete
+                        {scanSettings.quickMode && scanProgress > 40 && (
+                          <span className="ml-2 text-green-400">
+                            ⚡ Quick Mode Active
+                          </span>
+                        )}
+                      </p>
                     </div>
                   )}
 
@@ -1093,7 +721,9 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center text-green-400">
                           <RiCheckLine className="h-6 w-6 mr-2" />
-                          <span className="font-medium">Successfully extracted {extractedItems.length} items!</span>
+                          <span className="font-medium">
+                            ⚡ Quick scan found {extractedItems.length} items!
+                          </span>
                         </div>
                         <button
                           onClick={()=> setEditingItems(!editingItems)}
@@ -1167,22 +797,10 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                                     {item.description && (
                                       <p className="text-gray-400 text-xs mt-1">{item.description}</p>
                                     )}
-                                    {item.originalLine && (
-                                      <p className="text-gray-500 text-xs mt-1 font-mono">
-                                        Original: "{item.originalLine}"
-                                      </p>
-                                    )}
                                   </div>
-                                  <div className="text-right ml-4">
-                                    <span className="text-primary-400 font-medium">
-                                      £{item.unitPrice.toFixed(2)}
-                                    </span>
-                                    {item.totalPrice && item.totalPrice !== item.unitPrice && (
-                                      <div className="text-xs text-gray-400">
-                                        Total: £{item.totalPrice.toFixed(2)}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <span className="text-primary-400 font-medium ml-4">
+                                    £{item.unitPrice.toFixed(2)}
+                                  </span>
                                 </div>
                               )}
                             </div>
@@ -1197,17 +815,16 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                     <div className="text-center space-y-4">
                       <div className="flex items-center justify-center text-red-400">
                         <RiAlertLine className="h-6 w-6 mr-2" />
-                        <span className="font-medium">Scan Failed</span>
+                        <span className="font-medium">Quick Scan Failed</span>
                       </div>
                       <p className="text-gray-300">{errorMessage}</p>
                       <div className="text-sm text-gray-400">
-                        <p>Try these solutions:</p>
+                        <p>Quick solutions:</p>
                         <ul className="list-disc list-inside mt-2 space-y-1">
-                          <li>Enable multi-pass OCR in settings</li>
                           <li>Improve lighting conditions</li>
                           <li>Ensure receipt is flat and clear</li>
-                          <li>Enable debug mode to see processing details</li>
-                          <li>Check the OCR debug info for troubleshooting</li>
+                          <li>Try disabling Quick Mode for better accuracy</li>
+                          <li>Check the OCR text output for debugging</li>
                         </ul>
                       </div>
                     </div>
@@ -1222,14 +839,13 @@ export default function ReceiptScannerModal({isOpen,onClose,onItemsExtracted}) {
                       <RiRefreshLine className="h-5 w-5 mr-2" />
                       Try Again
                     </button>
-
                     {scanStatus==='success' && extractedItems.length > 0 && (
                       <button
                         onClick={handleConfirmItems}
                         className="flex items-center px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       >
                         <RiCheckLine className="h-5 w-5 mr-2" />
-                        Add {extractedItems.length} Items to Inventory
+                        Add {extractedItems.length} Items
                       </button>
                     )}
                   </div>
