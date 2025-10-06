@@ -1,12 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
 
-// Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-06-30.basil",
 });
 
-// Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
@@ -27,42 +25,40 @@ export const handler = async (event) => {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("❌ Webhook signature verification failed.", err.message);
+    console.error("❌ Webhook signature verification failed:", err.message);
     return { statusCode: 400, body: `Webhook Error: ${err.message}` };
   }
 
   console.log("📦 Stripe webhook event received:", stripeEvent.type);
 
-  switch (stripeEvent.type) {
-    case "checkout.session.completed":
-  const session = stripeEvent.data.object;
+  try {
+    if (stripeEvent.type === "checkout.session.completed") {
+      const session = stripeEvent.data.object;
+      const userId = session.metadata?.user_id;
 
-  // Get the customer's email
-  const email = session.customer_email;
+      console.log("💰 Payment successful for user:", userId);
 
-  console.log("💰 Payment successful for:", email);
+      if (userId) {
+        const { data, error } = await supabase
+          .from("users_tb2k4x9p1m") // 👈 your actual table name
+          .update({ plan: "Professional" })
+          .eq("id", userId);
 
-  // Update the user's plan to 'professional'
-  const { data, error } = await supabase
-    .from("users_tb2k4x9p1m")
-    .update({ plan: "professional" })
-    .eq("email", email);
-
-  if (error) {
-    console.error("❌ Supabase update error:", error.message);
-    return { statusCode: 500, body: "Database update failed" };
-  }
-
-  console.log("✅ User upgraded to Professional:", data);
-  break;
-
-
-    default:
+        if (error) {
+          console.error("❌ Error updating user plan:", error.message);
+        } else {
+          console.log("✅ User upgraded to Professional:", data);
+        }
+      } else {
+        console.warn("⚠️ No user_id found in session metadata");
+      }
+    } else {
       console.log(`⚠️ Unhandled event type: ${stripeEvent.type}`);
-  }
+    }
 
-  return {
-    statusCode: 200,
-    body: "✅ Webhook received",
-  };
+    return { statusCode: 200, body: "✅ Webhook received" };
+  } catch (err) {
+    console.error("❌ Webhook handler error:", err);
+    return { statusCode: 500, body: "Internal Server Error" };
+  }
 };
