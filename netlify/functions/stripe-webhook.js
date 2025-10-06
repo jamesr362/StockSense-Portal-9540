@@ -1,61 +1,69 @@
-import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
+import Stripe from "stripe";
+import { buffer } from "micro";
+import { createClient } from "@supabase/supabase-js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-export const handler = async (event) => {
-  try {
-    const sig = event.headers['stripe-signature'];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    let stripeEvent;
-    try {
-      stripeEvent = stripe.webhooks.constructEvent(event.body, sig, webhookSecret);
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err.message);
-      return { statusCode: 400, body: `Webhook Error: ${err.message}` };
-    }
-
-    console.log(`📦 Stripe webhook event received: ${stripeEvent.type}`);
-
-    if (stripeEvent.type === 'checkout.session.completed') {
-      const session = stripeEvent.data.object;
-
-      // Try every possible email field Stripe might send
-      const customerEmail =
-        session.customer_email ||
-        session.customer_details?.email ||
-        session.metadata?.email ||
-        null;
-
-      console.log('💰 Payment successful for email:', customerEmail);
-      console.log('📄 Full session object for debugging:', JSON.stringify(session, null, 2));
-
-      if (!customerEmail) {
-        console.log('⚠️ No email found — cannot update user plan.');
-        return { statusCode: 200, body: 'No email found in session' };
-      }
-
-      // Update your specific Supabase table and column
-      const { data, error } = await supabase
-        .from('users_tb2k4x9p1m') // 👈 your table name
-        .update({ plan: 'professional' }) // 👈 change 'plan' to your column name if needed
-        .eq('email', customerEmail.toLowerCase());
-
-      if (error) {
-        console.error('❌ Supabase update error:', error);
-        return { statusCode: 500, body: JSON.stringify(error) };
-      }
-
-      console.log('✅ User upgraded to Professional:', customerEmail);
-    } else {
-      console.log(`⚠️ Unhandled event type: ${stripeEvent.type}`);
-    }
-
-    return { statusCode: 200, body: 'Success' };
-  } catch (err) {
-    console.error('❌ Webhook handler failed:', err);
-    return { statusCode: 500, body: err.message };
-  }
+// ✅ Disable body parsing so Stripe signature works
+export const config = {
+  api: {
+    bodyParser: false,
+  },
 };
+
+// ✅ Initialize Stripe & Supabase
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+export default async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    // ✅ Use raw body for signature verification
+    const buf = await buffer(req);
+    event = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
+    console.log("📦 Stripe webhook event received:", event.type);
+  } catch (err) {
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // ✅ Handle successful checkout
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const email =
+      session.customer_details?.email ||
+      session.customer_email ||
+      session.metadata?.email;
+
+    console.log("💰 Payment successful for email:", email);
+    console.log("📄 Full session object for debugging:", JSON.stringify(session, null, 2));
+
+    if (!email) {
+      console.warn("⚠️ No email found in session data");
+      return res.status(200).send("No email found in session");
+    }
+
+    // ✅ Update Supabase table
+    const { error } = await supabase
+      .from("users_tb2k4x9p1m")
+      .update({ plan: "Professional" })
+      .eq("email", email);
+
+    if (error) {
+      console.error("❌ Supabase update failed:", error);
+      return res.status(500).send("Supabase update failed");
+    }
+
+    console.log("✅ User upgraded to Professional:", email);
+  } else {
+    console.log("⚠️ Unhandled event type:", event.type);
+  }
+
+  res.status(200).send("OK");
+};
+
