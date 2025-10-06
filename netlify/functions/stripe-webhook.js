@@ -1,22 +1,25 @@
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
-// ✅ Initialize Stripe and Supabase
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-export const handler = async (event, context) => {
-  // Stripe signature header
-  const sig = event.headers["stripe-signature"];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// 🚫 Tell Netlify not to parse the body — needed for Stripe signature verification
+export const config = {
+  bodyParser: false,
+};
 
-  // ✅ IMPORTANT: Use raw body (not parsed JSON)
+export const handler = async (event, context) => {
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const sig = event.headers["stripe-signature"];
+
+  // ✅ Get the raw request body (Stripe requires exact bytes)
   const rawBody = event.isBase64Encoded
-    ? Buffer.from(event.body, "base64").toString("utf8")
-    : event.body;
+    ? Buffer.from(event.body, "base64")
+    : Buffer.from(event.body || "");
 
   let stripeEvent;
   try {
@@ -30,7 +33,7 @@ export const handler = async (event, context) => {
     };
   }
 
-  // ✅ Handle payment success
+  // ✅ Handle successful checkout session
   if (stripeEvent.type === "checkout.session.completed") {
     const session = stripeEvent.data.object;
     const email =
@@ -39,11 +42,9 @@ export const handler = async (event, context) => {
       session.metadata?.email;
 
     console.log("💰 Payment successful for email:", email);
-    console.log("📄 Full session:", JSON.stringify(session, null, 2));
 
     if (!email) {
-      console.warn("⚠️ No email found in session data");
-      return { statusCode: 200, body: "No email found" };
+      return { statusCode: 200, body: "No email found in session" };
     }
 
     const { error } = await supabase
