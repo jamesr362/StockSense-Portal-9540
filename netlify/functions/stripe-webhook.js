@@ -35,30 +35,27 @@ export const handler = async (event) => {
 
   switch (stripeEvent.type) {
     case "checkout.session.completed":
-      const session = stripeEvent.data.object;
+  const session = stripeEvent.data.object;
 
-      console.log("💳 Checkout session completed:", session);
+  // Get the customer's email
+  const email = session.customer_email;
 
-      // Insert subscription into Supabase
-      const { data, error } = await supabase.from("subscriptions").insert([
-        {
-          customer_id: session.customer,
-          subscription_id: session.subscription,
-          email: session.customer_details?.email || null,
-          name: session.customer_details?.name || null,
-          amount: session.amount_total,
-          currency: session.currency,
-          status: "active",
-        },
-      ]);
+  console.log("💰 Payment successful for:", email);
 
-      if (error) {
-        console.error("❌ Supabase insert error:", error.message);
-        return { statusCode: 500, body: "Database insert failed" };
-      }
+  // Update the user's plan to 'professional'
+  const { data, error } = await supabase
+    .from("users_tb2k4x9p1m")
+    .update({ plan: "professional" })
+    .eq("email", email);
 
-      console.log("✅ Subscription saved in Supabase:", data);
-      break;
+  if (error) {
+    console.error("❌ Supabase update error:", error.message);
+    return { statusCode: 500, body: "Database update failed" };
+  }
+
+  console.log("✅ User upgraded to Professional:", data);
+  break;
+
 
     default:
       console.log(`⚠️ Unhandled event type: ${stripeEvent.type}`);
