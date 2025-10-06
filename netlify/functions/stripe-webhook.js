@@ -1,7 +1,10 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
 
+// Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// Initialize Supabase with service role key (not anon key)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -9,10 +12,10 @@ const supabase = createClient(
 
 export const handler = async (event) => {
   try {
+    // Stripe requires raw body for signature verification
     const sig = event.headers['stripe-signature'];
     const body = event.body;
 
-    // Verify event from Stripe
     const stripeEvent = stripe.webhooks.constructEvent(
       body,
       sig,
@@ -31,9 +34,12 @@ export const handler = async (event) => {
         const { error } = await supabase
           .from('users_tb2k4x9p1m')
           .update({ plan: 'professional' })
-          .eq('email', customerEmail);
+          .eq('email', customerEmail.toLowerCase());
 
-        if (error) throw error;
+        if (error) {
+          console.error('❌ Supabase update failed:', error);
+          throw error;
+        }
 
         console.log('✅ User upgraded to Professional:', customerEmail);
       } else {
@@ -48,7 +54,7 @@ export const handler = async (event) => {
       body: JSON.stringify({ received: true }),
     };
   } catch (err) {
-    console.error('❌ Webhook Error:', err);
+    console.error('❌ Webhook Error:', err.message);
     return {
       statusCode: 400,
       body: `Webhook Error: ${err.message}`,
