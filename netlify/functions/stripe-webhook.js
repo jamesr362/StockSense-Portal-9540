@@ -1,28 +1,26 @@
 import Stripe from "stripe";
-import { buffer } from "micro";
 import { createClient } from "@supabase/supabase-js";
 
+// ✅ Initialize Stripe and Supabase
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Tell Netlify not to parse JSON automatically
-export const config = {
-  bodyParser: false,
-};
-
 export const handler = async (event, context) => {
+  // Stripe signature header
   const sig = event.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let stripeEvent;
+  // ✅ IMPORTANT: Use raw body (not parsed JSON)
+  const rawBody = event.isBase64Encoded
+    ? Buffer.from(event.body, "base64").toString("utf8")
+    : event.body;
 
+  let stripeEvent;
   try {
-    // 👇 Convert string body to buffer for Stripe signature verification
-    const buf = Buffer.from(event.body, "utf8");
-    stripeEvent = stripe.webhooks.constructEvent(buf, sig, webhookSecret);
+    stripeEvent = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     console.log("📦 Stripe webhook event received:", stripeEvent.type);
   } catch (err) {
     console.error("❌ Webhook signature verification failed:", err.message);
@@ -32,6 +30,7 @@ export const handler = async (event, context) => {
     };
   }
 
+  // ✅ Handle payment success
   if (stripeEvent.type === "checkout.session.completed") {
     const session = stripeEvent.data.object;
     const email =
@@ -40,7 +39,7 @@ export const handler = async (event, context) => {
       session.metadata?.email;
 
     console.log("💰 Payment successful for email:", email);
-    console.log("📄 Full session object:", JSON.stringify(session, null, 2));
+    console.log("📄 Full session:", JSON.stringify(session, null, 2));
 
     if (!email) {
       console.warn("⚠️ No email found in session data");
@@ -50,7 +49,7 @@ export const handler = async (event, context) => {
     const { error } = await supabase
       .from("users_tb2k4x9p1m")
       .update({ plan: "Professional" })
-      .eq("email", email);
+      .eq("email", email.toLowerCase());
 
     if (error) {
       console.error("❌ Supabase update failed:", error);
