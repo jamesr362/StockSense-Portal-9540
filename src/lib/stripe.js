@@ -230,81 +230,41 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
   };
 };
 
-// **CRITICAL FIX**: Create payment link with dynamic redirect URLs
-export const createPaymentLinkWithRedirect = (planId, userEmail) => {
-  const plan = getPlanById(planId);
-  if (!plan || !plan.paymentLink) {
-    throw new Error('Invalid plan or missing payment link');
-  }
-
-  const baseUrl = getAppBaseUrl();
+// **NEW**: Enhanced payment return detection and handling
+export const detectPaymentReturn = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const referrer = document.referrer || '';
   
-  // **SOLUTION**: Add redirect parameters to the payment link URL
-  const paymentUrl = new URL(plan.paymentLink);
+  // Multiple detection methods
+  const indicators = {
+    hasStripeParams: urlParams.has('session_id') || hashParams.has('session_id'),
+    hasPaymentStatus: urlParams.get('payment_status') === 'success' || hashParams.get('payment_status') === 'success',
+    isFromStripe: referrer.includes('stripe.com') || referrer.includes('buy.stripe.com'),
+    hasSessionStorage: sessionStorage.getItem('stripePaymentAttempt') === 'true',
+    hasPendingPayment: localStorage.getItem('pendingPayment') !== null,
+    isPaymentSuccessPage: window.location.href.includes('payment-success')
+  };
   
-  // **CRITICAL**: Add success and cancel URLs as URL parameters
-  // Note: Some payment links support redirect URL parameters
-  const successUrl = `${baseUrl}/#/payment-success?payment_status=success&plan=${planId}&user_email=${encodeURIComponent(userEmail)}`;
-  const cancelUrl = `${baseUrl}/#/pricing?payment_status=canceled&plan=${planId}`;
+  const isPaymentReturn = Object.values(indicators).some(Boolean);
   
-  // Try adding redirect URLs as parameters (depends on Stripe Payment Link configuration)
-  paymentUrl.searchParams.set('success_url', successUrl);
-  paymentUrl.searchParams.set('cancel_url', cancelUrl);
-  
-  console.log('🔗 Enhanced payment link created:', {
-    originalLink: plan.paymentLink,
-    enhancedLink: paymentUrl.toString(),
-    successUrl,
-    cancelUrl,
-    planId,
-    userEmail
+  console.log('🔍 Payment return detection:', {
+    indicators,
+    isPaymentReturn,
+    currentUrl: window.location.href,
+    referrer
   });
   
   return {
-    url: paymentUrl.toString(),
-    originalUrl: plan.paymentLink,
-    successUrl,
-    cancelUrl,
-    planId,
-    userEmail
+    isPaymentReturn,
+    indicators,
+    sessionId: urlParams.get('session_id') || hashParams.get('session_id'),
+    planId: urlParams.get('plan') || hashParams.get('plan'),
+    paymentStatus: urlParams.get('payment_status') || hashParams.get('payment_status')
   };
 };
 
-// **NEW**: Manual redirect handler for when payment links don't support redirect URLs
-export const handlePaymentLinkReturn = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-  
-  // Check if this looks like a Stripe return
-  const hasStripeParams = urlParams.has('session_id') || 
-                         hashParams.has('session_id') ||
-                         window.location.href.includes('stripe.com') ||
-                         document.referrer.includes('stripe.com');
-  
-  if (hasStripeParams) {
-    console.log('🔄 Detected potential Stripe return, redirecting to payment success...');
-    
-    // Extract any available parameters
-    const sessionId = urlParams.get('session_id') || hashParams.get('session_id') || 'manual_redirect';
-    const planId = urlParams.get('plan') || hashParams.get('plan') || 'professional';
-    
-    // Build success URL with available parameters
-    const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${sessionId}&source=manual_redirect&timestamp=${Date.now()}`;
-    
-    console.log('🎯 Redirecting to:', successUrl);
-    
-    // Redirect to payment success page
-    setTimeout(() => {
-      window.location.href = successUrl;
-    }, 100);
-    
-    return true;
-  }
-  
-  return false;
-};
-
-// **ENHANCED**: Create checkout session for Payment Links
+// **ENHANCED**: Create checkout session for Payment Links with better redirect handling
 export const createEnhancedCheckoutSession = async (planId, userEmail, options = {}) => {
   const plan = getPlanById(planId);
   if (!plan || !plan.paymentLink) {
@@ -317,56 +277,108 @@ export const createEnhancedCheckoutSession = async (planId, userEmail, options =
     paymentLink: plan.paymentLink
   });
   
-  // **STEP 1**: Try to create payment link with redirect URLs
-  const paymentLinkData = createPaymentLinkWithRedirect(planId, userEmail);
-  
-  // **STEP 2**: Set up return detection
-  // Store payment attempt in localStorage for return detection
+  // **STEP 1**: Store payment attempt for return detection
   const paymentAttempt = {
     planId,
     userEmail,
     timestamp: Date.now(),
-    sessionId: `cs_manual_${Math.random().toString(36).substring(2, 15)}`,
-    source: 'payment_link'
+    sessionId: `cs_link_${Math.random().toString(36).substring(2, 15)}`,
+    source: 'payment_link',
+    originalUrl: plan.paymentLink
   };
   
+  // Store in both localStorage and sessionStorage for redundancy
   localStorage.setItem('pendingPayment', JSON.stringify(paymentAttempt));
+  sessionStorage.setItem('stripePaymentAttempt', 'true');
+  sessionStorage.setItem('paymentPlanId', planId);
+  sessionStorage.setItem('paymentUserEmail', userEmail);
   
-  // **STEP 3**: Set up return detection listener
-  window.addEventListener('focus', function handleWindowFocus() {
-    setTimeout(() => {
-      const pendingPayment = JSON.parse(localStorage.getItem('pendingPayment') || 'null');
-      
-      if (pendingPayment && (Date.now() - pendingPayment.timestamp) < 30 * 60 * 1000) { // 30 minutes
-        console.log('🔍 Window focused after payment attempt, checking for successful payment...');
+  // **STEP 2**: Set up return detection with multiple methods
+  const setupReturnDetection = () => {
+    // Method 1: Window focus detection
+    const handleWindowFocus = () => {
+      setTimeout(() => {
+        const pendingPayment = JSON.parse(localStorage.getItem('pendingPayment') || 'null');
         
-        // Simulate successful payment return
-        const successUrl = `/#/payment-success?payment_status=success&plan=${pendingPayment.planId}&session_id=${pendingPayment.sessionId}&user_email=${encodeURIComponent(pendingPayment.userEmail)}&source=focus_detection&timestamp=${Date.now()}`;
-        
-        // Ask user if payment was successful
-        const paymentSuccessful = confirm(
-          `Did you complete your payment successfully?\n\n` +
-          `Plan: ${plan.name}\n` +
-          `Price: £${plan.price}/month\n\n` +
-          `Click OK if payment was successful, or Cancel if you didn't complete the payment.`
-        );
-        
-        if (paymentSuccessful) {
-          console.log('✅ User confirmed successful payment, redirecting...');
-          localStorage.removeItem('pendingPayment');
-          window.location.href = successUrl;
-        } else {
-          console.log('❌ User cancelled or payment was not successful');
-          localStorage.removeItem('pendingPayment');
+        if (pendingPayment && (Date.now() - pendingPayment.timestamp) < 30 * 60 * 1000) {
+          console.log('🔍 Window focused after payment attempt, checking return...');
+          
+          // Check if we're already on payment success page
+          if (window.location.href.includes('payment-success')) {
+            console.log('✅ Already on payment success page');
+            return;
+          }
+          
+          // **IMPORTANT**: Ask user to confirm payment
+          const confirmPayment = () => {
+            const result = confirm(
+              `🎉 Welcome back!\n\n` +
+              `Did you successfully complete your payment for the ${plan.name} plan?\n\n` +
+              `💳 Price: £${plan.price}/month\n\n` +
+              `✅ Click OK if payment was successful\n` +
+              `❌ Click Cancel if you didn't complete the payment`
+            );
+            
+            if (result) {
+              console.log('✅ User confirmed successful payment');
+              
+              // Clear storage
+              localStorage.removeItem('pendingPayment');
+              sessionStorage.removeItem('stripePaymentAttempt');
+              
+              // Redirect to success page
+              const successUrl = `/#/payment-success?payment_status=success&plan=${pendingPayment.planId}&session_id=${pendingPayment.sessionId}&user_email=${encodeURIComponent(pendingPayment.userEmail)}&source=user_confirmation&timestamp=${Date.now()}`;
+              
+              window.location.href = successUrl;
+            } else {
+              console.log('❌ User cancelled or payment was unsuccessful');
+              localStorage.removeItem('pendingPayment');
+              sessionStorage.removeItem('stripePaymentAttempt');
+            }
+          };
+          
+          // Small delay to ensure page is fully loaded
+          setTimeout(confirmPayment, 1000);
         }
-      }
-    }, 1000); // Wait 1 second after focus
+      }, 2000); // Wait 2 seconds after focus
+    };
     
-    // Remove listener after first use
-    window.removeEventListener('focus', handleWindowFocus);
-  });
+    // Method 2: Periodic check for return
+    const checkInterval = setInterval(() => {
+      const detection = detectPaymentReturn();
+      
+      if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
+        console.log('🔄 Payment return detected via periodic check');
+        clearInterval(checkInterval);
+        
+        const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${detection.sessionId || paymentAttempt.sessionId}&user_email=${encodeURIComponent(userEmail)}&source=periodic_check&timestamp=${Date.now()}`;
+        
+        window.location.href = successUrl;
+      }
+    }, 5000); // Check every 5 seconds
+    
+    // Clean up after 30 minutes
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      window.removeEventListener('focus', handleWindowFocus);
+    }, 30 * 60 * 1000);
+    
+    // Add focus listener
+    window.addEventListener('focus', handleWindowFocus);
+  };
   
-  return paymentLinkData;
+  // **STEP 3**: Set up detection after small delay
+  setTimeout(setupReturnDetection, 1000);
+  
+  // **STEP 4**: Return payment link data
+  return {
+    url: plan.paymentLink,
+    originalUrl: plan.paymentLink,
+    sessionId: paymentAttempt.sessionId,
+    planId,
+    userEmail,
+    paymentAttempt
+  };
 };
 
 // **NEW**: Function to handle post-payment processing for Payment Links
@@ -385,8 +397,9 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
     // Check for various success indicators
     const isSuccessfulPayment = paymentStatus === 'success' || 
                                sessionId?.startsWith('cs_') ||
-                               source === 'focus_detection' ||
-                               source === 'manual_redirect';
+                               source === 'user_confirmation' ||
+                               source === 'periodic_check' ||
+                               source === 'focus_detection';
 
     if (isSuccessfulPayment && userEmail) {
       console.log('✅ Valid payment return detected, processing subscription activation...');
@@ -400,10 +413,21 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
       
       await updateUserSubscription(userEmail, finalPlanId, finalSessionId);
       
-      // Clear feature caches for immediate refresh
-      localStorage.removeItem(`featureCache_${userEmail}`);
-      localStorage.removeItem(`subscriptionCache_${userEmail}`);
-      localStorage.removeItem('pendingPayment');
+      // Clear all caches for immediate refresh
+      const cacheKeys = [
+        `featureCache_${userEmail}`,
+        `subscriptionCache_${userEmail}`,
+        `planLimits_${userEmail}`,
+        'pendingPayment',
+        'stripePaymentAttempt',
+        'paymentPlanId',
+        'paymentUserEmail'
+      ];
+      
+      cacheKeys.forEach(key => {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
       
       // Dispatch immediate subscription update event
       window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
@@ -422,7 +446,8 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
           detail: {
             source: 'post_payment_payment_link',
             immediate: true,
-            userEmail
+            userEmail,
+            force: true
           }
         }));
       }, 500);
@@ -448,6 +473,34 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
       error: error.message
     };
   }
+};
+
+// **NEW**: Manual redirect handler for when payment links don't support redirect URLs
+export const handlePaymentLinkReturn = () => {
+  const detection = detectPaymentReturn();
+  
+  if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
+    console.log('🔄 Detected payment return, redirecting to payment success...');
+    
+    // Extract available parameters
+    const sessionId = detection.sessionId || `cs_auto_${Date.now()}`;
+    const planId = detection.planId || sessionStorage.getItem('paymentPlanId') || 'professional';
+    const userEmail = sessionStorage.getItem('paymentUserEmail') || '';
+    
+    // Build success URL
+    const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${sessionId}&user_email=${encodeURIComponent(userEmail)}&source=auto_redirect&timestamp=${Date.now()}`;
+    
+    console.log('🎯 Auto-redirecting to:', successUrl);
+    
+    // Redirect to payment success page
+    setTimeout(() => {
+      window.location.href = successUrl;
+    }, 100);
+    
+    return true;
+  }
+  
+  return false;
 };
 
 // Webhook signature verification helper (for server-side use)

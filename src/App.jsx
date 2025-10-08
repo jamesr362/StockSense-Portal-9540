@@ -26,97 +26,58 @@ function AppRoutes() {
 
   // **ENHANCED**: Better payment return detection and handling
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-    
-    const paymentStatus = urlParams.get('payment_status') || hashParams.get('payment_status');
-    const sessionId = urlParams.get('session_id') || hashParams.get('session_id');
-    const planId = urlParams.get('plan') || hashParams.get('plan');
-    const webhookTrigger = urlParams.get('webhook_trigger') || hashParams.get('webhook_trigger');
-    const source = urlParams.get('source') || hashParams.get('source');
-    
-    // **ENHANCED**: Detect payment returns from multiple sources
-    const isPaymentReturn = paymentStatus === 'success' || 
-                           sessionId?.startsWith('cs_') ||
-                           window.location.href.includes('payment-success') ||
-                           webhookTrigger === 'true' ||
-                           source === 'focus_detection' ||
-                           source === 'manual_redirect';
-
-    // **NEW**: Detect return from Stripe (even without explicit parameters)
-    const isStripeReturn = document.referrer.includes('stripe.com') ||
-                          document.referrer.includes('buy.stripe.com') ||
-                          sessionStorage.getItem('stripeRedirectAttempt') === 'true';
-    
-    // Log all payment-related URL parameters for debugging
-    if (paymentStatus || sessionId || planId || webhookTrigger || isStripeReturn) {
-      console.log('🔍 Payment-related activity detected:', {
-        paymentStatus,
-        sessionId,
-        planId,
-        webhookTrigger,
-        source,
-        isStripeReturn,
-        referrer: document.referrer,
-        currentPath: location.pathname,
-        fullUrl: window.location.href,
-        hash: window.location.hash,
-        search: location.search,
-        isPaymentReturn: isPaymentReturn || isStripeReturn
-      });
-    }
-
-    // **ENHANCED**: Handle Stripe returns even without parameters
-    if (isStripeReturn && !window.location.href.includes('payment-success')) {
-      console.log('🔄 Detected return from Stripe, redirecting to payment success...');
-      
-      // Check for pending payment in localStorage
-      const pendingPayment = JSON.parse(localStorage.getItem('pendingPayment') || 'null');
-      
-      if (pendingPayment) {
-        const successUrl = `/#/payment-success?payment_status=success&plan=${pendingPayment.planId}&session_id=${pendingPayment.sessionId}&user_email=${encodeURIComponent(pendingPayment.userEmail)}&source=stripe_return&timestamp=${Date.now()}`;
+    const handlePaymentReturns = async () => {
+      try {
+        // Import Stripe utilities
+        const { detectPaymentReturn, handlePaymentLinkReturn } = await import('./lib/stripe');
         
-        console.log('🎯 Redirecting to payment success with pending payment data:', successUrl);
-        window.location.href = successUrl;
-        return;
-      } else {
-        // Ask user if payment was successful
-        const userConfirmed = confirm(
-          'Did you complete your payment successfully?\n\n' +
-          'Click OK if you just completed a payment, or Cancel if you didn\'t.'
-        );
+        // Detect if this is a payment return
+        const detection = detectPaymentReturn();
         
-        if (userConfirmed) {
-          const successUrl = `/#/payment-success?payment_status=success&plan=professional&session_id=cs_confirmed_${Date.now()}&source=user_confirmation&timestamp=${Date.now()}`;
-          console.log('✅ User confirmed payment, redirecting:', successUrl);
-          window.location.href = successUrl;
-          return;
-        }
-      }
-    }
-
-    // Trigger webhook simulation for successful payments
-    if (isPaymentReturn || isStripeReturn) {
-      console.log('🎯 Payment return detected, triggering webhook simulation...');
-      
-      // Clear the redirect attempt flag
-      sessionStorage.removeItem('stripeRedirectAttempt');
-      
-      // Dispatch custom event to trigger webhook processing
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('paymentReturnDetected', {
-          detail: {
-            paymentStatus: paymentStatus || 'success',
-            sessionId: sessionId || `cs_return_${Date.now()}`,
-            planId: planId || 'professional',
-            webhookTrigger,
-            source: source || 'app_router',
-            timestamp: Date.now(),
-            isStripeReturn
+        if (detection.isPaymentReturn) {
+          console.log('🎉 Payment return detected!', detection);
+          
+          // Handle different types of returns
+          if (!window.location.href.includes('payment-success')) {
+            console.log('🔄 Redirecting to payment success page...');
+            
+            // Try automatic redirect first
+            const handled = handlePaymentLinkReturn();
+            
+            if (!handled) {
+              // Manual redirect as fallback
+              const sessionId = detection.sessionId || `cs_fallback_${Date.now()}`;
+              const planId = detection.planId || 'professional';
+              const userEmail = sessionStorage.getItem('paymentUserEmail') || '';
+              
+              const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${sessionId}&user_email=${encodeURIComponent(userEmail)}&source=app_router&timestamp=${Date.now()}`;
+              
+              console.log('🎯 Manual redirect to:', successUrl);
+              setTimeout(() => {
+                window.location.href = successUrl;
+              }, 1000);
+            }
           }
-        }));
-      }, 500); // Small delay to ensure components are mounted
-    }
+          
+          // Trigger webhook simulation for successful payments
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('paymentReturnDetected', {
+              detail: {
+                ...detection,
+                source: 'app_router',
+                timestamp: Date.now()
+              }
+            }));
+          }, 500);
+        }
+        
+      } catch (error) {
+        console.warn('⚠️ Error handling payment returns:', error);
+      }
+    };
+
+    // Run payment return detection
+    handlePaymentReturns();
 
     // Initialize database on app load
     const initializeApp = async () => {
@@ -149,38 +110,29 @@ function AppRoutes() {
 
   }, [location]);
 
-  // **NEW**: Listen for payment link redirects
+  // **NEW**: Enhanced hash change detection for Payment Link returns
   useEffect(() => {
-    const handlePaymentLinkReturn = () => {
-      // Check if we're being redirected from a payment link
-      const urlParams = new URLSearchParams(window.location.search);
-      const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-      
-      // Look for Stripe-specific parameters or referrer
-      const hasStripeIndicators = document.referrer.includes('stripe.com') ||
-                                 document.referrer.includes('buy.stripe.com') ||
-                                 urlParams.has('session_id') ||
-                                 hashParams.has('session_id');
-      
-      if (hasStripeIndicators && !window.location.href.includes('payment-success')) {
-        console.log('🔗 Payment link return detected, processing...');
+    const handleHashChange = async () => {
+      try {
+        const { detectPaymentReturn, handlePaymentLinkReturn } = await import('./lib/stripe');
         
-        // **FIXED**: Correct import path for stripe module
-        import('./lib/stripe').then(({ handlePaymentLinkReturn }) => {
-          const handled = handlePaymentLinkReturn();
-          if (!handled) {
-            console.log('ℹ️ Payment link return not handled automatically');
-          }
-        });
+        // Check for payment returns on hash changes
+        const detection = detectPaymentReturn();
+        
+        if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
+          console.log('🔗 Payment return detected on hash change');
+          handlePaymentLinkReturn();
+        }
+      } catch (error) {
+        console.warn('⚠️ Error in hash change handler:', error);
       }
     };
 
-    // Run immediately and on hash changes
-    handlePaymentLinkReturn();
-    window.addEventListener('hashchange', handlePaymentLinkReturn);
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
     
     return () => {
-      window.removeEventListener('hashchange', handlePaymentLinkReturn);
+      window.removeEventListener('hashchange', handleHashChange);
     };
   }, []);
 
@@ -233,23 +185,65 @@ function AppRoutes() {
 }
 
 export default function App() {
-  // **NEW**: Set flag when we're about to redirect to Stripe
+  // **ENHANCED**: Better Stripe redirect detection
   useEffect(() => {
-    const handleStripeRedirect = (event) => {
-      console.log('🔗 Setting Stripe redirect flag...');
-      sessionStorage.setItem('stripeRedirectAttempt', 'true');
+    // Set up global payment return detection
+    const setupGlobalDetection = () => {
+      // Listen for page visibility changes (when user returns from Stripe)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          console.log('📱 Page became visible - checking for payment returns...');
+          
+          setTimeout(async () => {
+            try {
+              const { detectPaymentReturn } = await import('./lib/stripe');
+              const detection = detectPaymentReturn();
+              
+              if (detection.isPaymentReturn) {
+                console.log('🎉 Payment return detected on visibility change!');
+                // The main detection logic will handle the redirect
+              }
+            } catch (error) {
+              console.warn('⚠️ Error in visibility change handler:', error);
+            }
+          }, 1000);
+        }
+      };
+      
+      // Listen for window focus (alternative detection method)
+      const handleWindowFocus = () => {
+        console.log('🔍 Window focused - checking payment status...');
+        
+        setTimeout(async () => {
+          try {
+            const { detectPaymentReturn } = await import('./lib/stripe');
+            const detection = detectPaymentReturn();
+            
+            if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
+              console.log('🎯 Payment return detected on focus!');
+              // Let the main handler deal with it
+            }
+          } catch (error) {
+            console.warn('⚠️ Error in focus handler:', error);
+          }
+        }, 500);
+      };
+      
+      // Add event listeners
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleWindowFocus);
+      
+      // Cleanup function
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('focus', handleWindowFocus);
+      };
     };
-
-    window.addEventListener('beforeunload', (event) => {
-      // Check if we're navigating to Stripe
-      if (document.activeElement?.href?.includes('stripe.com')) {
-        sessionStorage.setItem('stripeRedirectAttempt', 'true');
-      }
-    });
-
-    return () => {
-      // Cleanup if needed
-    };
+    
+    // Set up detection
+    const cleanup = setupGlobalDetection();
+    
+    return cleanup;
   }, []);
 
   return (

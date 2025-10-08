@@ -16,6 +16,7 @@ export default function PaymentSuccess() {
   const [isUpdatingSubscription, setIsUpdatingSubscription] = useState(false);
   const [subscriptionUpdated, setSubscriptionUpdated] = useState(false);
   const [error, setError] = useState('');
+  const [debugInfo, setDebugInfo] = useState({});
 
   useEffect(() => {
     const handlePaymentSuccess = async () => {
@@ -23,14 +24,29 @@ export default function PaymentSuccess() {
         const planId = searchParams.get('plan');
         const sessionId = searchParams.get('session_id');
         const paymentStatus = searchParams.get('payment_status');
+        const source = searchParams.get('source');
         
-        console.log('🎉 PaymentSuccess page loaded:', { 
+        // Enhanced debugging information
+        const debugData = {
           planId, 
           sessionId, 
-          paymentStatus, 
+          paymentStatus,
+          source,
           userEmail: user?.email,
-          allParams: Object.fromEntries(searchParams.entries())
-        });
+          allParams: Object.fromEntries(searchParams.entries()),
+          referrer: document.referrer,
+          timestamp: new Date().toISOString(),
+          pendingPayment: JSON.parse(localStorage.getItem('pendingPayment') || 'null'),
+          sessionStorage: {
+            stripePaymentAttempt: sessionStorage.getItem('stripePaymentAttempt'),
+            paymentPlanId: sessionStorage.getItem('paymentPlanId'),
+            paymentUserEmail: sessionStorage.getItem('paymentUserEmail')
+          }
+        };
+        
+        setDebugInfo(debugData);
+        
+        console.log('🎉 PaymentSuccess page loaded with enhanced data:', debugData);
 
         if (!user?.email) {
           setError('User not authenticated. Please log in and try again.');
@@ -38,8 +54,12 @@ export default function PaymentSuccess() {
           return;
         }
 
-        // Determine plan details
-        const finalPlanId = planId || 'professional';
+        // Determine plan details with fallbacks
+        const finalPlanId = planId || 
+                           debugData.pendingPayment?.planId || 
+                           debugData.sessionStorage.paymentPlanId || 
+                           'professional';
+        
         const plan = SUBSCRIPTION_PLANS[finalPlanId] || SUBSCRIPTION_PLANS.professional;
         setPlanDetails(plan);
 
@@ -47,11 +67,13 @@ export default function PaymentSuccess() {
           planId: finalPlanId,
           userEmail: user.email,
           sessionId,
-          paymentStatus
+          paymentStatus,
+          source,
+          debugData
         });
 
         // **ENHANCED**: Process payment return and activate subscription
-        await processPaymentReturn(finalPlanId, sessionId, paymentStatus);
+        await processPaymentReturn(finalPlanId, sessionId, paymentStatus, source);
         
       } catch (error) {
         console.error('❌ Error handling payment success:', error);
@@ -68,7 +90,7 @@ export default function PaymentSuccess() {
     }
   }, [searchParams, user?.email]);
 
-  const processPaymentReturn = async (planId, sessionId, paymentStatus) => {
+  const processPaymentReturn = async (planId, sessionId, paymentStatus, source) => {
     try {
       setIsUpdatingSubscription(true);
       setError('');
@@ -77,6 +99,7 @@ export default function PaymentSuccess() {
         planId,
         sessionId,
         paymentStatus,
+        source,
         userEmail: user.email
       });
 
@@ -86,38 +109,93 @@ export default function PaymentSuccess() {
       if (postPaymentResult.success) {
         console.log('✅ Post-payment processing successful:', postPaymentResult);
         setSubscriptionUpdated(true);
+        
+        // **ADDITIONAL**: Force immediate feature refresh
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('forceFeatureRefresh', {
+            detail: {
+              userEmail: user.email,
+              planId,
+              immediate: true,
+              source: 'payment_success_force_refresh'
+            }
+          }));
+        }, 1000);
+        
         return;
       }
 
-      // **STEP 2**: Fallback - Direct subscription update
-      console.log('⚠️ Post-payment handler failed, using direct subscription update...');
+      // **STEP 2**: Enhanced fallback - Direct subscription update with retries
+      console.log('⚠️ Post-payment handler failed, using enhanced direct subscription update...');
       
-      await updateUserSubscription(user.email, planId, sessionId);
+      let updateSuccess = false;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (!updateSuccess && attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`🔄 Subscription update attempt ${attempts}/${maxAttempts}...`);
+          
+          await updateUserSubscription(user.email, planId, sessionId || `cs_manual_${Date.now()}_${attempts}`);
+          updateSuccess = true;
+          console.log('✅ Subscription updated successfully');
+          
+        } catch (updateError) {
+          console.warn(`⚠️ Subscription update attempt ${attempts} failed:`, updateError);
+          
+          if (attempts === maxAttempts) {
+            throw updateError;
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
+      }
 
-      // **STEP 3**: Clear all caches for immediate refresh
-      localStorage.removeItem(`featureCache_${user.email}`);
-      localStorage.removeItem(`subscriptionCache_${user.email}`);
-      localStorage.removeItem(`planLimits_${user.email}`);
+      // **STEP 3**: Enhanced cache clearing
+      const cacheKeys = [
+        `featureCache_${user.email}`,
+        `subscriptionCache_${user.email}`,
+        `planLimits_${user.email}`,
+        `userSubscription_${user.email}`,
+        'pendingPayment',
+        'stripePaymentAttempt',
+        'paymentPlanId',
+        'paymentUserEmail',
+        'routeCache',
+        'componentCache'
+      ];
       
-      // **STEP 4**: Dispatch multiple update events for maximum compatibility
+      cacheKeys.forEach(key => {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
+      
+      // **STEP 4**: Enhanced event dispatching
       const updateEvents = [
         'subscriptionUpdated',
         'refreshFeatureAccess',
         'planChanged',
-        'userUpgraded'
+        'userUpgraded',
+        'forceAppRefresh',
+        'subscriptionActivated'
       ];
 
-      updateEvents.forEach(eventName => {
-        window.dispatchEvent(new CustomEvent(eventName, {
-          detail: { 
-            userEmail: user.email, 
-            planId,
-            sessionId,
-            immediate: true,
-            source: 'payment_success_page',
-            timestamp: Date.now()
-          }
-        }));
+      updateEvents.forEach((eventName, index) => {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(eventName, {
+            detail: { 
+              userEmail: user.email, 
+              planId,
+              sessionId: sessionId || `cs_manual_${Date.now()}`,
+              immediate: true,
+              source: 'payment_success_page',
+              timestamp: Date.now(),
+              attempt: attempts
+            }
+          }));
+        }, index * 200); // Stagger events
       });
 
       setSubscriptionUpdated(true);
@@ -126,15 +204,27 @@ export default function PaymentSuccess() {
         userEmail: user.email,
         planId: `price_${planId}`,
         sessionId,
-        method: 'direct_update'
+        method: 'enhanced_direct_update',
+        attempts,
+        source
       });
 
     } catch (error) {
       console.error('❌ Error processing payment return:', error);
       setError(`Failed to activate subscription: ${error.message}`);
+      
+      // **FALLBACK**: Show manual activation option
+      setError(
+        `Subscription activation in progress... If features don't appear immediately, please refresh the page or contact support.\n\n` +
+        `Error details: ${error.message}`
+      );
+      
       logSecurityEvent('SUBSCRIPTION_UPDATE_ERROR_AFTER_PAYMENT', {
         error: error.message,
-        userEmail: user?.email
+        userEmail: user?.email,
+        planId,
+        sessionId,
+        source
       });
     } finally {
       setIsUpdatingSubscription(false);
@@ -142,26 +232,44 @@ export default function PaymentSuccess() {
   };
 
   const handleContinue = () => {
-    // **ENHANCED**: Force complete app refresh to ensure all components update
-    console.log('🔄 Redirecting to dashboard with full app refresh...');
+    console.log('🔄 Redirecting to dashboard with complete app refresh...');
     
-    // Clear additional caches
-    localStorage.removeItem('routeCache');
-    localStorage.removeItem('componentCache');
+    // **ENHANCED**: Multiple refresh strategies
     
-    // Force refresh feature access one more time
-    window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-      detail: {
-        source: 'payment_success_continue',
-        immediate: true,
-        force: true
+    // Strategy 1: Clear all possible caches
+    const allCacheKeys = Object.keys(localStorage).concat(Object.keys(sessionStorage));
+    allCacheKeys.forEach(key => {
+      if (key.includes('Cache') || key.includes('cache') || key.includes('feature') || key.includes('subscription')) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
       }
-    }));
-
-    // Use window.location for complete refresh instead of navigate
+    });
+    
+    // Strategy 2: Force multiple feature refresh events
+    const refreshEvents = ['refreshFeatureAccess', 'forceFeatureRefresh', 'subscriptionActivated'];
+    refreshEvents.forEach((event, index) => {
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent(event, {
+          detail: {
+            source: 'payment_success_continue',
+            immediate: true,
+            force: true,
+            userEmail: user?.email,
+            timestamp: Date.now()
+          }
+        }));
+      }, index * 100);
+    });
+    
+    // Strategy 3: Use window.location.href for complete refresh
     setTimeout(() => {
-      window.location.href = '/#/dashboard';
-    }, 100);
+      window.location.href = '/#/dashboard?subscription_activated=true&timestamp=' + Date.now();
+    }, 500);
+  };
+
+  const handleRefreshPage = () => {
+    console.log('🔄 Manual page refresh requested');
+    window.location.reload();
   };
 
   const handleViewBilling = () => {
@@ -171,10 +279,20 @@ export default function PaymentSuccess() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-400">Processing your payment confirmation...</p>
-          <p className="text-gray-500 text-sm mt-2">Activating premium features...</p>
+          <p className="text-gray-400 mb-2">Processing your payment confirmation...</p>
+          <p className="text-gray-500 text-sm mb-4">Activating premium features...</p>
+          
+          {/* Debug info for troubleshooting */}
+          {Object.keys(debugInfo).length > 0 && (
+            <details className="text-left text-xs text-gray-600 mt-4 bg-gray-800 p-3 rounded">
+              <summary className="cursor-pointer text-gray-400 mb-2">Debug Information</summary>
+              <pre className="whitespace-pre-wrap overflow-auto max-h-32">
+                {JSON.stringify(debugInfo, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       </div>
     );
@@ -191,20 +309,27 @@ export default function PaymentSuccess() {
           <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <RiAlertLine className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-4">Payment Processing Error</h1>
-          <p className="text-gray-300 mb-6">{error}</p>
+          <h1 className="text-2xl font-bold text-white mb-4">Payment Processing</h1>
+          <p className="text-gray-300 mb-6 whitespace-pre-line">{error}</p>
           <div className="space-y-3">
             <button
-              onClick={() => window.location.href = '/#/pricing'}
-              className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
+              onClick={handleRefreshPage}
+              className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
             >
-              Try Again
+              <RiRefreshLine className="h-5 w-5 mr-2" />
+              Refresh Page
             </button>
             <button
               onClick={() => window.location.href = '/#/dashboard'}
               className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
             >
-              Return to Dashboard
+              Continue to Dashboard
+            </button>
+            <button
+              onClick={() => window.location.href = '/#/pricing'}
+              className="w-full py-2 px-6 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
+            >
+              Back to Pricing
             </button>
           </div>
         </motion.div>
@@ -350,12 +475,22 @@ export default function PaymentSuccess() {
             Start Using Premium Features
             <RiArrowRightLine className="h-5 w-5 ml-2" />
           </button>
-          <button
-            onClick={handleViewBilling}
-            className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
-          >
-            Manage Subscription
-          </button>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handleViewBilling}
+              className="py-2 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm"
+            >
+              Manage Billing
+            </button>
+            <button
+              onClick={handleRefreshPage}
+              className="py-2 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm flex items-center justify-center"
+            >
+              <RiRefreshLine className="h-4 w-4 mr-1" />
+              Refresh
+            </button>
+          </div>
         </motion.div>
 
         {/* Auto-refresh notice */}
@@ -386,6 +521,9 @@ export default function PaymentSuccess() {
             >
               support@trackio.com
             </a>
+          </p>
+          <p className="text-gray-500 text-xs mt-2">
+            💡 If premium features don't appear immediately, try refreshing the page
           </p>
         </motion.div>
       </motion.div>
