@@ -12,7 +12,9 @@ import Admin from './pages/Admin';
 import PlatformAdmin from './pages/PlatformAdmin';
 import Settings from './pages/Settings';
 import SubscriptionManagement from './pages/SubscriptionManagement';
+import Billing from './pages/Billing';
 import Pricing from './pages/Pricing';
+import PricingGuide from './pages/PricingGuide';
 import PaymentSuccess from './pages/PaymentSuccess';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -145,6 +147,7 @@ function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pricing" element={<Pricing />} />
+        <Route path="/pricing-guide" element={<PricingGuide />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route
           path="/"
@@ -160,6 +163,7 @@ function AppRoutes() {
           <Route path="receipt-scanner" element={<ReceiptScanner />} />
           <Route path="excel-importer" element={<ExcelImporter />} />
           <Route path="tax-exports" element={<TaxExports />} />
+          <Route path="billing" element={<Billing />} />
           <Route path="settings/*" element={<Settings />} />
           <Route path="subscription" element={<SubscriptionManagement />} />
           <Route
@@ -179,6 +183,8 @@ function AppRoutes() {
             }
           />
         </Route>
+        {/* Catch all route - redirect to dashboard if logged in, otherwise to login */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </>
   );

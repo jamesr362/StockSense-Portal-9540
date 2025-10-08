@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {getInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 
-export default function TaxExportModal({isOpen,onClose}) {
+export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
   const [isLoading,setIsLoading]=useState(false);
   const [inventoryData,setInventoryData]=useState([]);
   const [exportSettings,setExportSettings]=useState({
@@ -475,9 +475,26 @@ export default function TaxExportModal({isOpen,onClose}) {
           throw new Error('Invalid export format');
       }
       
+      // Prepare export info for callback
+      const exportInfo = {
+        format: exportSettings.format,
+        fileName,
+        recordCount: taxSummary.totalItems,
+        totalValue: taxSummary.totalValue,
+        vatAmount: taxSummary.vatAmount,
+        dateRange: exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`,
+        settings: exportSettings
+      };
+      
       // Success message and close modal
       setTimeout(()=> {
         alert(`Tax report exported successfully as ${fileName}!\n\nThis file is ready to send to your accountant.`);
+        
+        // Call the callback if provided
+        if (onExportComplete) {
+          onExportComplete(exportInfo);
+        }
+        
         onClose();
       },500);
       
