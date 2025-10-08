@@ -309,12 +309,12 @@ async function handleCheckoutSessionCompleted(session) {
 
   console.log('📋 Plan ID determined:', planId);
 
-  // **FIXED**: Create subscription data WITHOUT stripe_session_id to match actual database schema
+  // **FIXED**: Include stripe_session_id since it EXISTS in the database schema
   const subscriptionData = {
     user_email: customerEmail.toLowerCase(),
     stripe_customer_id: session.customer,
     stripe_subscription_id: subscriptionId,
-    // REMOVED: stripe_session_id: session.id, // This column doesn't exist in the actual schema
+    stripe_session_id: session.id, // This column DOES exist in the schema
     plan_id: `price_${planId}`,
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -325,93 +325,133 @@ async function handleCheckoutSessionCompleted(session) {
     updated_at: new Date().toISOString()
   };
 
-  console.log('💾 Saving subscription data (matching database schema):', {
+  console.log('💾 Saving subscription data (with stripe_session_id):', {
     email: subscriptionData.user_email,
     planId: subscriptionData.plan_id,
     status: subscriptionData.status,
     customerId: subscriptionData.stripe_customer_id,
-    subscriptionId: subscriptionData.stripe_subscription_id
+    subscriptionId: subscriptionData.stripe_subscription_id,
+    sessionId: subscriptionData.stripe_session_id
   });
 
   try {
-    // **STRATEGY 1**: Try to update existing subscription first
-    const { data: updateData, error: updateError } = await supabase
+    // **FIXED**: Use proper upsert with correct conflict target
+    const { data: upsertData, error: upsertError } = await supabase
       .from('subscriptions_tb2k4x9p1m')
-      .update({
-        stripe_customer_id: subscriptionData.stripe_customer_id,
-        stripe_subscription_id: subscriptionData.stripe_subscription_id,
-        plan_id: subscriptionData.plan_id,
-        status: subscriptionData.status,
-        current_period_start: subscriptionData.current_period_start,
-        current_period_end: subscriptionData.current_period_end,
-        cancel_at_period_end: subscriptionData.cancel_at_period_end,
-        canceled_at: subscriptionData.canceled_at,
-        updated_at: subscriptionData.updated_at
+      .upsert(subscriptionData, { 
+        onConflict: 'user_email', // This should work with the UNIQUE constraint
+        ignoreDuplicates: false 
       })
-      .eq('user_email', customerEmail.toLowerCase())
       .select();
 
-    if (updateError) {
-      console.log('⚠️ Update failed, trying insert:', updateError.message);
+    if (upsertError) {
+      console.log('⚠️ Upsert failed, trying manual check and insert/update:', upsertError.message);
       
-      // **STRATEGY 2**: If update fails (no existing record), try insert
-      const { data: insertData, error: insertError } = await supabase
+      // **FALLBACK STRATEGY**: Manual check and insert/update
+      const { data: existingData, error: checkError } = await supabase
         .from('subscriptions_tb2k4x9p1m')
-        .insert(subscriptionData)
-        .select();
+        .select('*')
+        .eq('user_email', customerEmail.toLowerCase())
+        .single();
 
-      if (insertError) {
-        console.error('❌ Both update and insert failed:', insertError);
-        throw insertError;
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('❌ Error checking existing subscription:', checkError);
+        throw checkError;
       }
 
-      console.log('✅ Subscription inserted successfully');
-      return insertData;
-    } else if (updateData && updateData.length > 0) {
-      console.log('✅ Subscription updated successfully');
-      return updateData;
+      if (existingData) {
+        // Update existing subscription
+        console.log('🔄 Updating existing subscription...');
+        const { data: updateData, error: updateError } = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .update({
+            stripe_customer_id: subscriptionData.stripe_customer_id,
+            stripe_subscription_id: subscriptionData.stripe_subscription_id,
+            stripe_session_id: subscriptionData.stripe_session_id,
+            plan_id: subscriptionData.plan_id,
+            status: subscriptionData.status,
+            current_period_start: subscriptionData.current_period_start,
+            current_period_end: subscriptionData.current_period_end,
+            cancel_at_period_end: subscriptionData.cancel_at_period_end,
+            canceled_at: subscriptionData.canceled_at,
+            updated_at: subscriptionData.updated_at
+          })
+          .eq('user_email', customerEmail.toLowerCase())
+          .select();
+
+        if (updateError) {
+          console.error('❌ Update failed:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ Subscription updated successfully');
+        return updateData;
+      } else {
+        // Insert new subscription
+        console.log('➕ Inserting new subscription...');
+        const { data: insertData, error: insertError } = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .insert(subscriptionData)
+          .select();
+
+        if (insertError) {
+          console.error('❌ Insert failed:', insertError);
+          throw insertError;
+        }
+
+        console.log('✅ Subscription inserted successfully');
+        return insertData;
+      }
     } else {
-      // **STRATEGY 3**: Update succeeded but no rows affected, try insert
-      console.log('⚠️ Update succeeded but no rows affected, trying insert...');
-      
-      const { data: insertData, error: insertError } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .insert(subscriptionData)
-        .select();
-
-      if (insertError) {
-        console.error('❌ Insert after empty update failed:', insertError);
-        throw insertError;
-      }
-
-      console.log('✅ Subscription inserted after empty update');
-      return insertData;
+      console.log('✅ Subscription upserted successfully');
+      return upsertData;
     }
 
   } catch (supabaseError) {
-    console.error('❌ Supabase operation failed:', supabaseError);
+    console.error('❌ All Supabase operations failed:', supabaseError);
     
-    // **STRATEGY 4**: Emergency fallback - try with minimal data
+    // **EMERGENCY FALLBACK**: Try with minimal data structure
     console.log('🚨 EMERGENCY: Trying with minimal subscription data...');
     
     try {
       const minimalData = {
         user_email: customerEmail.toLowerCase(),
         plan_id: `price_${planId}`,
-        status: 'active'
+        status: 'active',
+        stripe_customer_id: session.customer,
+        stripe_subscription_id: subscriptionId,
+        stripe_session_id: session.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
+      // Try direct insert first
       const { data: emergencyData, error: emergencyError } = await supabase
         .from('subscriptions_tb2k4x9p1m')
-        .upsert(minimalData, { 
-          onConflict: 'user_email',
-          ignoreDuplicates: false 
-        })
+        .insert(minimalData)
         .select();
 
       if (emergencyError) {
-        console.error('❌ Emergency fallback also failed:', emergencyError);
-        throw emergencyError;
+        // If insert fails due to duplicate, try update
+        if (emergencyError.code === '23505') {
+          console.log('🔄 Insert failed due to duplicate, trying update...');
+          const { data: updateData, error: updateError } = await supabase
+            .from('subscriptions_tb2k4x9p1m')
+            .update(minimalData)
+            .eq('user_email', customerEmail.toLowerCase())
+            .select();
+
+          if (updateError) {
+            console.error('❌ Emergency update also failed:', updateError);
+            throw updateError;
+          }
+
+          console.log('✅ Emergency subscription updated');
+          return updateData;
+        } else {
+          console.error('❌ Emergency insert failed:', emergencyError);
+          throw emergencyError;
+        }
       }
 
       console.log('✅ Emergency subscription saved with minimal data');
@@ -453,11 +493,11 @@ async function handleSubscriptionCreated(subscription) {
   const priceId = subscription.items.data[0]?.price?.id;
   const planId = priceId ? extractPlanFromPriceId(priceId) : 'professional';
 
-  // **FIXED**: Remove stripe_session_id from subscription data
   const subscriptionData = {
     user_email: customerEmail.toLowerCase(),
     stripe_customer_id: subscription.customer,
     stripe_subscription_id: subscription.id,
+    stripe_session_id: null, // No session ID for direct subscription creation
     plan_id: priceId || `price_${planId}`,
     status: subscription.status,
     current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
@@ -469,45 +509,54 @@ async function handleSubscriptionCreated(subscription) {
   };
 
   try {
-    // Try update first, then insert if no rows affected
-    const { data: updateData, error: updateError } = await supabase
+    // Use the same strategy as checkout session completed
+    const { data: upsertData, error: upsertError } = await supabase
       .from('subscriptions_tb2k4x9p1m')
-      .update(subscriptionData)
-      .eq('user_email', customerEmail.toLowerCase())
+      .upsert(subscriptionData, { 
+        onConflict: 'user_email',
+        ignoreDuplicates: false 
+      })
       .select();
 
-    if (updateError) {
-      console.log('⚠️ Update failed, trying insert:', updateError.message);
+    if (upsertError) {
+      console.log('⚠️ Upsert failed, trying manual approach:', upsertError.message);
       
-      const { data: insertData, error: insertError } = await supabase
+      // Manual check and insert/update
+      const { data: existingData, error: checkError } = await supabase
         .from('subscriptions_tb2k4x9p1m')
-        .insert(subscriptionData)
-        .select();
+        .select('*')
+        .eq('user_email', customerEmail.toLowerCase())
+        .single();
 
-      if (insertError) {
-        console.error('❌ Insert failed:', insertError);
-        throw insertError;
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
       }
-      
-      console.log('✅ Subscription created successfully via insert');
-      return insertData;
-    } else if (updateData && updateData.length > 0) {
-      console.log('✅ Subscription created successfully via update');
-      return updateData;
+
+      if (existingData) {
+        // Update
+        const { data: updateData, error: updateError } = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .update(subscriptionData)
+          .eq('user_email', customerEmail.toLowerCase())
+          .select();
+
+        if (updateError) throw updateError;
+        console.log('✅ Subscription updated successfully');
+        return updateData;
+      } else {
+        // Insert
+        const { data: insertData, error: insertError } = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .insert(subscriptionData)
+          .select();
+
+        if (insertError) throw insertError;
+        console.log('✅ Subscription inserted successfully');
+        return insertData;
+      }
     } else {
-      // Update succeeded but no rows affected, try insert
-      const { data: insertData, error: insertError } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .insert(subscriptionData)
-        .select();
-
-      if (insertError) {
-        console.error('❌ Insert after empty update failed:', insertError);
-        throw insertError;
-      }
-      
-      console.log('✅ Subscription created successfully via insert after empty update');
-      return insertData;
+      console.log('✅ Subscription upserted successfully');
+      return upsertData;
     }
   } catch (error) {
     console.error('❌ Error in handleSubscriptionCreated:', error);
