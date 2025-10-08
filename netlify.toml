@@ -18,7 +18,10 @@
 
 [functions]
   directory = "netlify/functions"
+  node_bundler = "esbuild"
 
-# Ensure functions can handle raw request bodies
+# Function-specific configuration
 [functions."stripe-webhook"]
   included_files = ["netlify/functions/stripe-webhook.js"]
+  # Ensure raw request body is preserved
+  external_node_modules = ["stripe", "@supabase/supabase-js"]
