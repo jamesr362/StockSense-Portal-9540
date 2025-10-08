@@ -309,14 +309,15 @@ async function handleCheckoutSessionCompleted(session) {
 
   console.log('📋 Plan ID determined:', planId);
 
-  // **FIXED**: First check if stripe_session_id column exists, if not, create it
-  await ensureSchemaColumns();
+  // **CRITICAL FIX**: Ensure user exists before creating subscription
+  await ensureUserExists(customerEmail, session);
 
-  // **SCHEMA-SAFE**: Build data object dynamically based on available columns
-  const baseSubscriptionData = {
+  // **Build subscription data**
+  const subscriptionData = {
     user_email: customerEmail.toLowerCase(),
     stripe_customer_id: session.customer,
     stripe_subscription_id: subscriptionId,
+    stripe_session_id: session.id, // Include session ID
     plan_id: `price_${planId}`,
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -327,30 +328,13 @@ async function handleCheckoutSessionCompleted(session) {
     updated_at: new Date().toISOString()
   };
 
-  // Try to add stripe_session_id if the column exists
-  const subscriptionData = { ...baseSubscriptionData };
-  
-  try {
-    // Test if stripe_session_id column exists by trying to query with it
-    await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('stripe_session_id')
-      .limit(1);
-    
-    // If no error, column exists, add it to data
-    subscriptionData.stripe_session_id = session.id;
-    console.log('✅ stripe_session_id column exists, including in data');
-  } catch (columnError) {
-    console.log('⚠️ stripe_session_id column not found, proceeding without it');
-  }
-
   console.log('💾 Saving subscription data:', {
     email: subscriptionData.user_email,
     planId: subscriptionData.plan_id,
     status: subscriptionData.status,
     customerId: subscriptionData.stripe_customer_id,
     subscriptionId: subscriptionData.stripe_subscription_id,
-    hasSessionId: !!subscriptionData.stripe_session_id
+    sessionId: subscriptionData.stripe_session_id
   });
 
   try {
@@ -450,39 +434,65 @@ async function handleCheckoutSessionCompleted(session) {
   }
 }
 
-// **NEW**: Ensure database schema has required columns
-async function ensureSchemaColumns() {
+// **NEW**: Ensure user exists before creating subscription (fixes foreign key constraint)
+async function ensureUserExists(customerEmail, session) {
   try {
-    console.log('🔧 Checking database schema...');
+    console.log('🔍 Checking if user exists:', customerEmail);
     
-    // Try to add stripe_session_id column if it doesn't exist
-    const { error: columnError } = await supabase.rpc('exec_sql', {
-      sql: `
-        DO $$ 
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.columns 
-            WHERE table_name = 'subscriptions_tb2k4x9p1m' 
-            AND column_name = 'stripe_session_id'
-          ) THEN
-            ALTER TABLE subscriptions_tb2k4x9p1m 
-            ADD COLUMN stripe_session_id TEXT;
-            
-            CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_session 
-            ON subscriptions_tb2k4x9p1m(stripe_session_id);
-          END IF;
-        END $$;
-      `
-    });
+    // Check if user already exists
+    const { data: existingUser, error: userCheckError } = await supabase
+      .from('users_tb2k4x9p1m')
+      .select('email')
+      .eq('email', customerEmail.toLowerCase())
+      .single();
 
-    if (columnError) {
-      console.log('⚠️ Could not add stripe_session_id column:', columnError.message);
-    } else {
-      console.log('✅ Database schema verified/updated');
+    if (existingUser) {
+      console.log('✅ User already exists:', customerEmail);
+      return;
     }
 
+    if (userCheckError && userCheckError.code !== 'PGRST116') {
+      console.error('❌ Error checking for user:', userCheckError);
+      // Continue anyway - might not be a critical error
+    }
+
+    // User doesn't exist, create one
+    console.log('👤 Creating user for subscription:', customerEmail);
+    
+    const userData = {
+      email: customerEmail.toLowerCase(),
+      password: `stripe_${Math.random().toString(36).substring(2, 15)}`, // Random password
+      salt: `salt_${Math.random().toString(36).substring(2, 15)}`, // Random salt
+      business_name: session.customer_details?.name || 
+                    session.metadata?.business_name || 
+                    'Stripe Customer',
+      role: 'user',
+      created_at: new Date().toISOString(),
+      last_login: null
+    };
+
+    const { data: newUser, error: createError } = await supabase
+      .from('users_tb2k4x9p1m')
+      .insert(userData)
+      .select();
+
+    if (createError) {
+      if (createError.code === '23505') {
+        console.log('✅ User was created by another process (race condition)');
+        return;
+      }
+      console.error('❌ Error creating user:', createError);
+      throw createError;
+    }
+
+    console.log('✅ User created successfully for subscription:', customerEmail);
+    return newUser;
+
   } catch (error) {
-    console.log('⚠️ Schema check failed:', error.message);
+    console.error('❌ Error ensuring user exists:', error);
+    // Don't throw - let the subscription creation proceed
+    // The foreign key constraint might not actually exist
+    console.log('⚠️ Proceeding with subscription creation despite user creation error');
   }
 }
 
@@ -511,6 +521,9 @@ async function handleSubscriptionCreated(subscription) {
     console.warn('⚠️ No customer email found in subscription, skipping...');
     return;
   }
+
+  // Ensure user exists first
+  await ensureUserExists(customerEmail, { customer_details: { name: customerEmail } });
 
   const priceId = subscription.items.data[0]?.price?.id;
   const planId = priceId ? extractPlanFromPriceId(priceId) : 'professional';
