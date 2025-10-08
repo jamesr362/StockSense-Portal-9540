@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getUserSubscription, createOrUpdateSubscription, cancelSubscription, reactivateSubscription, updateSubscriptionStatus, getUserPlanLimits, checkPlanLimit } from '../services/subscriptionService';
+import { 
+  getUserSubscription, 
+  createOrUpdateSubscription, 
+  cancelSubscription, 
+  reactivateSubscription, 
+  updateSubscriptionStatus, 
+  getUserPlanLimits, 
+  checkPlanLimit 
+} from '../services/subscriptionService';
 import { useAuth } from '../context/AuthContext';
 import { logSecurityEvent } from '../utils/security';
 import { supabase } from '../lib/supabase';
@@ -65,11 +73,34 @@ export const useSubscription = () => {
         getUserPlanLimits(user.email)
       ]);
       
-      setSubscription(subscriptionData);
+      if (subscriptionData) {
+        const formattedSubscription = {
+          id: subscriptionData.id,
+          userEmail: subscriptionData.user_email,
+          stripeCustomerId: subscriptionData.stripe_customer_id,
+          stripeSubscriptionId: subscriptionData.stripe_subscription_id,
+          planId: subscriptionData.plan_id,
+          status: subscriptionData.status,
+          currentPeriodStart: subscriptionData.current_period_start,
+          currentPeriodEnd: subscriptionData.current_period_end,
+          cancelAtPeriodEnd: subscriptionData.cancel_at_period_end,
+          canceledAt: subscriptionData.canceled_at,
+          createdAt: subscriptionData.created_at,
+          updatedAt: subscriptionData.updated_at
+        };
+        setSubscription(formattedSubscription);
+      } else {
+        setSubscription(null);
+      }
+      
       setPlanLimits(limits);
     } catch (err) {
       console.error('Error loading subscription:', err);
       setError(err.message);
+      
+      // Set default free plan limits on error
+      const freeLimits = await getUserPlanLimits(user.email);
+      setPlanLimits(freeLimits);
     } finally {
       setLoading(false);
     }
@@ -80,6 +111,29 @@ export const useSubscription = () => {
     loadSubscription();
   }, [loadSubscription]);
 
+  // Listen for subscription updates
+  useEffect(() => {
+    const handleSubscriptionUpdate = (event) => {
+      if (event.detail?.userEmail === user?.email) {
+        console.log('🔄 Subscription update detected, reloading...');
+        loadSubscription();
+      }
+    };
+
+    const handleFeatureRefresh = () => {
+      console.log('🔄 Feature refresh requested, reloading subscription...');
+      loadSubscription();
+    };
+
+    window.addEventListener('subscriptionUpdated', handleSubscriptionUpdate);
+    window.addEventListener('refreshFeatureAccess', handleFeatureRefresh);
+
+    return () => {
+      window.removeEventListener('subscriptionUpdated', handleSubscriptionUpdate);
+      window.removeEventListener('refreshFeatureAccess', handleFeatureRefresh);
+    };
+  }, [user?.email, loadSubscription]);
+
   // Create or update subscription
   const updateSubscription = async (subscriptionData) => {
     if (!user?.email) throw new Error('User not authenticated');
@@ -87,70 +141,10 @@ export const useSubscription = () => {
     try {
       setError(null);
       
-      // Try to update directly in Supabase if available
-      if (supabase) {
-        try {
-          const { data: existingSubscription } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .select('id')
-            .eq('user_email', user.email.toLowerCase())
-            .single();
-            
-          const subscriptionRecord = {
-            plan_id: subscriptionData.planId,
-            status: subscriptionData.status || 'active',
-            current_period_start: subscriptionData.currentPeriodStart || new Date().toISOString(),
-            current_period_end: subscriptionData.currentPeriodEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString()
-          };
-            
-          let result;
-          if (existingSubscription) {
-            // Update existing subscription
-            const { data, error } = await supabase
-              .from('subscriptions_tb2k4x9p1m')
-              .update(subscriptionRecord)
-              .eq('user_email', user.email.toLowerCase())
-              .select()
-              .single();
-              
-            if (!error) {
-              result = {
-                id: data.id,
-                userEmail: data.user_email,
-                stripeCustomerId: data.stripe_customer_id,
-                stripeSubscriptionId: data.stripe_subscription_id,
-                planId: data.plan_id,
-                status: data.status,
-                currentPeriodStart: data.current_period_start,
-                currentPeriodEnd: data.current_period_end,
-                cancelAtPeriodEnd: data.cancel_at_period_end,
-                canceledAt: data.canceled_at,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at
-              };
-            }
-          }
-          
-          if (result) {
-            setSubscription(result);
-            // Reload plan limits as they might have changed
-            const newLimits = await getUserPlanLimits(user.email);
-            setPlanLimits(newLimits);
-            return result;
-          }
-        } catch (err) {
-          console.log('Error updating directly in Supabase, falling back to service:', err);
-        }
-      }
-      
-      // Fallback to service method
       const updatedSubscription = await createOrUpdateSubscription(user.email, subscriptionData);
-      setSubscription(updatedSubscription);
       
-      // Reload plan limits as they might have changed
-      const newLimits = await getUserPlanLimits(user.email);
-      setPlanLimits(newLimits);
+      // Reload subscription and limits
+      await loadSubscription();
       
       return updatedSubscription;
     } catch (err) {
@@ -166,58 +160,10 @@ export const useSubscription = () => {
     try {
       setError(null);
       
-      // Try to cancel directly in Supabase if available
-      if (supabase) {
-        try {
-          const status = cancelAtPeriodEnd ? 'active' : 'canceled';
-          const canceledAt = new Date().toISOString();
-          
-          const updateData = {
-            status,
-            canceled_at: canceledAt,
-            cancel_at_period_end: cancelAtPeriodEnd,
-            updated_at: new Date().toISOString()
-          };
-          
-          // If canceling immediately, set end date to now
-          if (!cancelAtPeriodEnd) {
-            updateData.current_period_end = canceledAt;
-          }
-          
-          const { data, error } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .update(updateData)
-            .eq('user_email', user.email.toLowerCase())
-            .select()
-            .single();
-            
-          if (!error) {
-            const result = {
-              id: data.id,
-              userEmail: data.user_email,
-              stripeCustomerId: data.stripe_customer_id,
-              stripeSubscriptionId: data.stripe_subscription_id,
-              planId: data.plan_id,
-              status: data.status,
-              currentPeriodStart: data.current_period_start,
-              currentPeriodEnd: data.current_period_end,
-              cancelAtPeriodEnd: data.cancel_at_period_end,
-              canceledAt: data.canceled_at,
-              createdAt: data.created_at,
-              updatedAt: data.updated_at
-            };
-            
-            setSubscription(result);
-            return result;
-          }
-        } catch (err) {
-          console.log('Error canceling directly in Supabase, falling back to service:', err);
-        }
-      }
-      
-      // Fallback to service method
       const canceledSubscription = await cancelSubscription(user.email, cancelAtPeriodEnd);
-      setSubscription(canceledSubscription);
+      
+      // Reload subscription and limits
+      await loadSubscription();
       
       return canceledSubscription;
     } catch (err) {
@@ -227,70 +173,16 @@ export const useSubscription = () => {
   };
 
   // Reactivate subscription
-  const reactivateUserSubscription = async (planId = null) => {
+  const reactivateUserSubscription = async (planId = 'professional') => {
     if (!user?.email) throw new Error('User not authenticated');
     
     try {
       setError(null);
       
-      // Try to reactivate directly in Supabase if available
-      if (supabase) {
-        try {
-          const updateData = {
-            status: 'active',
-            canceled_at: null,
-            cancel_at_period_end: false,
-            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            updated_at: new Date().toISOString()
-          };
-          
-          if (planId) {
-            updateData.plan_id = planId;
-          }
-          
-          const { data, error } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .update(updateData)
-            .eq('user_email', user.email.toLowerCase())
-            .select()
-            .single();
-            
-          if (!error) {
-            const result = {
-              id: data.id,
-              userEmail: data.user_email,
-              stripeCustomerId: data.stripe_customer_id,
-              stripeSubscriptionId: data.stripe_subscription_id,
-              planId: data.plan_id,
-              status: data.status,
-              currentPeriodStart: data.current_period_start,
-              currentPeriodEnd: data.current_period_end,
-              cancelAtPeriodEnd: data.cancel_at_period_end,
-              canceledAt: data.canceled_at,
-              createdAt: data.created_at,
-              updatedAt: data.updated_at
-            };
-            
-            setSubscription(result);
-            
-            // Reload plan limits
-            const newLimits = await getUserPlanLimits(user.email);
-            setPlanLimits(newLimits);
-            
-            return result;
-          }
-        } catch (err) {
-          console.log('Error reactivating directly in Supabase, falling back to service:', err);
-        }
-      }
-      
-      // Fallback to service method
       const reactivatedSubscription = await reactivateSubscription(user.email, planId);
-      setSubscription(reactivatedSubscription);
       
-      // Reload plan limits
-      const newLimits = await getUserPlanLimits(user.email);
-      setPlanLimits(newLimits);
+      // Reload subscription and limits
+      await loadSubscription();
       
       return reactivatedSubscription;
     } catch (err) {
@@ -306,7 +198,10 @@ export const useSubscription = () => {
     try {
       setError(null);
       const updatedSubscription = await updateSubscriptionStatus(user.email, status, endDate);
-      setSubscription(updatedSubscription);
+      
+      // Reload subscription and limits
+      await loadSubscription();
+      
       return updatedSubscription;
     } catch (err) {
       setError(err.message);
@@ -315,7 +210,7 @@ export const useSubscription = () => {
   };
 
   // Check if user can perform an action
-  const canPerformAction = async (limitType, currentUsage) => {
+  const canPerformAction = async (limitType, currentUsage = 0) => {
     if (!user?.email) return { allowed: false, reason: 'User not authenticated' };
     
     try {
@@ -328,10 +223,8 @@ export const useSubscription = () => {
 
   // Get current plan info
   const getCurrentPlan = () => {
-    if (!subscription) return 'free';
-    const planId = subscription.planId;
-    if (!planId) return 'free';
-    const parts = planId.split('_');
+    if (!subscription?.planId) return 'free';
+    const parts = subscription.planId.split('_');
     return parts.length > 1 ? parts[1] : 'free';
   };
 

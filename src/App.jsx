@@ -1,5 +1,5 @@
-import {Routes, Route, Navigate, useLocation} from 'react-router-dom';
-import {useEffect} from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -14,7 +14,7 @@ import Settings from './pages/Settings';
 import SubscriptionManagement from './pages/SubscriptionManagement';
 import Pricing from './pages/Pricing';
 import PaymentSuccess from './pages/PaymentSuccess';
-import {AuthProvider} from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
@@ -24,7 +24,7 @@ import WebhookListener from './components/WebhookListener';
 function AppRoutes() {
   const location = useLocation();
 
-  // Handle payment return URLs and webhook simulation
+  // Enhanced payment return handling and webhook simulation
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
     const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
@@ -32,38 +32,82 @@ function AppRoutes() {
     const paymentStatus = urlParams.get('payment_status') || hashParams.get('payment_status');
     const sessionId = urlParams.get('session_id') || hashParams.get('session_id');
     const planId = urlParams.get('plan') || hashParams.get('plan');
+    const webhookTrigger = urlParams.get('webhook_trigger') || hashParams.get('webhook_trigger');
     
-    // Log payment returns for debugging
-    if (paymentStatus || sessionId) {
-      console.log('Payment return detected:', {
+    // Enhanced detection of payment returns
+    const isPaymentReturn = paymentStatus === 'success' || 
+                           sessionId?.startsWith('cs_') ||
+                           window.location.href.includes('payment-success') ||
+                           webhookTrigger === 'true';
+    
+    // Log all payment-related URL parameters for debugging
+    if (paymentStatus || sessionId || planId || webhookTrigger) {
+      console.log('🔍 Payment-related parameters detected:', {
         paymentStatus,
         sessionId,
         planId,
+        webhookTrigger,
         currentPath: location.pathname,
         fullUrl: window.location.href,
-        hash: window.location.hash
+        hash: window.location.hash,
+        search: location.search,
+        isPaymentReturn
       });
+    }
 
-      // If we have payment success indicators, trigger webhook simulation
-      if (paymentStatus === 'success' || sessionId) {
-        console.log('Triggering webhook simulation for successful payment');
-        
-        // Dispatch custom event to trigger webhook processing
+    // Trigger webhook simulation for successful payments
+    if (isPaymentReturn) {
+      console.log('🎯 Payment return detected, triggering webhook simulation...');
+      
+      // Dispatch custom event to trigger webhook processing
+      setTimeout(() => {
         window.dispatchEvent(new CustomEvent('paymentReturnDetected', {
           detail: {
             paymentStatus,
             sessionId,
             planId,
-            timestamp: Date.now()
+            webhookTrigger,
+            timestamp: Date.now(),
+            source: 'app_router'
           }
         }));
-      }
+      }, 500); // Small delay to ensure components are mounted
     }
+
+    // Initialize database on app load
+    const initializeApp = async () => {
+      try {
+        console.log('🚀 Initializing application...');
+        
+        // Import and initialize database if needed
+        const { initializeDatabase, testDatabaseConnection } = await import('./services/supabaseSetup');
+        
+        const connectionTest = await testDatabaseConnection();
+        if (!connectionTest) {
+          console.log('🔧 Database needs initialization...');
+          await initializeDatabase();
+        } else {
+          console.log('✅ Database connection verified');
+        }
+        
+      } catch (error) {
+        console.warn('⚠️ App initialization warning:', error);
+        // Don't fail the app if database initialization fails
+      }
+    };
+
+    // Run initialization only once
+    const hasInitialized = sessionStorage.getItem('appInitialized');
+    if (!hasInitialized) {
+      initializeApp();
+      sessionStorage.setItem('appInitialized', 'true');
+    }
+
   }, [location]);
 
   return (
     <>
-      {/* Webhook listener for processing Stripe events */}
+      {/* Enhanced Webhook listener for processing Stripe events */}
       <WebhookListener />
       
       <Routes>

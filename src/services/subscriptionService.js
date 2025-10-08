@@ -1,383 +1,508 @@
-import {supabase} from '../lib/supabase';
-import {logSecurityEvent} from '../utils/security';
-import {SUBSCRIPTION_PLANS} from '../lib/stripe';
+import { supabase } from '../lib/supabase';
+import { logSecurityEvent } from '../utils/security';
+import { SUBSCRIPTION_PLANS } from '../lib/stripe';
 
-// Create or update subscription
-export const createOrUpdateSubscription = async (userEmail, subscriptionData) => {
+/**
+ * Complete subscription management service
+ * Handles all subscription operations with proper error handling
+ */
+
+/**
+ * Update user subscription directly in the database
+ */
+export const updateUserSubscription = async (userEmail, planId, sessionId = null) => {
   try {
-    logSecurityEvent('SUBSCRIPTION_CREATE_UPDATE_ATTEMPT', {
-      userEmail,
-      planId: subscriptionData.planId
-    });
+    console.log('📝 Updating user subscription directly:', { userEmail, planId, sessionId });
 
-    // Check if subscription exists
-    const {data: existingSubscription, error: fetchError} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      throw fetchError;
+    if (!userEmail || !planId) {
+      throw new Error('User email and plan ID are required');
     }
 
-    const subscriptionRecord = {
+    const subscriptionData = {
       user_email: userEmail.toLowerCase(),
-      stripe_customer_id: subscriptionData.stripeCustomerId || `cus_${Math.random().toString(36).substring(2, 15)}`,
-      stripe_subscription_id: subscriptionData.stripeSubscriptionId || `sub_${Math.random().toString(36).substring(2, 15)}`,
-      plan_id: subscriptionData.planId,
-      status: subscriptionData.status || 'active',
-      current_period_start: subscriptionData.currentPeriodStart || new Date().toISOString(),
-      current_period_end: subscriptionData.currentPeriodEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      stripe_customer_id: sessionId ? `cus_${sessionId.substring(3, 13)}` : `cus_${Math.random().toString(36).substring(2, 15)}`,
+      stripe_subscription_id: sessionId ? `sub_${sessionId.substring(3, 13)}` : `sub_${Math.random().toString(36).substring(2, 15)}`,
+      stripe_session_id: sessionId,
+      plan_id: `price_${planId}`,
+      status: 'active',
+      current_period_start: new Date().toISOString(),
+      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      cancel_at_period_end: false,
+      canceled_at: null,
       updated_at: new Date().toISOString()
     };
 
-    let result;
-    if (existingSubscription) {
-      // Update existing subscription
-      const {data, error} = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update(subscriptionRecord)
-        .eq('user_email', userEmail.toLowerCase())
-        .select()
-        .single();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('subscriptions_tb2k4x9p1m')
+          .upsert(subscriptionData, { 
+            onConflict: 'user_email',
+            ignoreDuplicates: false 
+          })
+          .select();
 
-      if (error) throw error;
-      result = data;
-    } else {
-      // Create new subscription
-      subscriptionRecord.created_at = new Date().toISOString();
-      const {data, error} = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .insert([subscriptionRecord])
-        .select()
-        .single();
+        if (error) {
+          console.error('❌ Error upserting subscription:', error);
+          
+          if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+            console.log('🔧 Table does not exist, initializing database...');
+            
+            const { initializeDatabase } = await import('./supabaseSetup');
+            const initialized = await initializeDatabase();
+            
+            if (initialized) {
+              const { data: retryData, error: retryError } = await supabase
+                .from('subscriptions_tb2k4x9p1m')
+                .upsert(subscriptionData, { 
+                  onConflict: 'user_email',
+                  ignoreDuplicates: false 
+                })
+                .select();
 
-      if (error) throw error;
-      result = data;
-    }
+              if (retryError) throw retryError;
+              
+              console.log('✅ Subscription updated after database initialization');
+              return retryData;
+            }
+          }
+          
+          throw error;
+        }
 
-    logSecurityEvent('SUBSCRIPTION_CREATE_UPDATE_SUCCESS', {
-      userEmail,
-      planId: subscriptionData.planId,
-      subscriptionId: result.id
-    });
+        console.log('✅ Subscription updated successfully:', data);
 
-    return transformSubscriptionData(result);
-  } catch (error) {
-    logSecurityEvent('SUBSCRIPTION_CREATE_UPDATE_ERROR', {
-      userEmail,
-      error: error.message
-    });
-    throw error;
-  }
-};
+        // Clear caches
+        localStorage.removeItem(`featureCache_${userEmail}`);
+        localStorage.removeItem(`subscriptionCache_${userEmail}`);
 
-// Get user subscription
-export const getUserSubscription = async (userEmail) => {
-  try {
-    const {data, error} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .single();
+        // Dispatch update event
+        window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+          detail: { 
+            userEmail, 
+            planId, 
+            sessionId,
+            immediate: true,
+            source: 'direct_service'
+          }
+        }));
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // No subscription found
+        logSecurityEvent('DIRECT_SUBSCRIPTION_UPDATE', {
+          userEmail,
+          planId,
+          sessionId
+        });
+
+        return data;
+
+      } catch (supabaseError) {
+        console.error('❌ Supabase error in direct subscription update:', supabaseError);
+        throw supabaseError;
       }
-      throw error;
+    } else {
+      console.warn('⚠️ Supabase not available, using local storage fallback');
+      
+      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
+      localSubscriptions[userEmail] = subscriptionData;
+      localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
+      
+      return [subscriptionData];
     }
 
-    return transformSubscriptionData(data);
   } catch (error) {
-    console.error('Error getting user subscription:', error);
-    throw error;
-  }
-};
-
-// Update subscription status
-export const updateSubscriptionStatus = async (userEmail, status, endDate = null) => {
-  try {
-    logSecurityEvent('SUBSCRIPTION_STATUS_UPDATE_ATTEMPT', {
-      userEmail,
-      status
-    });
-
-    const updateData = {
-      status,
-      updated_at: new Date().toISOString()
-    };
-
-    if (endDate) {
-      updateData.current_period_end = endDate;
-    }
-
-    const {data, error} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    logSecurityEvent('SUBSCRIPTION_STATUS_UPDATE_SUCCESS', {
-      userEmail,
-      status,
-      subscriptionId: data.id
-    });
-
-    return transformSubscriptionData(data);
-  } catch (error) {
-    logSecurityEvent('SUBSCRIPTION_STATUS_UPDATE_ERROR', {
-      userEmail,
-      error: error.message
-    });
-    throw error;
-  }
-};
-
-// Cancel subscription
-export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
-  try {
-    logSecurityEvent('SUBSCRIPTION_CANCEL_ATTEMPT', {
-      userEmail,
-      cancelAtPeriodEnd
-    });
-
-    const status = cancelAtPeriodEnd ? 'active' : 'canceled';
-    const canceledAt = new Date().toISOString();
-
-    const updateData = {
-      status,
-      canceled_at: canceledAt,
-      cancel_at_period_end: cancelAtPeriodEnd,
-      updated_at: new Date().toISOString()
-    };
-
-    // If canceling immediately, set end date to now
-    if (!cancelAtPeriodEnd) {
-      updateData.current_period_end = canceledAt;
-    }
-
-    const {data, error} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    logSecurityEvent('SUBSCRIPTION_CANCEL_SUCCESS', {
-      userEmail,
-      subscriptionId: data.id,
-      cancelAtPeriodEnd
-    });
-
-    return transformSubscriptionData(data);
-  } catch (error) {
-    logSecurityEvent('SUBSCRIPTION_CANCEL_ERROR', {
-      userEmail,
-      error: error.message
-    });
-    throw error;
-  }
-};
-
-// Reactivate subscription
-export const reactivateSubscription = async (userEmail, planId = null) => {
-  try {
-    logSecurityEvent('SUBSCRIPTION_REACTIVATE_ATTEMPT', {
+    console.error('❌ Error in direct subscription update:', error);
+    logSecurityEvent('DIRECT_SUBSCRIPTION_UPDATE_ERROR', {
+      error: error.message,
       userEmail,
       planId
     });
+    throw error;
+  }
+};
 
-    const updateData = {
-      status: 'active',
-      canceled_at: null,
-      cancel_at_period_end: false,
-      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    if (planId) {
-      updateData.plan_id = planId;
+/**
+ * Get user subscription from database
+ */
+export const getUserSubscription = async (userEmail) => {
+  try {
+    if (!userEmail) {
+      throw new Error('User email is required');
     }
 
-    const {data, error} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
+    console.log('🔍 Fetching subscription for:', userEmail);
 
-    if (error) throw error;
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .select('*')
+        .eq('user_email', userEmail.toLowerCase())
+        .single();
 
-    logSecurityEvent('SUBSCRIPTION_REACTIVATE_SUCCESS', {
-      userEmail,
-      subscriptionId: data.id
-    });
-
-    return transformSubscriptionData(data);
-  } catch (error) {
-    logSecurityEvent('SUBSCRIPTION_REACTIVATE_ERROR', {
-      userEmail,
-      error: error.message
-    });
-    throw error;
-  }
-};
-
-// Get subscription analytics
-export const getSubscriptionAnalytics = async () => {
-  try {
-    const {data, error} = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*');
-
-    if (error) throw error;
-
-    const analytics = {
-      totalSubscriptions: data.length,
-      activeSubscriptions: data.filter(s => s.status === 'active').length,
-      canceledSubscriptions: data.filter(s => s.status === 'canceled').length,
-      trialSubscriptions: data.filter(s => s.status === 'trialing').length,
-      pastDueSubscriptions: data.filter(s => s.status === 'past_due').length,
-      planDistribution: {},
-      monthlyRecurringRevenue: 0,
-      churnRate: 0
-    };
-
-    // Calculate plan distribution and MRR
-    data.forEach(subscription => {
-      const planName = getPlanNameFromId(subscription.plan_id);
-      analytics.planDistribution[planName] = (analytics.planDistribution[planName] || 0) + 1;
-
-      // Calculate MRR for active subscriptions
-      if (subscription.status === 'active') {
-        const plan = Object.values(SUBSCRIPTION_PLANS).find(p => p.priceId === subscription.plan_id);
-        if (plan && plan.price > 0) {
-          analytics.monthlyRecurringRevenue += plan.price;
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error fetching subscription:', error);
+        
+        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+          console.log('ℹ️ Subscriptions table does not exist, user is on free plan');
+          return null;
         }
+        
+        throw error;
       }
-    });
 
-    // Calculate churn rate (simplified)
-    const totalActive = analytics.activeSubscriptions;
-    const totalCanceled = analytics.canceledSubscriptions;
-    analytics.churnRate = totalActive > 0 ? (totalCanceled / (totalActive + totalCanceled)) * 100 : 0;
+      console.log('📊 Subscription data:', data);
+      return data;
 
-    return analytics;
+    } else {
+      console.warn('⚠️ Supabase not available, checking local storage');
+      
+      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
+      return localSubscriptions[userEmail] || null;
+    }
+
   } catch (error) {
-    console.error('Error getting subscription analytics:', error);
+    console.error('❌ Error fetching user subscription:', error);
+    return null;
+  }
+};
+
+/**
+ * Create or update subscription (alias for updateUserSubscription)
+ */
+export const createOrUpdateSubscription = async (userEmail, subscriptionData) => {
+  try {
+    const planId = subscriptionData.planId || 'professional';
+    const sessionId = subscriptionData.stripeSessionId || subscriptionData.sessionId;
+    
+    return await updateUserSubscription(userEmail, planId, sessionId);
+  } catch (error) {
+    console.error('❌ Error creating/updating subscription:', error);
     throw error;
   }
 };
 
-// Get user's plan limits
+/**
+ * Cancel user subscription
+ */
+export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
+  try {
+    console.log('🗑️ Canceling subscription for:', userEmail, { cancelAtPeriodEnd });
+
+    if (supabase) {
+      const status = cancelAtPeriodEnd ? 'active' : 'canceled';
+      const canceledAt = new Date().toISOString();
+      
+      const updateData = {
+        status,
+        canceled_at: canceledAt,
+        cancel_at_period_end: cancelAtPeriodEnd,
+        updated_at: new Date().toISOString()
+      };
+      
+      // If canceling immediately, set end date to now
+      if (!cancelAtPeriodEnd) {
+        updateData.current_period_end = canceledAt;
+      }
+
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .update(updateData)
+        .eq('user_email', userEmail.toLowerCase())
+        .select();
+
+      if (error) {
+        console.error('❌ Error canceling subscription:', error);
+        throw error;
+      }
+
+      // Clear caches
+      localStorage.removeItem(`featureCache_${userEmail}`);
+      localStorage.removeItem(`subscriptionCache_${userEmail}`);
+
+      // Dispatch update event
+      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+        detail: { 
+          userEmail, 
+          planId: cancelAtPeriodEnd ? null : 'free',
+          source: 'cancellation'
+        }
+      }));
+
+      logSecurityEvent('SUBSCRIPTION_CANCELED', {
+        userEmail,
+        cancelAtPeriodEnd
+      });
+
+      console.log('✅ Subscription canceled successfully');
+      return data;
+
+    } else {
+      // Fallback to local storage
+      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
+      if (localSubscriptions[userEmail]) {
+        localSubscriptions[userEmail].status = cancelAtPeriodEnd ? 'active' : 'canceled';
+        localSubscriptions[userEmail].canceled_at = new Date().toISOString();
+        localSubscriptions[userEmail].cancel_at_period_end = cancelAtPeriodEnd;
+        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
+      }
+      
+      return localSubscriptions[userEmail];
+    }
+
+  } catch (error) {
+    console.error('❌ Error canceling subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Reactivate a canceled subscription
+ */
+export const reactivateSubscription = async (userEmail, planId = 'professional') => {
+  try {
+    console.log('🔄 Reactivating subscription for:', userEmail, { planId });
+
+    if (supabase) {
+      const updateData = {
+        status: 'active',
+        plan_id: `price_${planId}`,
+        canceled_at: null,
+        cancel_at_period_end: false,
+        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .update(updateData)
+        .eq('user_email', userEmail.toLowerCase())
+        .select();
+
+      if (error) {
+        console.error('❌ Error reactivating subscription:', error);
+        throw error;
+      }
+
+      // Clear caches
+      localStorage.removeItem(`featureCache_${userEmail}`);
+      localStorage.removeItem(`subscriptionCache_${userEmail}`);
+
+      // Dispatch update event
+      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+        detail: { 
+          userEmail, 
+          planId,
+          source: 'reactivation'
+        }
+      }));
+
+      logSecurityEvent('SUBSCRIPTION_REACTIVATED', {
+        userEmail,
+        planId
+      });
+
+      console.log('✅ Subscription reactivated successfully');
+      return data;
+
+    } else {
+      // Fallback to local storage
+      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
+      if (localSubscriptions[userEmail]) {
+        localSubscriptions[userEmail].status = 'active';
+        localSubscriptions[userEmail].plan_id = `price_${planId}`;
+        localSubscriptions[userEmail].canceled_at = null;
+        localSubscriptions[userEmail].cancel_at_period_end = false;
+        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
+      }
+      
+      return localSubscriptions[userEmail];
+    }
+
+  } catch (error) {
+    console.error('❌ Error reactivating subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update subscription status
+ */
+export const updateSubscriptionStatus = async (userEmail, status, endDate = null) => {
+  try {
+    console.log('📊 Updating subscription status for:', userEmail, { status, endDate });
+
+    if (supabase) {
+      const updateData = {
+        status,
+        updated_at: new Date().toISOString()
+      };
+
+      if (endDate) {
+        updateData.current_period_end = new Date(endDate).toISOString();
+      }
+
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .update(updateData)
+        .eq('user_email', userEmail.toLowerCase())
+        .select();
+
+      if (error) {
+        console.error('❌ Error updating subscription status:', error);
+        throw error;
+      }
+
+      // Clear caches
+      localStorage.removeItem(`featureCache_${userEmail}`);
+      localStorage.removeItem(`subscriptionCache_${userEmail}`);
+
+      logSecurityEvent('SUBSCRIPTION_STATUS_UPDATED', {
+        userEmail,
+        status,
+        endDate
+      });
+
+      console.log('✅ Subscription status updated successfully');
+      return data;
+
+    } else {
+      // Fallback to local storage
+      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
+      if (localSubscriptions[userEmail]) {
+        localSubscriptions[userEmail].status = status;
+        if (endDate) {
+          localSubscriptions[userEmail].current_period_end = new Date(endDate).toISOString();
+        }
+        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
+      }
+      
+      return localSubscriptions[userEmail];
+    }
+
+  } catch (error) {
+    console.error('❌ Error updating subscription status:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get user plan limits based on their subscription
+ */
 export const getUserPlanLimits = async (userEmail) => {
   try {
+    console.log('📋 Getting plan limits for:', userEmail);
+
     const subscription = await getUserSubscription(userEmail);
     
-    if (!subscription) {
-      return SUBSCRIPTION_PLANS.free.limits;
+    let planId = 'free';
+    if (subscription?.plan_id) {
+      // Extract plan from price_id (e.g., "price_professional" -> "professional")
+      const parts = subscription.plan_id.split('_');
+      planId = parts.length > 1 ? parts[1] : 'free';
     }
 
-    const planName = getPlanNameFromId(subscription.planId);
-    const plan = SUBSCRIPTION_PLANS[planName];
+    // Get plan configuration from stripe.js
+    const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.free;
     
-    return plan ? plan.limits : SUBSCRIPTION_PLANS.free.limits;
-  } catch (error) {
-    console.error('Error getting user plan limits:', error);
-    return SUBSCRIPTION_PLANS.free.limits;
-  }
-};
-
-// Check if user can perform action based on plan limits
-export const checkPlanLimit = async (userEmail, limitType, currentUsage) => {
-  try {
-    const limits = await getUserPlanLimits(userEmail);
-    const limit = limits[limitType];
-
-    if (limit === -1) return { allowed: true, unlimited: true };
-    if (limit === 0) return { allowed: false, reason: 'Feature not available on current plan' };
+    console.log('📊 Plan limits for', planId, ':', plan.limits);
     
-    const allowed = currentUsage < limit;
-    return { 
-      allowed, 
-      limit, 
-      currentUsage,
-      remaining: limit - currentUsage,
-      reason: allowed ? null : 'Plan limit reached'
+    return {
+      planId,
+      limits: plan.limits,
+      features: plan.features,
+      isActive: subscription?.status === 'active'
     };
+
   } catch (error) {
-    console.error('Error checking plan limit:', error);
-    return { allowed: false, reason: 'Error checking plan limits' };
+    console.error('❌ Error getting user plan limits:', error);
+    
+    // Return free plan limits as fallback
+    return {
+      planId: 'free',
+      limits: SUBSCRIPTION_PLANS.free.limits,
+      features: SUBSCRIPTION_PLANS.free.features,
+      isActive: false
+    };
   }
 };
 
-// Transform subscription data from database format
-const transformSubscriptionData = (data) => {
-  if (!data) return null;
+/**
+ * Check if user can perform an action based on plan limits
+ */
+export const checkPlanLimit = async (userEmail, limitType, currentUsage = 0) => {
+  try {
+    console.log('🔍 Checking plan limit for:', userEmail, { limitType, currentUsage });
 
-  return {
-    id: data.id,
-    userEmail: data.user_email,
-    stripeCustomerId: data.stripe_customer_id,
-    stripeSubscriptionId: data.stripe_subscription_id,
-    planId: data.plan_id,
-    status: data.status,
-    currentPeriodStart: data.current_period_start,
-    currentPeriodEnd: data.current_period_end,
-    cancelAtPeriodEnd: data.cancel_at_period_end,
-    canceledAt: data.canceled_at,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at
-  };
+    const planLimits = await getUserPlanLimits(userEmail);
+    
+    if (!planLimits.isActive && limitType !== 'inventoryItems') {
+      return {
+        allowed: false,
+        reason: 'Subscription not active',
+        limit: 0,
+        usage: currentUsage
+      };
+    }
+
+    const limit = planLimits.limits[limitType];
+    
+    if (limit === -1) {
+      // Unlimited
+      return {
+        allowed: true,
+        reason: 'Unlimited',
+        limit: -1,
+        usage: currentUsage
+      };
+    }
+
+    if (limit === 0) {
+      // Not allowed
+      return {
+        allowed: false,
+        reason: 'Feature not available in current plan',
+        limit: 0,
+        usage: currentUsage
+      };
+    }
+
+    const allowed = currentUsage < limit;
+    
+    return {
+      allowed,
+      reason: allowed ? 'Within limits' : 'Limit exceeded',
+      limit,
+      usage: currentUsage,
+      remaining: Math.max(0, limit - currentUsage)
+    };
+
+  } catch (error) {
+    console.error('❌ Error checking plan limit:', error);
+    
+    // Conservative fallback - deny access
+    return {
+      allowed: false,
+      reason: 'Error checking limits',
+      limit: 0,
+      usage: currentUsage
+    };
+  }
 };
 
-// Helper function to get plan name from price ID
-const getPlanNameFromId = (priceId) => {
-  if (!priceId) return 'free';
-  
-  // Extract plan name from price ID (e.g., "price_professional" -> "professional")
-  const parts = priceId.split('_');
-  return parts.length > 1 ? parts[1] : 'free';
-};
-
-// Validate subscription data
-export const validateSubscriptionData = (subscriptionData) => {
-  const errors = [];
-
-  if (!subscriptionData.planId) {
-    errors.push('Plan ID is required');
-  }
-
-  if (!subscriptionData.status) {
-    errors.push('Status is required');
-  }
-
-  const validStatuses = ['active', 'canceled', 'trialing', 'past_due', 'unpaid'];
-  if (subscriptionData.status && !validStatuses.includes(subscriptionData.status)) {
-    errors.push('Invalid subscription status');
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
+/**
+ * Legacy alias for cancelUserSubscription (for backward compatibility)
+ */
+export const cancelUserSubscription = async (userEmail) => {
+  return await cancelSubscription(userEmail, false); // Immediate cancellation
 };
 
 export default {
-  createOrUpdateSubscription,
+  updateUserSubscription,
   getUserSubscription,
-  updateSubscriptionStatus,
+  createOrUpdateSubscription,
   cancelSubscription,
   reactivateSubscription,
-  getSubscriptionAnalytics,
+  updateSubscriptionStatus,
   getUserPlanLimits,
   checkPlanLimit,
-  validateSubscriptionData
+  cancelUserSubscription
 };
