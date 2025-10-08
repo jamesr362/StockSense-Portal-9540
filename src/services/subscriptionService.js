@@ -34,43 +34,56 @@ export const updateUserSubscription = async (userEmail, planId, sessionId = null
 
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        // First, try to find existing subscription
+        const { data: existingData, error: findError } = await supabase
           .from('subscriptions_tb2k4x9p1m')
-          .upsert(subscriptionData, { 
-            onConflict: 'user_email',
-            ignoreDuplicates: false 
-          })
-          .select();
+          .select('*')
+          .eq('user_email', userEmail.toLowerCase())
+          .maybeSingle();
 
-        if (error) {
-          console.error('❌ Error upserting subscription:', error);
+        if (findError) {
+          console.error('❌ Error finding existing subscription:', findError);
           
-          if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
+          if (findError.message?.includes('relation') && findError.message?.includes('does not exist')) {
             console.log('🔧 Table does not exist, initializing database...');
             
             const { initializeDatabase } = await import('./supabaseSetup');
             const initialized = await initializeDatabase();
             
-            if (initialized) {
-              const { data: retryData, error: retryError } = await supabase
-                .from('subscriptions_tb2k4x9p1m')
-                .upsert(subscriptionData, { 
-                  onConflict: 'user_email',
-                  ignoreDuplicates: false 
-                })
-                .select();
-
-              if (retryError) throw retryError;
-              
-              console.log('✅ Subscription updated after database initialization');
-              return retryData;
+            if (!initialized) {
+              throw new Error('Failed to initialize database');
             }
+          } else {
+            throw findError;
           }
-          
-          throw error;
         }
 
-        console.log('✅ Subscription updated successfully:', data);
+        let result;
+        
+        if (existingData) {
+          // Update existing subscription
+          console.log('📝 Updating existing subscription');
+          const { data, error } = await supabase
+            .from('subscriptions_tb2k4x9p1m')
+            .update(subscriptionData)
+            .eq('user_email', userEmail.toLowerCase())
+            .select();
+
+          if (error) throw error;
+          result = data;
+        } else {
+          // Insert new subscription
+          console.log('📝 Creating new subscription');
+          const { data, error } = await supabase
+            .from('subscriptions_tb2k4x9p1m')
+            .insert(subscriptionData)
+            .select();
+
+          if (error) throw error;
+          result = data;
+        }
+
+        console.log('✅ Subscription updated successfully:', result);
 
         // Clear caches
         localStorage.removeItem(`featureCache_${userEmail}`);
@@ -93,7 +106,7 @@ export const updateUserSubscription = async (userEmail, planId, sessionId = null
           sessionId
         });
 
-        return data;
+        return result;
 
       } catch (supabaseError) {
         console.error('❌ Supabase error in direct subscription update:', supabaseError);
@@ -136,9 +149,9 @@ export const getUserSubscription = async (userEmail) => {
         .from('subscriptions_tb2k4x9p1m')
         .select('*')
         .eq('user_email', userEmail.toLowerCase())
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         console.error('❌ Error fetching subscription:', error);
         
         if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
