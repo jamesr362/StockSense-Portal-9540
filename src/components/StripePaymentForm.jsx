@@ -26,50 +26,45 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
         amount: plan.price
       });
 
-      // Create enhanced checkout session with webhook support
+      // Always use Stripe checkout for real payments
       if (plan.paymentLink) {
-        logSecurityEvent('STRIPE_EXTERNAL_PAYMENT_INITIATED', {
+        logSecurityEvent('STRIPE_CHECKOUT_INITIATED', {
           planId: plan.id,
           userEmail: user.email,
-          paymentUrl: plan.paymentLink,
-          openMethod: 'current_window'
+          paymentUrl: plan.paymentLink
         });
 
-        // Create enhanced checkout session with webhook parameters
+        // Create enhanced checkout session with proper webhook handling
         const checkoutSession = await createEnhancedCheckoutSession(plan.id, user.email, {
           mode: 'subscription',
           allowPromotionCodes: true
         });
 
-        console.log('Redirecting to enhanced Stripe checkout:', checkoutSession.url);
+        console.log('🚀 Redirecting to Stripe checkout:', checkoutSession.url);
         
-        // Redirect to payment link in current window for better UX and webhook handling
+        // Redirect to Stripe checkout - webhook will handle the rest
         window.location.href = checkoutSession.url;
         return;
       }
 
-      // Fallback: Simulate payment processing for demo
+      // Fallback: Demo payment processing (should be removed in production)
+      console.log('⚠️ Using demo payment processing - remove in production');
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Update subscription in Supabase for demo payment
+      // Demo: Update subscription directly
       if (supabase) {
-        await updateSubscriptionAfterPayment(plan.id);
+        await updateSubscriptionAfterDemoPayment(plan.id);
       }
 
-      logSecurityEvent('PAYMENT_SUCCESS', {
+      logSecurityEvent('DEMO_PAYMENT_SUCCESS', {
         planId: plan.id,
         userEmail: user.email
       });
 
-      // Call success callback
-      if (onSuccess) {
-        onSuccess();
-      }
-
-      // Navigate to success page with plan info
-      navigate(`/payment-success?plan=${plan.id}&payment_status=success&session_id=cs_demo_${Date.now()}&webhook_processed=true`);
+      // Navigate to success page
+      navigate(`/payment-success?plan=${plan.id}&payment_status=success&session_id=demo_${Date.now()}`);
     } catch (error) {
-      console.error('Payment processing error:', error);
+      console.error('❌ Payment processing error:', error);
       setError('Payment failed. Please try again.');
       logSecurityEvent('PAYMENT_FAILED', {
         planId: plan.id,
@@ -81,8 +76,10 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
     }
   };
 
-  const updateSubscriptionAfterPayment = async (planId) => {
+  const updateSubscriptionAfterDemoPayment = async (planId) => {
     try {
+      console.log('📝 Updating subscription after demo payment...');
+
       // Check if user already has a subscription
       const { data: existingSubscription, error: fetchError } = await supabase
         .from('subscriptions_tb2k4x9p1m')
@@ -92,8 +89,8 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
 
       const subscriptionData = {
         user_email: user.email.toLowerCase(),
-        stripe_customer_id: `cus_${Math.random().toString(36).substring(2, 15)}`,
-        stripe_subscription_id: `sub_${Math.random().toString(36).substring(2, 15)}`,
+        stripe_customer_id: `cus_demo_${Math.random().toString(36).substring(2, 15)}`,
+        stripe_subscription_id: `sub_demo_${Math.random().toString(36).substring(2, 15)}`,
         stripe_session_id: `cs_demo_${Date.now()}`,
         plan_id: `price_${planId}`,
         status: 'active',
@@ -112,6 +109,7 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
           .eq('user_email', user.email.toLowerCase());
 
         if (updateError) throw updateError;
+        console.log('✅ Updated existing subscription');
       } else {
         // Create new subscription
         subscriptionData.created_at = new Date().toISOString();
@@ -120,18 +118,24 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
           .insert([subscriptionData]);
 
         if (insertError) throw insertError;
+        console.log('✅ Created new subscription');
       }
 
-      // Clear feature cache to force refresh
+      // Clear feature cache for immediate access
       localStorage.removeItem(`featureCache_${user.email}`);
       
       // Dispatch subscription update event
       window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { userEmail: user.email, planId, webhookProcessed: true }
+        detail: { 
+          userEmail: user.email, 
+          planId, 
+          immediate: true,
+          source: 'demo_payment'
+        }
       }));
 
     } catch (error) {
-      console.error('Error updating subscription after payment:', error);
+      console.error('❌ Error updating subscription after demo payment:', error);
       throw error;
     }
   };
@@ -174,52 +178,29 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
             <span className="text-blue-300 font-medium">Secure Stripe Checkout</span>
           </div>
           <p className="text-blue-300 text-sm text-center mb-2">
-            You'll be redirected to Stripe's secure checkout. After payment, you'll return here with full Professional access.
+            You'll be redirected to Stripe's secure payment page. After completing payment, 
+            you'll automatically return with full Professional access activated.
           </p>
-          <div className="text-center">
+          <div className="text-center space-y-1">
             <div className="inline-flex items-center text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
               <RiCheckLine className="h-3 w-3 mr-1" />
-              Webhook-enabled for instant activation
+              Instant activation via webhooks
+            </div>
+            <div className="inline-flex items-center text-xs text-blue-400 bg-blue-900/20 px-2 py-1 rounded ml-2">
+              <RiSecurePaymentLine className="h-3 w-3 mr-1" />
+              256-bit SSL encryption
             </div>
           </div>
         </div>
       ) : (
-        <div className="space-y-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Card Number (Demo)
-            </label>
-            <input
-              type="text"
-              value="4242 4242 4242 4242"
-              readOnly
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-            />
+        <div className="bg-orange-900/30 border border-orange-700 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-center mb-2">
+            <RiAlertLine className="h-5 w-5 text-orange-400 mr-2" />
+            <span className="text-orange-300 font-medium">Demo Mode</span>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Expiry
-              </label>
-              <input
-                type="text"
-                value="12/25"
-                readOnly
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                CVC
-              </label>
-              <input
-                type="text"
-                value="123"
-                readOnly
-                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
-              />
-            </div>
-          </div>
+          <p className="text-orange-300 text-sm text-center">
+            This is a demo payment. In production, this would process through Stripe.
+          </p>
         </div>
       )}
 
@@ -242,31 +223,31 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
         <button
           onClick={onCancel}
           disabled={isProcessing}
-          className="flex-1 py-3 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+          className="flex-1 py-3 px-4 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 font-medium"
         >
           Cancel
         </button>
         <button
           onClick={handlePayment}
           disabled={isProcessing}
-          className="flex-1 py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center"
+          className="flex-1 py-3 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center justify-center font-medium"
         >
           {isProcessing ? (
             <div className="flex items-center">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              {plan.paymentLink ? 'Redirecting...' : 'Processing...'}
+              {plan.paymentLink ? 'Redirecting to Stripe...' : 'Processing Demo Payment...'}
             </div>
           ) : (
             <>
               {plan.paymentLink ? (
                 <>
                   <RiExternalLinkLine className="h-4 w-4 mr-2" />
-                  Continue to Stripe
+                  Continue to Stripe Checkout
                 </>
               ) : (
                 <>
                   <RiCheckLine className="h-4 w-4 mr-2" />
-                  Pay £{plan.price}/month
+                  Demo Pay £{plan.price}/month
                 </>
               )}
             </>
@@ -278,13 +259,21 @@ export default function StripePaymentForm({ plan, onSuccess, onCancel }) {
       {plan.paymentLink && (
         <div className="mt-4 p-3 bg-gray-700 rounded-lg">
           <p className="text-gray-300 text-xs text-center">
-            ✅ After payment completion, webhooks will instantly activate your Professional features
+            ✅ Webhooks enabled: Your Professional features will be activated instantly upon payment completion
           </p>
           <p className="text-gray-400 text-xs text-center mt-1">
-            No manual refresh required - your upgrade will be processed automatically
+            No manual refresh needed - the system will automatically detect your payment
           </p>
         </div>
       )}
+
+      {/* Security Notice */}
+      <div className="mt-4 pt-4 border-t border-gray-700">
+        <div className="flex items-center justify-center text-gray-400 text-xs">
+          <RiSecurePaymentLine className="h-3 w-3 mr-1" />
+          Your payment information is processed securely by Stripe
+        </div>
+      </div>
     </motion.div>
   );
 }
