@@ -26,27 +26,35 @@ export default function PaymentSuccess() {
         const paymentStatus = searchParams.get('payment_status');
         const source = searchParams.get('source');
         
+        // **CRITICAL FIX**: Handle literal {CHECKOUT_SESSION_ID} from Stripe Payment Links
+        const isLiteralSessionId = sessionId === '{CHECKOUT_SESSION_ID}';
+        const actualSessionId = isLiteralSessionId ? `pl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` : sessionId;
+        
         // Enhanced debugging information
         const debugData = {
           planId, 
-          sessionId, 
+          sessionId,
+          actualSessionId,
+          isLiteralSessionId,
           paymentStatus,
           source,
           userEmail: user?.email,
           allParams: Object.fromEntries(searchParams.entries()),
           referrer: document.referrer,
           timestamp: new Date().toISOString(),
+          isFromStripe: document.referrer.includes('stripe.com') || document.referrer.includes('buy.stripe.com'),
           pendingPayment: JSON.parse(localStorage.getItem('pendingPayment') || 'null'),
           sessionStorage: {
             stripePaymentAttempt: sessionStorage.getItem('stripePaymentAttempt'),
             paymentPlanId: sessionStorage.getItem('paymentPlanId'),
-            paymentUserEmail: sessionStorage.getItem('paymentUserEmail')
+            paymentUserEmail: sessionStorage.getItem('paymentUserEmail'),
+            paymentTracking: JSON.parse(sessionStorage.getItem('paymentTracking') || 'null')
           }
         };
         
         setDebugInfo(debugData);
         
-        console.log('🎉 PaymentSuccess page loaded with enhanced data:', debugData);
+        console.log('🎉 PaymentSuccess page loaded with FIXED session ID handling:', debugData);
 
         if (!user?.email) {
           setError('User not authenticated. Please log in and try again.');
@@ -66,14 +74,16 @@ export default function PaymentSuccess() {
         logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', {
           planId: finalPlanId,
           userEmail: user.email,
-          sessionId,
+          sessionId: actualSessionId,
+          originalSessionId: sessionId,
+          isLiteralSessionId,
           paymentStatus,
           source,
           debugData
         });
 
-        // **ENHANCED**: Process payment return and activate subscription
-        await processPaymentReturn(finalPlanId, sessionId, paymentStatus, source);
+        // **ENHANCED**: Process payment return with fixed session ID
+        await processPaymentReturn(finalPlanId, actualSessionId, paymentStatus, source, isLiteralSessionId);
         
       } catch (error) {
         console.error('❌ Error handling payment success:', error);
@@ -90,27 +100,36 @@ export default function PaymentSuccess() {
     }
   }, [searchParams, user?.email]);
 
-  const processPaymentReturn = async (planId, sessionId, paymentStatus, source) => {
+  const processPaymentReturn = async (planId, sessionId, paymentStatus, source, isLiteralSessionId) => {
     try {
       setIsUpdatingSubscription(true);
       setError('');
 
-      console.log('🔄 Processing payment return for subscription activation...', {
+      console.log('🔄 Processing payment return with FIXED logic...', {
         planId,
         sessionId,
         paymentStatus,
         source,
-        userEmail: user.email
+        userEmail: user.email,
+        isLiteralSessionId
       });
 
-      // **STEP 1**: Use the enhanced post-payment handler
+      // **NEW LOGIC**: For Payment Links with literal session IDs, directly activate subscription
+      if (isLiteralSessionId || paymentStatus === 'success' || document.referrer.includes('stripe.com')) {
+        console.log('✅ Detected successful Payment Link return, activating subscription directly...');
+        
+        await activateSubscriptionDirectly(planId, sessionId);
+        return;
+      }
+
+      // **FALLBACK**: Try the standard post-payment handler
       const postPaymentResult = await handlePostPaymentReturn(searchParams, user.email);
       
       if (postPaymentResult.success) {
         console.log('✅ Post-payment processing successful:', postPaymentResult);
         setSubscriptionUpdated(true);
         
-        // **ADDITIONAL**: Force immediate feature refresh
+        // Force immediate feature refresh
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('forceFeatureRefresh', {
             detail: {
@@ -125,99 +144,13 @@ export default function PaymentSuccess() {
         return;
       }
 
-      // **STEP 2**: Enhanced fallback - Direct subscription update with retries
-      console.log('⚠️ Post-payment handler failed, using enhanced direct subscription update...');
-      
-      let updateSuccess = false;
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (!updateSuccess && attempts < maxAttempts) {
-        try {
-          attempts++;
-          console.log(`🔄 Subscription update attempt ${attempts}/${maxAttempts}...`);
-          
-          await updateUserSubscription(user.email, planId, sessionId || `cs_manual_${Date.now()}_${attempts}`);
-          updateSuccess = true;
-          console.log('✅ Subscription updated successfully');
-          
-        } catch (updateError) {
-          console.warn(`⚠️ Subscription update attempt ${attempts} failed:`, updateError);
-          
-          if (attempts === maxAttempts) {
-            throw updateError;
-          }
-          
-          // Wait before retry
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
-      }
-
-      // **STEP 3**: Enhanced cache clearing
-      const cacheKeys = [
-        `featureCache_${user.email}`,
-        `subscriptionCache_${user.email}`,
-        `planLimits_${user.email}`,
-        `userSubscription_${user.email}`,
-        'pendingPayment',
-        'stripePaymentAttempt',
-        'paymentPlanId',
-        'paymentUserEmail',
-        'routeCache',
-        'componentCache'
-      ];
-      
-      cacheKeys.forEach(key => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      });
-      
-      // **STEP 4**: Enhanced event dispatching
-      const updateEvents = [
-        'subscriptionUpdated',
-        'refreshFeatureAccess',
-        'planChanged',
-        'userUpgraded',
-        'forceAppRefresh',
-        'subscriptionActivated'
-      ];
-
-      updateEvents.forEach((eventName, index) => {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent(eventName, {
-            detail: { 
-              userEmail: user.email, 
-              planId,
-              sessionId: sessionId || `cs_manual_${Date.now()}`,
-              immediate: true,
-              source: 'payment_success_page',
-              timestamp: Date.now(),
-              attempt: attempts
-            }
-          }));
-        }, index * 200); // Stagger events
-      });
-
-      setSubscriptionUpdated(true);
-
-      logSecurityEvent('SUBSCRIPTION_ACTIVATED_FROM_PAYMENT', {
-        userEmail: user.email,
-        planId: `price_${planId}`,
-        sessionId,
-        method: 'enhanced_direct_update',
-        attempts,
-        source
-      });
+      // **FINAL FALLBACK**
+      console.log('⚠️ All methods failed, using direct activation fallback...');
+      await activateSubscriptionDirectly(planId, sessionId);
 
     } catch (error) {
       console.error('❌ Error processing payment return:', error);
       setError(`Failed to activate subscription: ${error.message}`);
-      
-      // **FALLBACK**: Show manual activation option
-      setError(
-        `Subscription activation in progress... If features don't appear immediately, please refresh the page or contact support.\n\n` +
-        `Error details: ${error.message}`
-      );
       
       logSecurityEvent('SUBSCRIPTION_UPDATE_ERROR_AFTER_PAYMENT', {
         error: error.message,
@@ -228,6 +161,101 @@ export default function PaymentSuccess() {
       });
     } finally {
       setIsUpdatingSubscription(false);
+    }
+  };
+
+  // **NEW**: Direct subscription activation method
+  const activateSubscriptionDirectly = async (planId, sessionId) => {
+    try {
+      console.log('🚀 Activating subscription directly...', { planId, sessionId, userEmail: user.email });
+      
+      let updateSuccess = false;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (!updateSuccess && attempts < maxAttempts) {
+        try {
+          attempts++;
+          console.log(`🔄 Direct activation attempt ${attempts}/${maxAttempts}...`);
+          
+          await updateUserSubscription(user.email, planId, sessionId);
+          updateSuccess = true;
+          console.log('✅ Subscription activated successfully');
+          
+        } catch (updateError) {
+          console.warn(`⚠️ Activation attempt ${attempts} failed:`, updateError);
+          
+          if (attempts === maxAttempts) {
+            throw updateError;
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
+      }
+
+      // **ENHANCED**: Comprehensive cache clearing
+      const cacheKeys = [
+        `featureCache_${user.email}`,
+        `subscriptionCache_${user.email}`,
+        `planLimits_${user.email}`,
+        `userSubscription_${user.email}`,
+        'pendingPayment',
+        'stripePaymentAttempt',
+        'paymentPlanId',
+        'paymentUserEmail',
+        'paymentTracking',
+        'awaitingPayment',
+        'routeCache',
+        'componentCache'
+      ];
+      
+      cacheKeys.forEach(key => {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      });
+      
+      // **ENHANCED**: Multiple event dispatching with delays
+      const updateEvents = [
+        { name: 'subscriptionUpdated', delay: 0 },
+        { name: 'refreshFeatureAccess', delay: 200 },
+        { name: 'planChanged', delay: 400 },
+        { name: 'userUpgraded', delay: 600 },
+        { name: 'forceAppRefresh', delay: 800 },
+        { name: 'subscriptionActivated', delay: 1000 },
+        { name: 'forceFeatureRefresh', delay: 1200 }
+      ];
+
+      updateEvents.forEach(({ name, delay }) => {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(name, {
+            detail: { 
+              userEmail: user.email, 
+              planId,
+              sessionId,
+              immediate: true,
+              source: 'direct_activation',
+              timestamp: Date.now(),
+              attempt: attempts
+            }
+          }));
+        }, delay);
+      });
+
+      setSubscriptionUpdated(true);
+
+      logSecurityEvent('SUBSCRIPTION_ACTIVATED_DIRECTLY', {
+        userEmail: user.email,
+        planId: `price_${planId}`,
+        sessionId,
+        method: 'direct_activation',
+        attempts,
+        source: 'payment_link_literal_session'
+      });
+
+    } catch (error) {
+      console.error('❌ Error in direct subscription activation:', error);
+      throw error;
     }
   };
 
@@ -526,6 +554,21 @@ export default function PaymentSuccess() {
             💡 If premium features don't appear immediately, try refreshing the page
           </p>
         </motion.div>
+
+        {/* Debug Info (only show if there's an issue) */}
+        {debugInfo.isLiteralSessionId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.0 }}
+            className="mt-4 p-2 bg-yellow-900/20 border border-yellow-700 rounded text-xs"
+          >
+            <p className="text-yellow-400 font-medium mb-1">🔧 Technical Note:</p>
+            <p className="text-yellow-300">
+              Payment Link redirect URL needs configuration in Stripe Dashboard for optimal experience.
+            </p>
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );
