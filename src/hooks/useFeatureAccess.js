@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import { getUserPlanLimits, hasReachedLimit } from '../lib/stripe';
+import { getUserPlanLimits, checkPlanLimit } from '../services/subscriptionService';
 
 /**
  * Hook for managing feature access and subscription limits
@@ -10,14 +9,20 @@ import { getUserPlanLimits, hasReachedLimit } from '../lib/stripe';
 export const useFeatureAccess = () => {
   const { user } = useAuth();
   const [subscription, setSubscription] = useState(null);
-  const [usage, setUsage] = useState({});
+  const [planLimits, setPlanLimits] = useState(null);
+  const [usage, setUsage] = useState({
+    inventoryItems: 0,
+    receiptScans: 0,
+    excelImports: 0
+  });
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(Date.now());
 
   // Fetch subscription data
   const fetchSubscription = useCallback(async () => {
-    if (!user?.email || !supabase) {
+    if (!user?.email) {
       setSubscription(null);
+      setPlanLimits(null);
       setLoading(false);
       return;
     }
@@ -25,117 +30,111 @@ export const useFeatureAccess = () => {
     try {
       console.log('🔍 Fetching subscription for:', user.email);
 
-      // Check cache first (but refresh every 5 minutes)
-      const cacheKey = `subscriptionCache_${user.email}`;
-      const cached = localStorage.getItem(cacheKey);
-      const now = Date.now();
+      // Get user subscription and plan limits
+      const { subscription: userSubscription, planLimits: limits } = await getUserPlanLimits(user.email);
       
-      if (cached && (now - lastRefresh) < 300000) { // 5 minutes
-        const cachedData = JSON.parse(cached);
-        if (cachedData.timestamp && (now - cachedData.timestamp) < 300000) {
-          setSubscription(cachedData.subscription);
-          setLoading(false);
-          return;
-        }
-      }
+      console.log('✅ Found subscription:', userSubscription);
+      console.log('✅ Plan limits:', limits);
+      
+      setSubscription(userSubscription);
+      setPlanLimits(limits);
 
-      // Fetch from database
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .select('*')
-        .eq('user_email', user.email.toLowerCase())
-        .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('❌ Error fetching subscription:', error);
-        setSubscription(null);
-      } else if (data) {
-        console.log('✅ Found subscription:', data);
-        setSubscription(data);
-        
-        // Cache the result
-        localStorage.setItem(cacheKey, JSON.stringify({
-          subscription: data,
-          timestamp: now
-        }));
-      } else {
-        console.log('ℹ️ No subscription found, using free plan');
-        setSubscription(null);
-      }
     } catch (error) {
-      console.error('❌ Error in fetchSubscription:', error);
+      console.error('❌ Error fetching subscription:', error);
       setSubscription(null);
+      setPlanLimits({
+        inventoryItems: 100,
+        receiptScans: 1,
+        excelImports: 1,
+        taxExports: false,
+        features: ['inventory']
+      });
     } finally {
       setLoading(false);
       setLastRefresh(Date.now());
     }
-  }, [user?.email, lastRefresh]);
+  }, [user?.email]);
 
   // Fetch usage statistics
   const fetchUsage = useCallback(async () => {
-    if (!user?.email || !supabase) {
-      setUsage({});
+    if (!user?.email) {
+      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
       return;
     }
 
     try {
       console.log('📊 Fetching usage statistics for:', user.email);
 
-      // Get current month's usage
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-
-      // Fetch inventory count
-      const { count: inventoryCount, error: inventoryError } = await supabase
-        .from('inventory_tb2k4x9p1m')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_email', user.email.toLowerCase());
-
-      if (inventoryError) {
-        console.warn('⚠️ Error fetching inventory count:', inventoryError);
-      }
-
-      // Fetch receipt scans count for current month
-      const { count: receiptScansCount, error: scansError } = await supabase
-        .from('receipt_scans_tb2k4x9p1m')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_email', user.email.toLowerCase())
-        .gte('created_at', startOfMonth.toISOString());
-
-      if (scansError) {
-        console.warn('⚠️ Error fetching receipt scans count:', scansError);
-      }
-
-      // Fetch Excel imports count for current month
-      const { count: excelImportsCount, error: importsError } = await supabase
-        .from('excel_imports_tb2k4x9p1m')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_email', user.email.toLowerCase())
-        .gte('created_at', startOfMonth.toISOString());
-
-      if (importsError) {
-        console.warn('⚠️ Error fetching Excel imports count:', importsError);
-      }
+      // Get current usage from various sources
+      const inventoryCount = await getCurrentInventoryCount();
+      const monthlyScans = await getCurrentMonthScans();
+      const monthlyImports = await getCurrentMonthImports();
 
       const usageData = {
-        inventoryItems: inventoryCount || 0,
-        receiptScans: receiptScansCount || 0,
-        excelImports: excelImportsCount || 0,
+        inventoryItems: inventoryCount,
+        receiptScans: monthlyScans,
+        excelImports: monthlyImports,
         lastUpdated: Date.now()
       };
 
       console.log('📈 Usage statistics:', usageData);
       setUsage(usageData);
 
-      // Cache usage data
-      localStorage.setItem(`usageCache_${user.email}`, JSON.stringify(usageData));
-
     } catch (error) {
       console.error('❌ Error fetching usage:', error);
-      setUsage({});
+      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
     }
   }, [user?.email]);
+
+  // Helper functions to get current usage
+  const getCurrentInventoryCount = async () => {
+    try {
+      const { getInventoryItems } = await import('../services/db');
+      const items = await getInventoryItems(user.email);
+      return items.length;
+    } catch (error) {
+      console.error('Error getting inventory count:', error);
+      return 0;
+    }
+  };
+
+  const getCurrentMonthScans = async () => {
+    try {
+      const stored = localStorage.getItem(`scanHistory_${user.email}`);
+      if (!stored) return 0;
+      
+      const history = JSON.parse(stored);
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      return history.filter(scan => 
+        new Date(scan.timestamp) >= startOfMonth
+      ).length;
+    } catch (error) {
+      console.error('Error getting scan count:', error);
+      return 0;
+    }
+  };
+
+  const getCurrentMonthImports = async () => {
+    try {
+      const stored = localStorage.getItem(`importHistory_${user.email}`);
+      if (!stored) return 0;
+      
+      const history = JSON.parse(stored);
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      return history.filter(imp => 
+        new Date(imp.timestamp) >= startOfMonth
+      ).length;
+    } catch (error) {
+      console.error('Error getting import count:', error);
+      return 0;
+    }
+  };
 
   // Get current plan ID
   const getCurrentPlan = useCallback(() => {
@@ -153,23 +152,30 @@ export const useFeatureAccess = () => {
     return subscription ? 'professional' : 'free';
   }, [subscription]);
 
+  // Get plan info
+  const getPlanInfo = useCallback(() => {
+    const currentPlan = getCurrentPlan();
+    const planInfoMap = {
+      free: { name: 'Free Plan', color: 'gray' },
+      professional: { name: 'Professional Plan', color: 'green' }
+    };
+    return planInfoMap[currentPlan] || planInfoMap.free;
+  }, [getCurrentPlan]);
+
   // Check if user can access a feature
   const canUseFeature = useCallback((feature) => {
     const currentPlan = getCurrentPlan();
-    const limits = getUserPlanLimits(currentPlan);
     
-    if (!limits) return false;
-
     switch (feature) {
       case 'receiptScanner':
         if (currentPlan === 'free') {
-          return !hasReachedLimit(currentPlan, 'receiptScans', usage.receiptScans || 0);
+          return usage.receiptScans < (planLimits?.receiptScans || 1);
         }
         return true;
 
       case 'excelImporter':
         if (currentPlan === 'free') {
-          return !hasReachedLimit(currentPlan, 'excelImport', usage.excelImports || 0);
+          return usage.excelImports < (planLimits?.excelImports || 1);
         }
         return true;
 
@@ -179,54 +185,109 @@ export const useFeatureAccess = () => {
       case 'unlimitedInventory':
         return currentPlan === 'professional';
 
-      case 'addInventoryItem':
-        if (currentPlan === 'free') {
-          return !hasReachedLimit(currentPlan, 'inventoryItems', usage.inventoryItems || 0);
-        }
-        return true;
-
       default:
-        return limits.features.includes(feature);
+        return planLimits?.features?.includes(feature) || false;
     }
-  }, [getCurrentPlan, usage]);
+  }, [getCurrentPlan, usage, planLimits]);
 
-  // Check if user has reached a specific limit
-  const isAtLimit = useCallback((limitType) => {
+  // Check if user can add inventory item
+  const canAddInventoryItem = useCallback((currentCount = null) => {
     const currentPlan = getCurrentPlan();
-    const currentUsage = usage[limitType] || 0;
-    return hasReachedLimit(currentPlan, limitType, currentUsage);
-  }, [getCurrentPlan, usage]);
+    const count = currentCount !== null ? currentCount : usage.inventoryItems;
+    
+    if (currentPlan === 'professional') {
+      return { allowed: true, limit: -1, remaining: Infinity };
+    }
+    
+    const limit = planLimits?.inventoryItems || 100;
+    const allowed = count < limit;
+    const remaining = Math.max(0, limit - count);
+    
+    return {
+      allowed,
+      limit,
+      remaining,
+      reason: allowed ? null : `You have reached your inventory limit of ${limit} items. Upgrade to Professional for unlimited items.`
+    };
+  }, [getCurrentPlan, usage.inventoryItems, planLimits]);
 
-  // Get remaining quota for a feature
-  const getRemainingQuota = useCallback((limitType) => {
+  // Check if user can scan receipt
+  const canScanReceipt = useCallback(() => {
     const currentPlan = getCurrentPlan();
-    const limits = getUserPlanLimits(currentPlan);
-    const currentUsage = usage[limitType] || 0;
     
-    if (!limits) return 0;
+    if (currentPlan === 'professional') {
+      return { allowed: true, limit: -1, remaining: Infinity };
+    }
     
-    const limit = limits[limitType];
-    if (limit === -1) return Infinity; // unlimited
-    if (limit === 0) return 0; // not available
+    const limit = planLimits?.receiptScans || 1;
+    const used = usage.receiptScans;
+    const allowed = used < limit;
+    const remaining = Math.max(0, limit - used);
     
-    return Math.max(0, limit - currentUsage);
-  }, [getCurrentPlan, usage]);
+    return {
+      allowed,
+      limit,
+      used,
+      remaining,
+      reason: allowed ? null : `You have used all ${limit} receipt scans for this month. Upgrade to Professional for unlimited scans.`
+    };
+  }, [getCurrentPlan, usage.receiptScans, planLimits]);
+
+  // Check if user can import Excel
+  const canImportExcel = useCallback(() => {
+    const currentPlan = getCurrentPlan();
+    
+    if (currentPlan === 'professional') {
+      return { allowed: true, limit: -1, remaining: Infinity };
+    }
+    
+    const limit = planLimits?.excelImports || 1;
+    const used = usage.excelImports;
+    const allowed = used < limit;
+    const remaining = Math.max(0, limit - used);
+    
+    return {
+      allowed,
+      limit,
+      used,
+      remaining,
+      reason: allowed ? null : `You have used all ${limit} Excel imports for this month. Upgrade to Professional for unlimited imports.`
+    };
+  }, [getCurrentPlan, usage.excelImports, planLimits]);
+
+  // Increment usage counter
+  const incrementUsage = useCallback((type) => {
+    setUsage(prev => ({
+      ...prev,
+      [type]: (prev[type] || 0) + 1
+    }));
+    
+    // Update localStorage for persistence
+    if (user?.email) {
+      const key = type === 'receiptScan' ? `scanHistory_${user.email}` : 
+                   type === 'excelImport' ? `importHistory_${user.email}` : null;
+      
+      if (key) {
+        try {
+          const stored = localStorage.getItem(key);
+          const history = stored ? JSON.parse(stored) : [];
+          // The actual history update happens in the respective components
+          // This is just for immediate UI feedback
+        } catch (error) {
+          console.error('Error updating usage counter:', error);
+        }
+      }
+    }
+  }, [user?.email]);
 
   // Refresh feature access data
   const refresh = useCallback(async () => {
     console.log('🔄 Refreshing feature access data...');
     setLoading(true);
     
-    // Clear caches
-    if (user?.email) {
-      localStorage.removeItem(`subscriptionCache_${user.email}`);
-      localStorage.removeItem(`usageCache_${user.email}`);
-      localStorage.removeItem(`featureCache_${user.email}`);
-    }
-    
     await Promise.all([fetchSubscription(), fetchUsage()]);
     setLoading(false);
-  }, [fetchSubscription, fetchUsage, user?.email]);
+  }, [fetchSubscription, fetchUsage]);
 
   // Initial data fetch
   useEffect(() => {
@@ -235,7 +296,8 @@ export const useFeatureAccess = () => {
       fetchUsage();
     } else {
       setSubscription(null);
-      setUsage({});
+      setPlanLimits(null);
+      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
       setLoading(false);
     }
   }, [user?.email, fetchSubscription, fetchUsage]);
@@ -246,7 +308,6 @@ export const useFeatureAccess = () => {
       console.log('📱 Handling subscription update:', event.detail);
       
       if (event.detail.userEmail === user?.email) {
-        // Wait a moment for database to be updated
         setTimeout(async () => {
           await refresh();
         }, 1000);
@@ -269,14 +330,18 @@ export const useFeatureAccess = () => {
 
   return {
     subscription,
+    planLimits,
     usage,
+    usageStats: usage, // Alias for backward compatibility
     loading,
     currentPlan: getCurrentPlan(),
+    planInfo: getPlanInfo(),
     canUseFeature,
-    isAtLimit,
-    getRemainingQuota,
-    refresh,
-    limits: getUserPlanLimits(getCurrentPlan())
+    canAddInventoryItem,
+    canScanReceipt,
+    canImportExcel,
+    incrementUsage,
+    refresh
   };
 };
 

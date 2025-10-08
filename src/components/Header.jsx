@@ -22,7 +22,7 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
           <div className="flex items-center lg:hidden">
             <button
               type="button"
-              className="p-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-md"
+              className="p-2 text-gray-300 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md"
               onClick={onMobileMenuToggle}
             >
               <span className="sr-only">Toggle navigation menu</span>
@@ -34,9 +34,9 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
             </button>
           </div>
 
-          {/* Logo - Perfectly centered */}
+          {/* Logo - Perfectly centered - Restored Original Branding */}
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:static lg:left-auto lg:transform-none">
-            <h1 className="text-xl sm:text-2xl font-bold text-white">Trackio</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white">GoTrack</h1>
           </div>
 
           {/* User menu - Right side */}
@@ -44,7 +44,7 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
             <div className="relative">
               <button
                 type="button"
-                className="flex items-center p-2 rounded-full bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="flex items-center p-2 rounded-full bg-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               >
                 <span className="sr-only">Open user menu</span>

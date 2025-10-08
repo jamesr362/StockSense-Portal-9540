@@ -15,24 +15,36 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inventoryCount, setInventoryCount] = useState(0);
+  const [error, setError] = useState(null);
 
   const { user } = useAuth();
-  const { subscription, planLimits, currentPlan, planInfo, canUseFeature, refresh } = useFeatureAccess();
+  const { subscription, usage, currentPlan, canUseFeature, refresh, loading: featureLoading } = useFeatureAccess();
   const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
 
   useEffect(() => {
     const loadData = async () => {
-      if (!user?.email) return;
+      if (!user?.email) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
         setIsLoading(true);
+        setError(null);
 
-        // Load inventory data
-        const items = await getInventoryItems(user.email);
+        // Load inventory data with error handling
+        let items = [];
+        try {
+          items = await getInventoryItems(user.email);
+        } catch (inventoryError) {
+          console.error('Error loading inventory:', inventoryError);
+          items = []; // Continue with empty array
+        }
+
         const totalItems = items.length;
         const outOfStockItems = items.filter((item) => item.status === 'Out of Stock').length;
         const limitedStockItems = items.filter((item) => item.status === 'Limited Stock').length;
-        const totalValue = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const totalValue = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
 
         setInventoryCount(totalItems);
 
@@ -62,6 +74,7 @@ export default function Dashboard() {
         ]);
       } catch (error) {
         console.error('Error loading dashboard stats:', error);
+        setError('Failed to load dashboard data. Please try refreshing the page.');
       } finally {
         setIsLoading(false);
       }
@@ -73,15 +86,33 @@ export default function Dashboard() {
   // Refresh feature access when verification completes
   useEffect(() => {
     if (verificationStatus?.success) {
-      // Refresh feature access to get updated subscription
       refresh();
     }
   }, [verificationStatus, refresh]);
 
-  if (isLoading) {
+  // Show loading state
+  if (isLoading || featureLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <span className="ml-3 text-white">Loading dashboard...</span>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <RiAlertLine className="mx-auto h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-medium text-white mb-2">Error Loading Dashboard</h3>
+        <p className="text-gray-400 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+        >
+          Refresh Page
+        </button>
       </div>
     );
   }
@@ -105,15 +136,15 @@ export default function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-semibold text-white">Dashboard</h1>
-              <p className="text-sm text-gray-400 mt-2">Welcome back, {user?.businessName}</p>
+              <p className="text-sm text-gray-400 mt-2">Welcome back, {user?.businessName || user?.email}</p>
             </div>
             <div className="flex flex-col items-end space-y-2">
               <SubscriptionStatus subscription={subscription} compact />
-              {planLimits && (
+              {usage && (
                 <div className="text-xs text-gray-500">
-                  {planLimits.inventoryItems === -1
+                  {currentPlan === 'professional'
                     ? 'Unlimited items'
-                    : `${inventoryCount}/${planLimits.inventoryItems} items used`
+                    : `${inventoryCount}/100 items used`
                   }
                 </div>
               )}
@@ -240,74 +271,72 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        {/* Stats Grid with Usage Limit Checking */}
-        <UsageLimitGate limitType="inventoryItems" currentUsage={inventoryCount} showUpgradePrompt={false}>
-          {stats && stats.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {stats.map((stat, index) => (
-                <motion.div
-                  key={stat.name}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
-                >
-                  <div className="p-4 sm:p-5">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <stat.icon
-                          className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                            stat.changeType === 'negative'
-                              ? 'text-red-400'
-                              : stat.changeType === 'warning'
-                              ? 'text-yellow-400'
-                              : 'text-gray-400'
-                          }`}
-                        />
-                      </div>
-                      <div className="ml-3 sm:ml-4 w-0 flex-1">
-                        <dl>
-                          <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                            {stat.name}
-                          </dt>
-                          <dd className="flex items-baseline mt-1">
-                            <div className="text-xl sm:text-2xl font-semibold text-white break-all">
-                              {stat.value}
-                            </div>
-                          </dd>
-                        </dl>
-                      </div>
+        {/* Stats Grid */}
+        {stats && stats.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {stats.map((stat, index) => (
+              <motion.div
+                key={stat.name}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+              >
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <stat.icon
+                        className={`h-6 w-6 sm:h-7 sm:w-7 ${
+                          stat.changeType === 'negative'
+                            ? 'text-red-400'
+                            : stat.changeType === 'warning'
+                            ? 'text-yellow-400'
+                            : 'text-gray-400'
+                        }`}
+                      />
+                    </div>
+                    <div className="ml-3 sm:ml-4 w-0 flex-1">
+                      <dl>
+                        <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
+                          {stat.name}
+                        </dt>
+                        <dd className="flex items-baseline mt-1">
+                          <div className="text-xl sm:text-2xl font-semibold text-white break-all">
+                            {stat.value}
+                          </div>
+                        </dd>
+                      </dl>
                     </div>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gray-800 overflow-hidden rounded-lg shadow p-6 sm:p-8 text-center text-gray-400"
-            >
-              <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-              <h3 className="text-lg font-medium text-white mb-2">No inventory items yet</h3>
-              <p className="text-sm">
-                {currentPlan === 'free' && inventoryCount >= 100
-                  ? 'You\'ve reached the 100 item limit for the Free plan. Upgrade to add more items.'
-                  : 'Add some items to your inventory to see your dashboard statistics.'
-                }
-              </p>
-              {currentPlan === 'free' && inventoryCount >= 100 && (
-                <Link
-                  to="/pricing"
-                  className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors mt-4"
-                >
-                  <RiStarLine className="h-5 w-5 mr-2" />
-                  Upgrade to Professional
-                </Link>
-              )}
-            </motion.div>
-          )}
-        </UsageLimitGate>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gray-800 overflow-hidden rounded-lg shadow p-6 sm:p-8 text-center text-gray-400"
+          >
+            <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No inventory items yet</h3>
+            <p className="text-sm">
+              {currentPlan === 'free' && inventoryCount >= 100
+                ? 'You\'ve reached the 100 item limit for the Free plan. Upgrade to add more items.'
+                : 'Add some items to your inventory to see your dashboard statistics.'
+              }
+            </p>
+            {currentPlan === 'free' && inventoryCount >= 100 && (
+              <Link
+                to="/pricing"
+                className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors mt-4"
+              >
+                <RiStarLine className="h-5 w-5 mr-2" />
+                Upgrade to Professional
+              </Link>
+            )}
+          </motion.div>
+        )}
 
         {/* Feature Cards */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -456,15 +485,6 @@ export default function Dashboard() {
               )}
             </div>
           </motion.div>
-        </div>
-
-        {/* Inventory Usage Warning */}
-        <div className="mt-6">
-          <UsageLimitGate
-            limitType="inventoryItems"
-            currentUsage={inventoryCount}
-            customMessage={`You're using ${inventoryCount} of ${planLimits?.inventoryItems || 0} available inventory slots.`}
-          />
         </div>
       </motion.div>
     </div>

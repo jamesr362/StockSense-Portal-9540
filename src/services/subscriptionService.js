@@ -1,264 +1,336 @@
 import { supabase } from '../lib/supabase';
 import { logSecurityEvent } from '../utils/security';
-import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import { STRIPE_PLANS } from '../lib/stripe';
 
 /**
- * Complete subscription management service
- * Handles all subscription operations with proper error handling and duplicate management
+ * Get user subscription and plan limits
  */
-
-/**
- * Clean up duplicate subscriptions for a user (keep the most recent)
- */
-const cleanupDuplicateSubscriptions = async (userEmail) => {
+export const getUserPlanLimits = async (userEmail) => {
   try {
-    console.log('🧹 Cleaning up duplicate subscriptions for:', userEmail);
-
-    if (!supabase) return false;
-
-    // Get all subscriptions for this user, ordered by updated_at DESC
-    const { data: subscriptions, error: fetchError } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .order('updated_at', { ascending: false });
-
-    if (fetchError) {
-      console.error('❌ Error fetching subscriptions for cleanup:', fetchError);
-      return false;
+    if (!userEmail) {
+      return {
+        subscription: null,
+        planLimits: getFreePlanLimits()
+      };
     }
 
-    if (!subscriptions || subscriptions.length <= 1) {
-      console.log('✅ No duplicates found for:', userEmail);
-      return true;
-    }
+    console.log('🔍 Getting plan limits for:', userEmail);
 
-    console.log(`🔍 Found ${subscriptions.length} subscriptions for ${userEmail}, keeping the most recent`);
-
-    // Keep the first one (most recent), delete the rest
-    const toKeep = subscriptions[0];
-    const toDelete = subscriptions.slice(1);
-
-    if (toDelete.length > 0) {
-      const idsToDelete = toDelete.map(sub => sub.id);
-      
-      const { error: deleteError } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .delete()
-        .in('id', idsToDelete);
-
-      if (deleteError) {
-        console.error('❌ Error deleting duplicate subscriptions:', deleteError);
-        return false;
-      }
-
-      console.log(`✅ Deleted ${toDelete.length} duplicate subscriptions for ${userEmail}`);
-    }
-
-    return true;
-
-  } catch (error) {
-    console.error('❌ Error cleaning up duplicates:', error);
-    return false;
-  }
-};
-
-/**
- * Update user subscription directly in the database
- */
-export const updateUserSubscription = async (userEmail, planId, sessionId = null) => {
-  try {
-    console.log('📝 Updating user subscription directly:', { userEmail, planId, sessionId });
-
-    if (!userEmail || !planId) {
-      throw new Error('User email and plan ID are required');
-    }
-
-    const subscriptionData = {
-      user_email: userEmail.toLowerCase(),
-      stripe_customer_id: sessionId ? `cus_${sessionId.substring(3, 13)}` : `cus_${Math.random().toString(36).substring(2, 15)}`,
-      stripe_subscription_id: sessionId ? `sub_${sessionId.substring(3, 13)}` : `sub_${Math.random().toString(36).substring(2, 15)}`,
-      stripe_session_id: sessionId,
-      plan_id: `price_${planId}`,
-      status: 'active',
-      current_period_start: new Date().toISOString(),
-      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      cancel_at_period_end: false,
-      canceled_at: null,
-      updated_at: new Date().toISOString()
-    };
-
+    // Try to get subscription from Supabase first
+    let subscription = null;
+    
     if (supabase) {
       try {
-        // First, clean up any duplicate subscriptions
-        await cleanupDuplicateSubscriptions(userEmail);
-
-        // Now try to find the single subscription
-        const { data: existingData, error: findError } = await supabase
+        const { data, error } = await supabase
           .from('subscriptions_tb2k4x9p1m')
           .select('*')
           .eq('user_email', userEmail.toLowerCase())
-          .limit(1)
-          .maybeSingle();
+          .single();
 
-        if (findError) {
-          console.error('❌ Error finding existing subscription:', findError);
-          
-          if (findError.message?.includes('relation') && findError.message?.includes('does not exist')) {
-            console.log('🔧 Table does not exist, initializing database...');
-            
-            const { initializeDatabase } = await import('./supabaseSetup');
-            const initialized = await initializeDatabase();
-            
-            if (!initialized) {
-              throw new Error('Failed to initialize database');
-            }
-          } else {
-            throw findError;
-          }
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error fetching subscription:', error);
+        } else if (data) {
+          subscription = data;
+          console.log('✅ Found subscription:', subscription);
         }
-
-        let result;
-        
-        if (existingData) {
-          // Update existing subscription
-          console.log('📝 Updating existing subscription with ID:', existingData.id);
-          const { data, error } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .update(subscriptionData)
-            .eq('id', existingData.id)
-            .select()
-            .single();
-
-          if (error) {
-            console.error('❌ Error updating subscription:', error);
-            throw error;
-          }
-          result = data;
-        } else {
-          // Insert new subscription
-          console.log('📝 Creating new subscription');
-          const { data, error } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .insert(subscriptionData)
-            .select()
-            .single();
-
-          if (error) {
-            console.error('❌ Error inserting subscription:', error);
-            throw error;
-          }
-          result = data;
-        }
-
-        console.log('✅ Subscription updated successfully:', result);
-
-        // Clear caches
-        localStorage.removeItem(`featureCache_${userEmail}`);
-        localStorage.removeItem(`subscriptionCache_${userEmail}`);
-
-        // Dispatch update event
-        window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-          detail: { 
-            userEmail, 
-            planId, 
-            sessionId,
-            immediate: true,
-            source: 'direct_service'
-          }
-        }));
-
-        logSecurityEvent('DIRECT_SUBSCRIPTION_UPDATE', {
-          userEmail,
-          planId,
-          sessionId
-        });
-
-        return result;
-
-      } catch (supabaseError) {
-        console.error('❌ Supabase error in direct subscription update:', supabaseError);
-        throw supabaseError;
+      } catch (error) {
+        console.error('Error querying subscription:', error);
       }
-    } else {
-      console.warn('⚠️ Supabase not available, using local storage fallback');
-      
-      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
-      localSubscriptions[userEmail] = subscriptionData;
-      localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
-      
-      return subscriptionData;
     }
 
+    // Determine plan limits based on subscription
+    let planLimits;
+    
+    if (subscription && subscription.status === 'active') {
+      // Extract plan type from plan_id
+      if (subscription.plan_id && subscription.plan_id.includes('professional')) {
+        planLimits = getProfessionalPlanLimits();
+      } else {
+        planLimits = getFreePlanLimits();
+      }
+    } else {
+      planLimits = getFreePlanLimits();
+    }
+
+    console.log('📊 Plan limits:', planLimits);
+
+    return {
+      subscription,
+      planLimits
+    };
+
   } catch (error) {
-    console.error('❌ Error in direct subscription update:', error);
-    logSecurityEvent('DIRECT_SUBSCRIPTION_UPDATE_ERROR', {
-      error: error.message,
-      userEmail,
-      planId
-    });
-    throw error;
+    console.error('❌ Error getting user plan limits:', error);
+    
+    // Fallback to free plan
+    return {
+      subscription: null,
+      planLimits: getFreePlanLimits()
+    };
   }
 };
 
 /**
- * Get user subscription from database
+ * Get free plan limits
+ */
+export const getFreePlanLimits = () => ({
+  inventoryItems: 100,
+  receiptScans: 1,
+  excelImports: 1,
+  taxExports: false,
+  features: ['inventory', 'dashboard', 'settings']
+});
+
+/**
+ * Get professional plan limits
+ */
+export const getProfessionalPlanLimits = () => ({
+  inventoryItems: -1, // unlimited
+  receiptScans: -1,   // unlimited
+  excelImports: -1,   // unlimited
+  taxExports: true,
+  features: ['inventory', 'dashboard', 'settings', 'receiptScanner', 'excelImporter', 'taxExports']
+});
+
+/**
+ * Check if user has reached a specific limit
+ */
+export const checkPlanLimit = async (userEmail, limitType, currentUsage) => {
+  try {
+    const { planLimits } = await getUserPlanLimits(userEmail);
+    const limit = planLimits[limitType];
+    
+    if (limit === -1) return false; // unlimited
+    if (limit === 0) return true;   // not available
+    
+    return currentUsage >= limit;
+  } catch (error) {
+    console.error('Error checking plan limit:', error);
+    return true; // Err on the side of caution
+  }
+};
+
+/**
+ * Get user subscription
  */
 export const getUserSubscription = async (userEmail) => {
+  if (!userEmail || !supabase) {
+    console.log('No user email or Supabase not available');
+    return null;
+  }
+
   try {
-    if (!userEmail) {
-      throw new Error('User email is required');
-    }
+    console.log('🔍 Fetching subscription for user:', userEmail);
 
-    console.log('🔍 Fetching subscription for:', userEmail);
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*')
+      .eq('user_email', userEmail.toLowerCase())
+      .single();
 
-    if (supabase) {
-      // First, clean up any duplicates
-      await cleanupDuplicateSubscriptions(userEmail);
-
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .select('*')
-        .eq('user_email', userEmail.toLowerCase())
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error('❌ Error fetching subscription:', error);
-        
-        if (error.message?.includes('relation') && error.message?.includes('does not exist')) {
-          console.log('ℹ️ Subscriptions table does not exist, user is on free plan');
-          return null;
-        }
-        
-        throw error;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log('No subscription found for user');
+        return null;
       }
-
-      console.log('📊 Subscription data:', data);
-      return data;
-
-    } else {
-      console.warn('⚠️ Supabase not available, checking local storage');
-      
-      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
-      return localSubscriptions[userEmail] || null;
+      console.error('Error fetching subscription:', error);
+      return null;
     }
+
+    console.log('✅ Found subscription:', data);
+    return data;
 
   } catch (error) {
-    console.error('❌ Error fetching user subscription:', error);
+    console.error('❌ Error in getUserSubscription:', error);
     return null;
   }
 };
 
 /**
- * Create or update subscription (alias for updateUserSubscription)
+ * Update user subscription - Main function used by PaymentSuccess
  */
-export const createOrUpdateSubscription = async (userEmail, subscriptionData) => {
+export const updateUserSubscription = async (userEmail, planId, sessionId = null) => {
+  if (!userEmail || !planId) {
+    throw new Error('User email and plan ID are required');
+  }
+
+  if (!supabase) {
+    throw new Error('Database not available');
+  }
+
   try {
-    const planId = subscriptionData.planId || 'professional';
-    const sessionId = subscriptionData.stripeSessionId || subscriptionData.sessionId;
+    console.log('🔄 Updating user subscription:', { userEmail, planId, sessionId });
+
+    // Clean duplicate subscriptions first
+    await cleanupDuplicateSubscriptions(userEmail);
+
+    // Prepare subscription data
+    const subscriptionData = {
+      user_email: userEmail.toLowerCase(),
+      plan_id: planId.startsWith('price_') ? planId : `price_${planId}`,
+      status: 'active',
+      stripe_customer_id: null,
+      stripe_subscription_id: sessionId || `manual_${Date.now()}`,
+      current_period_start: new Date().toISOString(),
+      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+      updated_at: new Date().toISOString()
+    };
+
+    // Create or update subscription
+    const result = await createOrUpdateSubscription(subscriptionData);
     
-    return await updateUserSubscription(userEmail, planId, sessionId);
+    console.log('✅ Subscription updated successfully:', result);
+    
+    // Log security event
+    logSecurityEvent('SUBSCRIPTION_UPDATED_VIA_PAYMENT', {
+      userEmail,
+      planId: subscriptionData.plan_id,
+      sessionId,
+      subscriptionId: result.id
+    });
+
+    return result;
+
+  } catch (error) {
+    console.error('❌ Error updating user subscription:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clean up duplicate subscriptions for a user
+ */
+export const cleanupDuplicateSubscriptions = async (userEmail) => {
+  if (!userEmail || !supabase) {
+    return;
+  }
+
+  try {
+    console.log('🧹 Cleaning up duplicate subscriptions for:', userEmail);
+
+    // Get all subscriptions for the user
+    const { data: subscriptions, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*')
+      .eq('user_email', userEmail.toLowerCase())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching subscriptions for cleanup:', error);
+      return;
+    }
+
+    if (!subscriptions || subscriptions.length <= 1) {
+      console.log('No duplicate subscriptions found');
+      return;
+    }
+
+    // Keep the most recent subscription, delete the rest
+    const [keepSubscription, ...duplicates] = subscriptions;
+    
+    if (duplicates.length > 0) {
+      console.log(`🗑️ Removing ${duplicates.length} duplicate subscriptions`);
+      
+      const duplicateIds = duplicates.map(sub => sub.id);
+      
+      const { error: deleteError } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .delete()
+        .in('id', duplicateIds);
+
+      if (deleteError) {
+        console.error('Error deleting duplicate subscriptions:', deleteError);
+      } else {
+        console.log('✅ Duplicate subscriptions cleaned up');
+        
+        logSecurityEvent('DUPLICATE_SUBSCRIPTIONS_CLEANED', {
+          userEmail,
+          keptSubscriptionId: keepSubscription.id,
+          deletedCount: duplicates.length,
+          deletedIds: duplicateIds
+        });
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error cleaning up duplicate subscriptions:', error);
+  }
+};
+
+/**
+ * Create or update subscription
+ */
+export const createOrUpdateSubscription = async (subscriptionData) => {
+  if (!supabase) {
+    console.error('Supabase not available');
+    throw new Error('Database not available');
+  }
+
+  try {
+    console.log('💾 Creating/updating subscription:', subscriptionData);
+
+    const userEmail = subscriptionData.user_email?.toLowerCase();
+    if (!userEmail) {
+      throw new Error('User email is required');
+    }
+
+    // Check for existing subscription
+    const { data: existingData } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*')
+      .eq('user_email', userEmail)
+      .limit(1);
+
+    if (existingData && existingData.length > 0) {
+      // Update existing subscription
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .update({
+          ...subscriptionData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingData[0].id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      console.log('✅ Updated subscription:', data);
+      
+      // Log security event
+      logSecurityEvent('SUBSCRIPTION_UPDATED', {
+        userEmail,
+        subscriptionId: data.id,
+        planId: subscriptionData.plan_id
+      });
+
+      return data;
+    } else {
+      // Create new subscription
+      const { data, error } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .insert([{
+          ...subscriptionData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      console.log('✅ Created subscription:', data);
+      
+      // Log security event
+      logSecurityEvent('SUBSCRIPTION_CREATED', {
+        userEmail,
+        subscriptionId: data.id,
+        planId: subscriptionData.plan_id
+      });
+
+      return data;
+    }
+
   } catch (error) {
     console.error('❌ Error creating/updating subscription:', error);
     throw error;
@@ -266,76 +338,38 @@ export const createOrUpdateSubscription = async (userEmail, subscriptionData) =>
 };
 
 /**
- * Cancel user subscription
+ * Cancel subscription
  */
-export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
+export const cancelSubscription = async (userEmail) => {
+  if (!userEmail || !supabase) {
+    throw new Error('User email and database connection required');
+  }
+
   try {
-    console.log('🗑️ Canceling subscription for:', userEmail, { cancelAtPeriodEnd });
+    console.log('❌ Canceling subscription for user:', userEmail);
 
-    if (supabase) {
-      // Clean up duplicates first
-      await cleanupDuplicateSubscriptions(userEmail);
-
-      const status = cancelAtPeriodEnd ? 'active' : 'canceled';
-      const canceledAt = new Date().toISOString();
-      
-      const updateData = {
-        status,
-        canceled_at: canceledAt,
-        cancel_at_period_end: cancelAtPeriodEnd,
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .update({
+        status: 'canceled',
+        canceled_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      };
-      
-      // If canceling immediately, set end date to now
-      if (!cancelAtPeriodEnd) {
-        updateData.current_period_end = canceledAt;
-      }
+      })
+      .eq('user_email', userEmail.toLowerCase())
+      .select()
+      .single();
 
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update(updateData)
-        .eq('user_email', userEmail.toLowerCase())
-        .select()
-        .single();
+    if (error) throw error;
 
-      if (error) {
-        console.error('❌ Error canceling subscription:', error);
-        throw error;
-      }
+    console.log('✅ Canceled subscription:', data);
+    
+    // Log security event
+    logSecurityEvent('SUBSCRIPTION_CANCELED', {
+      userEmail,
+      subscriptionId: data.id
+    });
 
-      // Clear caches
-      localStorage.removeItem(`featureCache_${userEmail}`);
-      localStorage.removeItem(`subscriptionCache_${userEmail}`);
-
-      // Dispatch update event
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { 
-          userEmail, 
-          planId: cancelAtPeriodEnd ? null : 'free',
-          source: 'cancellation'
-        }
-      }));
-
-      logSecurityEvent('SUBSCRIPTION_CANCELED', {
-        userEmail,
-        cancelAtPeriodEnd
-      });
-
-      console.log('✅ Subscription canceled successfully');
-      return data;
-
-    } else {
-      // Fallback to local storage
-      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
-      if (localSubscriptions[userEmail]) {
-        localSubscriptions[userEmail].status = cancelAtPeriodEnd ? 'active' : 'canceled';
-        localSubscriptions[userEmail].canceled_at = new Date().toISOString();
-        localSubscriptions[userEmail].cancel_at_period_end = cancelAtPeriodEnd;
-        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
-      }
-      
-      return localSubscriptions[userEmail];
-    }
+    return data;
 
   } catch (error) {
     console.error('❌ Error canceling subscription:', error);
@@ -344,71 +378,38 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
 };
 
 /**
- * Reactivate a canceled subscription
+ * Reactivate subscription
  */
-export const reactivateSubscription = async (userEmail, planId = 'professional') => {
+export const reactivateSubscription = async (userEmail) => {
+  if (!userEmail || !supabase) {
+    throw new Error('User email and database connection required');
+  }
+
   try {
-    console.log('🔄 Reactivating subscription for:', userEmail, { planId });
+    console.log('🔄 Reactivating subscription for user:', userEmail);
 
-    if (supabase) {
-      // Clean up duplicates first
-      await cleanupDuplicateSubscriptions(userEmail);
-
-      const updateData = {
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .update({
         status: 'active',
-        plan_id: `price_${planId}`,
         canceled_at: null,
-        cancel_at_period_end: false,
-        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         updated_at: new Date().toISOString()
-      };
+      })
+      .eq('user_email', userEmail.toLowerCase())
+      .select()
+      .single();
 
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update(updateData)
-        .eq('user_email', userEmail.toLowerCase())
-        .select()
-        .single();
+    if (error) throw error;
 
-      if (error) {
-        console.error('❌ Error reactivating subscription:', error);
-        throw error;
-      }
+    console.log('✅ Reactivated subscription:', data);
+    
+    // Log security event
+    logSecurityEvent('SUBSCRIPTION_REACTIVATED', {
+      userEmail,
+      subscriptionId: data.id
+    });
 
-      // Clear caches
-      localStorage.removeItem(`featureCache_${userEmail}`);
-      localStorage.removeItem(`subscriptionCache_${userEmail}`);
-
-      // Dispatch update event
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { 
-          userEmail, 
-          planId,
-          source: 'reactivation'
-        }
-      }));
-
-      logSecurityEvent('SUBSCRIPTION_REACTIVATED', {
-        userEmail,
-        planId
-      });
-
-      console.log('✅ Subscription reactivated successfully');
-      return data;
-
-    } else {
-      // Fallback to local storage
-      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
-      if (localSubscriptions[userEmail]) {
-        localSubscriptions[userEmail].status = 'active';
-        localSubscriptions[userEmail].plan_id = `price_${planId}`;
-        localSubscriptions[userEmail].canceled_at = null;
-        localSubscriptions[userEmail].cancel_at_period_end = false;
-        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
-      }
-      
-      return localSubscriptions[userEmail];
-    }
+    return data;
 
   } catch (error) {
     console.error('❌ Error reactivating subscription:', error);
@@ -419,61 +420,40 @@ export const reactivateSubscription = async (userEmail, planId = 'professional')
 /**
  * Update subscription status
  */
-export const updateSubscriptionStatus = async (userEmail, status, endDate = null) => {
+export const updateSubscriptionStatus = async (userEmail, status, metadata = {}) => {
+  if (!userEmail || !supabase) {
+    throw new Error('User email and database connection required');
+  }
+
   try {
-    console.log('📊 Updating subscription status for:', userEmail, { status, endDate });
+    console.log(`📊 Updating subscription status to ${status} for user:`, userEmail);
 
-    if (supabase) {
-      // Clean up duplicates first
-      await cleanupDuplicateSubscriptions(userEmail);
+    const updateData = {
+      status,
+      updated_at: new Date().toISOString(),
+      ...metadata
+    };
 
-      const updateData = {
-        status,
-        updated_at: new Date().toISOString()
-      };
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .update(updateData)
+      .eq('user_email', userEmail.toLowerCase())
+      .select()
+      .single();
 
-      if (endDate) {
-        updateData.current_period_end = new Date(endDate).toISOString();
-      }
+    if (error) throw error;
 
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update(updateData)
-        .eq('user_email', userEmail.toLowerCase())
-        .select()
-        .single();
+    console.log('✅ Updated subscription status:', data);
+    
+    // Log security event
+    logSecurityEvent('SUBSCRIPTION_STATUS_UPDATED', {
+      userEmail,
+      subscriptionId: data.id,
+      status,
+      metadata
+    });
 
-      if (error) {
-        console.error('❌ Error updating subscription status:', error);
-        throw error;
-      }
-
-      // Clear caches
-      localStorage.removeItem(`featureCache_${userEmail}`);
-      localStorage.removeItem(`subscriptionCache_${userEmail}`);
-
-      logSecurityEvent('SUBSCRIPTION_STATUS_UPDATED', {
-        userEmail,
-        status,
-        endDate
-      });
-
-      console.log('✅ Subscription status updated successfully');
-      return data;
-
-    } else {
-      // Fallback to local storage
-      const localSubscriptions = JSON.parse(localStorage.getItem('localSubscriptions') || '{}');
-      if (localSubscriptions[userEmail]) {
-        localSubscriptions[userEmail].status = status;
-        if (endDate) {
-          localSubscriptions[userEmail].current_period_end = new Date(endDate).toISOString();
-        }
-        localStorage.setItem('localSubscriptions', JSON.stringify(localSubscriptions));
-      }
-      
-      return localSubscriptions[userEmail];
-    }
+    return data;
 
   } catch (error) {
     console.error('❌ Error updating subscription status:', error);
@@ -481,125 +461,16 @@ export const updateSubscriptionStatus = async (userEmail, status, endDate = null
   }
 };
 
-/**
- * Get user plan limits based on their subscription
- */
-export const getUserPlanLimits = async (userEmail) => {
-  try {
-    console.log('📋 Getting plan limits for:', userEmail);
-
-    const subscription = await getUserSubscription(userEmail);
-    
-    let planId = 'free';
-    if (subscription?.plan_id) {
-      // Extract plan from price_id (e.g., "price_professional" -> "professional")
-      const parts = subscription.plan_id.split('_');
-      planId = parts.length > 1 ? parts[1] : 'free';
-    }
-
-    // Get plan configuration from stripe.js
-    const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.free;
-    
-    console.log('📊 Plan limits for', planId, ':', plan.limits);
-    
-    return {
-      planId,
-      limits: plan.limits,
-      features: plan.features,
-      isActive: subscription?.status === 'active'
-    };
-
-  } catch (error) {
-    console.error('❌ Error getting user plan limits:', error);
-    
-    // Return free plan limits as fallback
-    return {
-      planId: 'free',
-      limits: SUBSCRIPTION_PLANS.free.limits,
-      features: SUBSCRIPTION_PLANS.free.features,
-      isActive: false
-    };
-  }
-};
-
-/**
- * Check if user can perform an action based on plan limits
- */
-export const checkPlanLimit = async (userEmail, limitType, currentUsage = 0) => {
-  try {
-    console.log('🔍 Checking plan limit for:', userEmail, { limitType, currentUsage });
-
-    const planLimits = await getUserPlanLimits(userEmail);
-    
-    if (!planLimits.isActive && limitType !== 'inventoryItems') {
-      return {
-        allowed: false,
-        reason: 'Subscription not active',
-        limit: 0,
-        usage: currentUsage
-      };
-    }
-
-    const limit = planLimits.limits[limitType];
-    
-    if (limit === -1) {
-      // Unlimited
-      return {
-        allowed: true,
-        reason: 'Unlimited',
-        limit: -1,
-        usage: currentUsage
-      };
-    }
-
-    if (limit === 0) {
-      // Not allowed
-      return {
-        allowed: false,
-        reason: 'Feature not available in current plan',
-        limit: 0,
-        usage: currentUsage
-      };
-    }
-
-    const allowed = currentUsage < limit;
-    
-    return {
-      allowed,
-      reason: allowed ? 'Within limits' : 'Limit exceeded',
-      limit,
-      usage: currentUsage,
-      remaining: Math.max(0, limit - currentUsage)
-    };
-
-  } catch (error) {
-    console.error('❌ Error checking plan limit:', error);
-    
-    // Conservative fallback - deny access
-    return {
-      allowed: false,
-      reason: 'Error checking limits',
-      limit: 0,
-      usage: currentUsage
-    };
-  }
-};
-
-/**
- * Legacy alias for cancelUserSubscription (for backward compatibility)
- */
-export const cancelUserSubscription = async (userEmail) => {
-  return await cancelSubscription(userEmail, false); // Immediate cancellation
-};
-
 export default {
-  updateUserSubscription,
+  getUserPlanLimits,
+  getFreePlanLimits,
+  getProfessionalPlanLimits,
+  checkPlanLimit,
   getUserSubscription,
+  updateUserSubscription,
+  cleanupDuplicateSubscriptions,
   createOrUpdateSubscription,
   cancelSubscription,
   reactivateSubscription,
-  updateSubscriptionStatus,
-  getUserPlanLimits,
-  checkPlanLimit,
-  cancelUserSubscription
+  updateSubscriptionStatus
 };
