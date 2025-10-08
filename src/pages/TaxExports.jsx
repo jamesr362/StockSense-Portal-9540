@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
 import {useState,useEffect} from 'react';
-import {RiCalculatorLine,RiDownloadLine,RiFileTextLine,RiCalendarLine,RiMoneyDollarCircleLine,RiHistoryLine,RiEyeLine,RiDeleteBin6Line,RiAlertLine,RiLockLine,RiStarLine,RiArrowRightLine} from 'react-icons/ri';
+import {RiCalculatorLine,RiDownloadLine,RiFileTextLine,RiCalendarLine,RiMoneyDollarCircleLine,RiHistoryLine,RiEyeLine,RiDeleteBin6Line,RiAlertLine,RiLockLine,RiStarLine,RiArrowRightLine,RiRefund2Line} from 'react-icons/ri';
 import TaxExportModal from '../components/TaxExportModal';
 import {getInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
@@ -32,30 +32,36 @@ setError('');
 
 // Load inventory data for stats
 const items=await getInventoryItems(user.email);
-const totalValue=items.reduce((sum,item)=> sum + (item.quantity * item.unitPrice),0);
-const vatAmount=totalValue * 0.2;// 20% VAT
-const totalWithVAT=totalValue + vatAmount;
+const totalCostValue=items.reduce((sum,item)=> sum + (item.quantity * item.unitPrice),0);
+
+// Calculate potential VAT refund (VAT that was paid on purchases)
+const vatRefundAmount=totalCostValue * 0.2 / 1.2; // Extract VAT from VAT-inclusive prices
+const netCostValue=totalCostValue - vatRefundAmount; // Net cost without VAT
 
 const categoryBreakdown=items.reduce((acc,item)=> {
 const category=item.category || 'Uncategorized';
 if (!acc[category]) {
-acc[category]={items: 0,value: 0};
+acc[category]={items: 0,value: 0,vatRefund: 0};
 }
+const itemValue = item.quantity * item.unitPrice;
+const itemVatRefund = itemValue * 0.2 / 1.2;
 acc[category].items++;
-acc[category].value +=item.quantity * item.unitPrice;
+acc[category].value +=itemValue;
+acc[category].vatRefund +=itemVatRefund;
 return acc;
 },{});
 
 setInventoryStats({
 totalItems: items.length,
-totalValue,
-vatAmount,
-totalWithVAT,
+totalCostValue,
+netCostValue,
+vatRefundAmount,
+potentialSavings: vatRefundAmount, // Potential tax savings
 categoryBreakdown,
 lastUpdated: new Date().toISOString()
 });
 
-// Loadexport history from localStorage
+// Load export history from localStorage
 const stored=localStorage.getItem(`taxExportHistory_${user.email}`);
 if (stored) {
 setExportHistory(JSON.parse(stored));
@@ -76,7 +82,7 @@ format: exportInfo.format,
 fileName: exportInfo.fileName,
 recordCount: exportInfo.recordCount,
 totalValue: exportInfo.totalValue,
-vatAmount: exportInfo.vatAmount,
+vatRefundAmount: exportInfo.vatRefundAmount,
 dateRange: exportInfo.dateRange,
 settings: exportInfo.settings
 };
@@ -87,12 +93,12 @@ setExportHistory(newHistory);
 try {
 localStorage.setItem(`taxExportHistory_${user.email}`,JSON.stringify(newHistory));
 } catch (error) {
-console.error('Error savingexport history:',error);
+console.error('Error saving export history:',error);
 }
 };
 
 const deleteExportRecord=(exportId)=> {
-if (window.confirm('Are you sure you want to delete thisexport record?')) {
+if (window.confirm('Are you sure you want to delete this export record?')) {
 const newHistory=exportHistory.filter(exp=> exp.id !==exportId);
 setExportHistory(newHistory);
 localStorage.setItem(`taxExportHistory_${user.email}`,JSON.stringify(newHistory));
@@ -100,7 +106,7 @@ localStorage.setItem(`taxExportHistory_${user.email}`,JSON.stringify(newHistory)
 };
 
 const clearHistory=()=> {
-if (window.confirm('Are you sure you want to clear allexport history? This action cannot be undone.')) {
+if (window.confirm('Are you sure you want to clear all export history? This action cannot be undone.')) {
 setExportHistory([]);
 localStorage.removeItem(`taxExportHistory_${user.email}`);
 }
@@ -146,9 +152,9 @@ transition={{duration: 0.5}}
 {/* Header */}
 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
 <div>
-<h1 className="text-2xl sm:text-3xl font-semibold text-white">Tax Exports</h1>
+<h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Refund Calculator</h1>
 <p className="mt-1 text-sm text-gray-400">
-Generate tax-ready reports for your accountant
+Calculate potential VAT refunds on your inventory purchases
 </p>
 </div>
 </div>
@@ -165,7 +171,7 @@ Professional Feature
 </h3>
 
 <p className="text-gray-300 mb-6 max-w-2xl mx-auto">
-Taxexport functionality is available exclusively with the Professional plan. Generate comprehensive,accountant-ready reports with detailed VAT calculations,category breakdowns,and professional formatting.
+VAT refund calculation is available exclusively with the Professional plan. Calculate how much VAT you can claim back on your inventory purchases if you're VAT registered.
 </p>
 
 {/* Current Plan Info */}
@@ -188,13 +194,13 @@ Taxexport functionality is available exclusively with the Professional plan. Gen
 </div>
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
 <div>
-<h5 className="text-white font-medium mb-2">📊 Tax Export Features:</h5>
+<h5 className="text-white font-medium mb-2">💰 VAT Refund Features:</h5>
 <ul className="text-gray-300 text-sm space-y-1">
+<li>• Calculate VAT refunds on purchases</li>
+<li>• Professional tax reports</li>
+<li>• Category-wise VAT breakdowns</li>
+<li>• HMRC-compliant documentation</li>
 <li>• Multi-format exports (Excel,CSV,PDF)</li>
-<li>• Comprehensive VAT calculations</li>
-<li>• Category-wise breakdowns</li>
-<li>• Professional accountant notes</li>
-<li>• HMRC-compliant reporting</li>
 <li>• Export history tracking</li>
 </ul>
 </div>
@@ -241,18 +247,18 @@ All features included • No setup fees
 </div>
 </div>
 
-{/* Why Tax Exports Matter */}
-<div className="mt-8 bg-blue-900/20 border border-blue-700 rounded-lg p-6">
+{/* Why VAT Refunds Matter */}
+<div className="mt-8 bg-green-900/20 border border-green-700 rounded-lg p-6">
 <div className="flex items-start">
-<RiCalculatorLine className="h-6 w-6 text-blue-400 mr-3 mt-1 flex-shrink-0" />
+<RiRefund2Line className="h-6 w-6 text-green-400 mr-3 mt-1 flex-shrink-0" />
 <div>
-<h5 className="text-blue-400 font-medium mb-2">Why Professional Tax Exports?</h5>
-<ul className="text-blue-300 text-sm space-y-1">
-<li>• <strong>Time-Saving:</strong> Generate complete tax reports in minutes</li>
-<li>• <strong>Accuracy:</strong> Automatic VAT calculations reduce errors</li>
-<li>• <strong>Professional:</strong> Accountant-ready format with audit trail</li>
-<li>• <strong>Compliance:</strong> HMRC-compliant inventory valuations</li>
-<li>• <strong>Convenience:</strong> Multiple formats for different needs</li>
+<h5 className="text-green-400 font-medium mb-2">Why Calculate VAT Refunds?</h5>
+<ul className="text-green-300 text-sm space-y-1">
+<li>• <strong>Maximize Tax Savings:</strong> Claim back VAT on business purchases</li>
+<li>• <strong>Improve Cash Flow:</strong> Get money back from HMRC quarterly</li>
+<li>• <strong>Professional Reports:</strong> Accountant-ready VAT return documentation</li>
+<li>• <strong>Compliance:</strong> Proper records for HMRC VAT inspections</li>
+<li>• <strong>Time-Saving:</strong> Automated calculations reduce errors</li>
 </ul>
 </div>
 </div>
@@ -266,7 +272,7 @@ if (isLoading) {
 return (
 <div className="flex items-center justify-center h-64">
 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-<span className="ml-2 text-white">Loading taxexport data...</span>
+<span className="ml-2 text-white">Loading VAT refund data...</span>
 </div>
 );
 }
@@ -281,9 +287,9 @@ transition={{duration: 0.5}}
 {/* Header */}
 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
 <div>
-<h1 className="text-2xl sm:text-3xl font-semibold text-white">Tax Exports</h1>
+<h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Refund Calculator</h1>
 <p className="mt-1 text-sm text-gray-400">
-Generate tax-ready reports for your accountant
+Calculate potential VAT refunds on your inventory purchases
 </p>
 </div>
 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -299,8 +305,8 @@ Clear History
 onClick={()=> setIsExportModalOpen(true)}
 className="inline-flex items-center justify-center rounded-md border border-transparent bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 w-full sm:w-auto"
 >
-<RiCalculatorLine className="mr-2 h-4 w-4" />
-Generate Tax Export
+<RiRefund2Line className="mr-2 h-4 w-4" />
+Generate VAT Report
 </button>
 </div>
 </div>
@@ -311,7 +317,7 @@ Generate Tax Export
 <RiStarLine className="h-5 w-5 text-green-400 mr-2" />
 <div>
 <h3 className="text-green-400 font-medium">Professional Feature Active</h3>
-<p className="text-gray-300 text-sm">You have access to comprehensive taxexport functionality</p>
+<p className="text-gray-300 text-sm">You have access to comprehensive VAT refund calculations</p>
 </div>
 </div>
 </div>
@@ -330,7 +336,7 @@ className="mb-6 p-4 bg-red-900/50 border border-red-700 rounded-lg"
 </motion.div>
 )}
 
-{/* Current Tax Summary */}
+{/* VAT Refund Summary */}
 {inventoryStats && (
 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
 <motion.div
@@ -369,16 +375,16 @@ className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
 <div className="p-4 sm:p-5">
 <div className="flex items-center">
 <div className="flex-shrink-0">
-<RiMoneyDollarCircleLine className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
+<RiMoneyDollarCircleLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
 </div>
 <div className="ml-3 sm:ml-4 w-0 flex-1">
 <dl>
 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-Value (Excl. VAT)
+Total Purchase Cost
 </dt>
 <dd className="flex items-baseline mt-1">
 <div className="text-xl sm:text-2xl font-semibold text-white">
-{formatCurrency(inventoryStats.totalValue)}
+{formatCurrency(inventoryStats.totalCostValue)}
 </div>
 </dd>
 </dl>
@@ -391,21 +397,21 @@ Value (Excl. VAT)
 initial={{opacity: 0,y: 20}}
 animate={{opacity: 1,y: 0}}
 transition={{duration: 0.5,delay: 0.3}}
-className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
+className="bg-gray-800 overflow-hidden rounded-lg shadow-sm border border-green-500/30"
 >
 <div className="p-4 sm:p-5">
 <div className="flex items-center">
 <div className="flex-shrink-0">
-<RiCalculatorLine className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400" />
+<RiRefund2Line className="h-6 w-6 sm:h-7 sm:w-7 text-green-400" />
 </div>
 <div className="ml-3 sm:ml-4 w-0 flex-1">
 <dl>
 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-VAT Amount (20%)
+Potential VAT Refund
 </dt>
 <dd className="flex items-baseline mt-1">
-<div className="text-xl sm:text-2xl font-semibold text-white">
-{formatCurrency(inventoryStats.vatAmount)}
+<div className="text-xl sm:text-2xl font-semibold text-green-400">
+{formatCurrency(inventoryStats.vatRefundAmount)}
 </div>
 </dd>
 </dl>
@@ -423,16 +429,16 @@ className="bg-gray-800 overflow-hidden rounded-lg shadow-sm"
 <div className="p-4 sm:p-5">
 <div className="flex items-center">
 <div className="flex-shrink-0">
-<RiMoneyDollarCircleLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
+<RiCalculatorLine className="h-6 w-6 sm:h-7 sm:w-7 text-primary-400" />
 </div>
 <div className="ml-3 sm:ml-4 w-0 flex-1">
 <dl>
 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-Total (Incl. VAT)
+Net Cost (Ex-VAT)
 </dt>
 <dd className="flex items-baseline mt-1">
 <div className="text-xl sm:text-2xl font-semibold text-white">
-{formatCurrency(inventoryStats.totalWithVAT)}
+{formatCurrency(inventoryStats.netCostValue)}
 </div>
 </dd>
 </dl>
@@ -443,33 +449,54 @@ Total (Incl. VAT)
 </div>
 )}
 
-{/* Quick Export Guide */}
+{/* VAT Registration Notice */}
+<div className="bg-blue-900/20 border border-blue-700 rounded-lg p-6 mb-8">
+<div className="flex items-start">
+<RiAlertLine className="h-6 w-6 text-blue-400 mr-3 mt-1 flex-shrink-0" />
+<div>
+<h5 className="text-blue-400 font-medium mb-2">VAT Registration Required</h5>
+<p className="text-blue-300 text-sm mb-3">
+To claim VAT refunds, your business must be registered for VAT with HMRC. If you're not VAT registered, you cannot reclaim VAT on purchases but also don't need to charge VAT on sales.
+</p>
+<div className="bg-blue-800/30 rounded-lg p-3">
+<h6 className="text-blue-300 font-medium text-sm mb-1">VAT Registration Thresholds (2024):</h6>
+<ul className="text-blue-300 text-xs space-y-1">
+<li>• <strong>Mandatory:</strong> Annual turnover exceeds £85,000</li>
+<li>• <strong>Voluntary:</strong> Register below threshold to reclaim VAT</li>
+<li>• <strong>Benefits:</strong> Reclaim VAT on business purchases and expenses</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+{/* Quick VAT Guide */}
 <div className="bg-gray-800 rounded-lg shadow-lg mb-8">
 <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-<h3 className="text-lg leading-6 font-medium text-white">Tax Export Guide</h3>
+<h3 className="text-lg leading-6 font-medium text-white">VAT Refund Guide</h3>
 <p className="mt-1 max-w-2xl text-sm text-gray-400">
-Essential information for generating accountant-ready reports
+How to maximize your VAT refunds on business purchases
 </p>
 </div>
 <div className="px-4 py-5 sm:p-6">
 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 <div className="text-center">
-<div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-4 mx-auto">
+<div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600 mb-4 mx-auto">
 <span className="text-lg font-semibold">1</span>
 </div>
-<h4 className="text-white font-medium mb-2">Select Period</h4>
+<h4 className="text-white font-medium mb-2">VAT Registration</h4>
 <p className="text-gray-400 text-sm">
-Choose your tax year or custom date range for accurate reporting.
+Ensure your business is registered for VAT with HMRC to claim refunds.
 </p>
 </div>
 
 <div className="text-center">
-<div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-100 text-green-600 mb-4 mx-auto">
+<div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 mb-4 mx-auto">
 <span className="text-lg font-semibold">2</span>
 </div>
-<h4 className="text-white font-medium mb-2">Configure Options</h4>
+<h4 className="text-white font-medium mb-2">Track Purchases</h4>
 <p className="text-gray-400 text-sm">
-Set VAT rates,include/exclude items,and choose report format.
+Keep all VAT receipts and invoices for business purchases and inventory.
 </p>
 </div>
 
@@ -477,9 +504,9 @@ Set VAT rates,include/exclude items,and choose report format.
 <div className="flex items-center justify-center w-12 h-12 rounded-full bg-purple-100 text-purple-600 mb-4 mx-auto">
 <span className="text-lg font-semibold">3</span>
 </div>
-<h4 className="text-white font-medium mb-2">Send to Accountant</h4>
+<h4 className="text-white font-medium mb-2">Submit VAT Return</h4>
 <p className="text-gray-400 text-sm">
-Export generates a professional report ready for tax submission.
+Use this report with your quarterly VAT return to claim refunds.
 </p>
 </div>
 </div>
@@ -489,29 +516,29 @@ Export generates a professional report ready for tax submission.
 {/* What's Included */}
 <div className="bg-gray-800 rounded-lg shadow-lg mb-8">
 <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
-<h3 className="text-lg leading-6 font-medium text-white">What's Included in Tax Export</h3>
+<h3 className="text-lg leading-6 font-medium text-white">What's Included in VAT Report</h3>
 </div>
 <div className="px-4 py-5 sm:p-6">
 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 <div>
-<h4 className="text-white font-medium mb-3">📊 Financial Data</h4>
+<h4 className="text-white font-medium mb-3">💰 VAT Calculations</h4>
 <ul className="text-gray-300 text-sm space-y-2">
-<li>• Complete inventory valuation</li>
-<li>• VAT calculations at current rates</li>
-<li>• Category-wise breakdowns</li>
-<li>• Total stock value with/without VAT</li>
-<li>• Individual item costs and totals</li>
-<li>• Stock turnover calculations</li>
+<li>• Total VAT paid on inventory purchases</li>
+<li>• VAT refund amounts by category</li>
+<li>• Net costs excluding VAT</li>
+<li>• Potential quarterly refund amounts</li>
+<li>• Individual item VAT breakdowns</li>
+<li>• Annual VAT refund projections</li>
 </ul>
 </div>
 <div>
-<h4 className="text-white font-medium mb-3">📋 Business Information</h4>
+<h4 className="text-white font-medium mb-3">📋 Business Documentation</h4>
 <ul className="text-gray-300 text-sm space-y-2">
-<li>• Business name and contact details</li>
-<li>• Export date and time</li>
-<li>• Reporting period specified</li>
-<li>• Inventory methodology notes</li>
-<li>• System audit trail</li>
+<li>• Business name and VAT details</li>
+<li>• Report date and period covered</li>
+<li>• Inventory purchase documentation</li>
+<li>• HMRC-compliant formatting</li>
+<li>• Audit trail and reference numbers</li>
 <li>• Accountant guidance notes</li>
 </ul>
 </div>
@@ -526,7 +553,7 @@ Export generates a professional report ready for tax submission.
 <div>
 <h3 className="text-lg leading-6 font-medium text-white">Export History</h3>
 <p className="mt-1 max-w-2xl text-sm text-gray-400">
-Your recent taxexport downloads
+Your recent VAT refund reports
 </p>
 </div>
 <RiHistoryLine className="h-6 w-6 text-gray-400" />
@@ -536,17 +563,17 @@ Your recent taxexport downloads
 <div className="px-4 py-5 sm:p-6">
 {exportHistory.length===0 ? (
 <div className="text-center py-12">
-<RiCalculatorLine className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-<h3 className="text-lg font-medium text-white mb-2">No tax exports yet</h3>
+<RiRefund2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+<h3 className="text-lg font-medium text-white mb-2">No VAT reports yet</h3>
 <p className="text-gray-400 text-sm mb-6">
-Generate your first taxexport to build yourexport history
+Generate your first VAT refund report to build your export history
 </p>
 <button
 onClick={()=> setIsExportModalOpen(true)}
 className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
 >
-<RiCalculatorLine className="mr-2 h-4 w-4" />
-Generate Tax Export
+<RiRefund2Line className="mr-2 h-4 w-4" />
+Generate VAT Report
 </button>
 </div>
 ) : (
@@ -563,7 +590,7 @@ className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transitio
 <div className="flex items-center">
 {getFormatIcon(exportRecord.format)}
 <span className="text-white font-medium ml-2">
-{exportRecord.fileName || `Tax Export ${exportRecord.id}`}
+{exportRecord.fileName || `VAT Report ${exportRecord.id}`}
 </span>
 <span className="ml-2 text-sm text-gray-400">
 {formatDate(exportRecord.timestamp)}
@@ -571,8 +598,8 @@ className="border border-gray-700 rounded-lg p-4 hover:border-gray-600 transitio
 </div>
 <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
 <span>{exportRecord.recordCount} items</span>
-<span>Value: {formatCurrency(exportRecord.totalValue)}</span>
-<span>VAT: {formatCurrency(exportRecord.vatAmount)}</span>
+<span>Cost: {formatCurrency(exportRecord.totalValue)}</span>
+<span>VAT Refund: {formatCurrency(exportRecord.vatRefundAmount)}</span>
 <span className="capitalize">{exportRecord.format} format</span>
 </div>
 {exportRecord.dateRange && (
@@ -585,14 +612,14 @@ Period: {exportRecord.dateRange}
 <div className="flex items-center space-x-2">
 <button
 onClick={()=> {
-const details=`Tax Export Details:
+const details=`VAT Refund Report Details:
 
-File: ${exportRecord.fileName || 'Tax Export'}
+File: ${exportRecord.fileName || 'VAT Report'}
 Date: ${formatDate(exportRecord.timestamp)}
 Format: ${exportRecord.format.toUpperCase()}
 Items: ${exportRecord.recordCount}
-Total Value: ${formatCurrency(exportRecord.totalValue)}
-VAT Amount: ${formatCurrency(exportRecord.vatAmount)}
+Total Cost: ${formatCurrency(exportRecord.totalValue)}
+VAT Refund: ${formatCurrency(exportRecord.vatRefundAmount)}
 Period: ${exportRecord.dateRange || 'All Time'}
 
 Settings Used:
@@ -600,7 +627,7 @@ ${exportRecord.settings ? Object.entries(exportRecord.settings).map(([key,value]
 alert(details);
 }}
 className="text-gray-400 hover:text-gray-300 p-1"
-title="Viewexport details"
+title="View export details"
 >
 <RiEyeLine className="h-4 w-4" />
 </button>
@@ -608,7 +635,7 @@ title="Viewexport details"
 <button
 onClick={()=> deleteExportRecord(exportRecord.id)}
 className="text-gray-400 hover:text-red-400 p-1"
-title="Deleteexport record"
+title="Delete export record"
 >
 <RiDeleteBin6Line className="h-4 w-4" />
 </button>
@@ -616,23 +643,23 @@ title="Deleteexport record"
 </div>
 
 <div className="bg-gray-700 rounded-md p-3">
-<h4 className="text-sm font-medium text-white mb-2">Export Summary:</h4>
+<h4 className="text-sm font-medium text-white mb-2">VAT Refund Summary:</h4>
 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
 <div>
 <div className="text-gray-400">Items</div>
 <div className="text-white font-medium">{exportRecord.recordCount}</div>
 </div>
 <div>
-<div className="text-gray-400">Net Value</div>
+<div className="text-gray-400">Total Cost</div>
 <div className="text-white font-medium">{formatCurrency(exportRecord.totalValue)}</div>
 </div>
 <div>
-<div className="text-gray-400">VAT</div>
-<div className="text-white font-medium">{formatCurrency(exportRecord.vatAmount)}</div>
+<div className="text-gray-400">VAT Refund</div>
+<div className="text-green-400 font-medium">{formatCurrency(exportRecord.vatRefundAmount)}</div>
 </div>
 <div>
-<div className="text-gray-400">Total</div>
-<div className="text-white font-medium">{formatCurrency(exportRecord.totalValue + exportRecord.vatAmount)}</div>
+<div className="text-gray-400">Net Cost</div>
+<div className="text-white font-medium">{formatCurrency(exportRecord.totalValue - exportRecord.vatRefundAmount)}</div>
 </div>
 </div>
 </div>
@@ -643,26 +670,26 @@ title="Deleteexport record"
 </div>
 </div>
 
-{/* Tax Information */}
-<div className="bg-blue-900/20 border border-blue-700 rounded-lg p-6">
+{/* VAT Information */}
+<div className="bg-green-900/20 border border-green-700 rounded-lg p-6">
 <div className="flex items-start">
-<RiAlertLine className="h-5 w-5 text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
+<RiAlertLine className="h-5 w-5 text-green-400 mr-3 mt-0.5 flex-shrink-0" />
 <div>
-<h5 className="text-blue-400 font-medium mb-2">Tax Compliance Information</h5>
-<ul className="text-blue-300 text-sm space-y-1">
-<li>• Reports include all necessary information for UK tax submissions</li>
-<li>• VAT calculations use current HMRC rates (verify with your accountant)</li>
-<li>• Inventory valuations follow FIFO (First In,First Out) methodology</li>
-<li>• All exports include detailed audit trail and business information</li>
+<h5 className="text-green-400 font-medium mb-2">VAT Refund Information</h5>
+<ul className="text-green-300 text-sm space-y-1">
+<li>• Reports calculate VAT that can be reclaimed on business purchases</li>
+<li>• Only VAT-registered businesses can claim VAT refunds</li>
+<li>• Submit VAT returns quarterly to HMRC for refunds</li>
+<li>• Keep all purchase receipts and invoices as proof</li>
 <li>• Reports are compatible with popular accounting software</li>
-<li>• Keepexport records for HMRC compliance and audit purposes</li>
+<li>• Consult your accountant for VAT registration advice</li>
 </ul>
 </div>
 </div>
 </div>
 </motion.div>
 
-{/* Tax Export Modal */}
+{/* VAT Export Modal */}
 <TaxExportModal
 isOpen={isExportModalOpen}
 onClose={()=> setIsExportModalOpen(false)}
