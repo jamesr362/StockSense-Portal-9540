@@ -19,8 +19,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     vatRegistered: true, // Assume VAT registered for calculations
     vatRate: 20, // UK VAT rate
     currencyFormat: 'GBP',
-    reportType: 'full',
-    calculationMethod: 'inclusive' // VAT inclusive prices (most common for purchases)
+    reportType: 'full'
   });
   const [vatSummary,setVatSummary]=useState(null);
   const [error,setError]=useState('');
@@ -49,26 +48,21 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
   const calculateVatSummary=(items)=> {
     const filteredItems=filterItemsByDateRange(items);
     
-    const totalCostValue=filteredItems.reduce((sum,item)=> 
+    const totalPurchaseCost=filteredItems.reduce((sum,item)=> 
       sum + (item.quantity * item.unitPrice),0
     );
     
-    // Calculate VAT refund based on calculation method
+    // Calculate VAT refund from VAT-inclusive prices (most common scenario)
+    // Formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)
     let vatRefundAmount = 0;
     let netCostValue = 0;
     
     if (exportSettings.vatRegistered) {
-      if (exportSettings.calculationMethod === 'inclusive') {
-        // VAT inclusive prices - extract VAT from total
-        vatRefundAmount = totalCostValue * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-        netCostValue = totalCostValue - vatRefundAmount;
-      } else {
-        // VAT exclusive prices - add VAT to get total
-        netCostValue = totalCostValue;
-        vatRefundAmount = totalCostValue * (exportSettings.vatRate / 100);
-      }
+      // VAT-inclusive calculation (default and most common)
+      vatRefundAmount = totalPurchaseCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
+      netCostValue = totalPurchaseCost - vatRefundAmount;
     } else {
-      netCostValue = totalCostValue;
+      netCostValue = totalPurchaseCost;
       vatRefundAmount = 0;
     }
     
@@ -89,13 +83,9 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       let itemNetCost = itemCost;
       
       if (exportSettings.vatRegistered) {
-        if (exportSettings.calculationMethod === 'inclusive') {
-          itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-          itemNetCost = itemCost - itemVatRefund;
-        } else {
-          itemVatRefund = itemCost * (exportSettings.vatRate / 100);
-          itemNetCost = itemCost;
-        }
+        // VAT-inclusive calculation
+        itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
+        itemNetCost = itemCost - itemVatRefund;
       }
       
       acc[category].items++;
@@ -114,14 +104,14 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     setVatSummary({
       totalItems: filteredItems.length,
       totalQuantity: filteredItems.reduce((sum,item)=> sum + item.quantity,0),
-      totalCostValue,
+      totalPurchaseCost,
       vatRefundAmount,
       netCostValue,
       quarterlyRefund,
       annualRefund,
       categoryBreakdown,
       averageVatPerItem: filteredItems.length > 0 ? vatRefundAmount / filteredItems.length : 0,
-      vatPercentage: totalCostValue > 0 ? (vatRefundAmount / totalCostValue) * 100 : 0,
+      vatPercentage: totalPurchaseCost > 0 ? (vatRefundAmount / totalPurchaseCost) * 100 : 0,
       dateRange: {
         start: exportSettings.startDate,
         end: exportSettings.endDate
@@ -168,7 +158,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         'Category': category,
         'Total Items': data.items,
         'Total Quantity': data.quantity,
-        'Total Cost': data.totalCost,
+        'Total Purchase Cost': data.totalCost,
         'VAT Refund Available': data.vatRefund,
         'Net Cost (Ex-VAT)': data.netCost,
         'Average VAT per Item': data.items > 0 ? data.vatRefund / data.items : 0
@@ -183,21 +173,17 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         let itemNetCost = itemCost;
         
         if (exportSettings.vatRegistered) {
-          if (exportSettings.calculationMethod === 'inclusive') {
-            itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-            itemNetCost = itemCost - itemVatRefund;
-          } else {
-            itemVatRefund = itemCost * (exportSettings.vatRate / 100);
-            itemNetCost = itemCost;
-          }
+          // VAT-inclusive calculation
+          itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
+          itemNetCost = itemCost - itemVatRefund;
         }
         
         return {
           'Item Name': item.name,
           'Category': item.category || 'Uncategorized',
           'Quantity': item.quantity,
-          'Unit Price': item.unitPrice,
-          'Total Cost': itemCost,
+          'Unit Price (Inc VAT)': item.unitPrice,
+          'Total Purchase Cost': itemCost,
           'VAT Refund Available': itemVatRefund,
           'Net Cost (Ex-VAT)': itemNetCost,
           'Status': item.status,
@@ -227,7 +213,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['VAT REFUND SUMMARY',''],
       ['Total Items:',vatSummary.totalItems],
       ['Total Quantity:',vatSummary.totalQuantity],
-      ['Total Purchase Cost:',`£${vatSummary.totalCostValue.toFixed(2)}`],
+      ['Total Purchase Cost (Inc VAT):',`£${vatSummary.totalPurchaseCost.toFixed(2)}`],
       ['VAT Rate:',`${exportSettings.vatRate}%`],
       ['VAT Refund Available:',`£${vatSummary.vatRefundAmount.toFixed(2)}`],
       ['Net Cost (Ex-VAT):',`£${vatSummary.netCostValue.toFixed(2)}`],
@@ -236,6 +222,11 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['QUARTERLY VAT RETURNS',''],
       ['Quarterly Refund Potential:',`£${vatSummary.quarterlyRefund.toFixed(2)}`],
       ['Annual Refund Potential:',`£${vatSummary.annualRefund.toFixed(2)}`],
+      ['',''],
+      ['IMPORTANT NOTES',''],
+      ['Calculation Method:','VAT extracted from VAT-inclusive purchase prices'],
+      ['Formula Used:','VAT = (Purchase Price × 20%) ÷ 120%'],
+      ['Example:','£120 purchase = £20 VAT refund + £100 net cost'],
       ['',''],
       ['CATEGORY BREAKDOWN','']
     ];
@@ -263,17 +254,24 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['Email:',user?.email || ''],
       ['System:','Trackio Inventory Management'],
       ['',''],
-      ['VAT INFORMATION',''],
-      ['Currency:','British Pounds (GBP)'],
-      ['VAT Registration Status:',exportSettings.vatRegistered ? 'Registered for VAT' : 'Not VAT Registered'],
+      ['VAT CALCULATION METHOD',''],
+      ['Price Type:','VAT-Inclusive Purchase Prices'],
       ['VAT Rate Used:',`${exportSettings.vatRate}% (UK Standard Rate)`],
-      ['Calculation Method:',exportSettings.calculationMethod === 'inclusive' ? 'VAT Inclusive Prices' : 'VAT Exclusive Prices'],
-      ['Reporting Period:',exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`],
+      ['Calculation Formula:','VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)'],
+      ['Example Calculation:','£120 purchase price = (£120 × 20) ÷ 120 = £20 VAT refund'],
+      ['Net Cost Formula:','Net Cost = Purchase Price - VAT Amount'],
+      ['Example Net Cost:','£120 - £20 = £100 net cost (ex-VAT)'],
+      ['',''],
+      ['WHY VAT-INCLUSIVE PRICING?',''],
+      ['Most Common:','Most business purchases show VAT-inclusive prices'],
+      ['Supplier Invoices:','Suppliers typically quote prices including VAT'],
+      ['Receipt Scanning:','Scanned receipts show VAT-inclusive totals'],
+      ['Accurate Refunds:','Extracts actual VAT paid to calculate refunds'],
       ['',''],
       ['IMPORTANT NOTES FOR ACCOUNTANT',''],
       ['1. VAT Refunds:','Only available if business is VAT registered with HMRC'],
-      ['2. Calculation Method:',exportSettings.calculationMethod === 'inclusive' ? 'VAT extracted from inclusive purchase prices' : 'VAT calculated on exclusive prices'],
-      ['3. Documentation:','Ensure all purchase invoices show VAT separately'],
+      ['2. Purchase Prices:','All prices assumed to be VAT-inclusive (most common)'],
+      ['3. Documentation:','Ensure purchase invoices show VAT separately for compliance'],
       ['4. Quarterly Returns:','Submit VAT returns quarterly to claim refunds'],
       ['5. Record Keeping:','Keep all purchase receipts for HMRC compliance'],
       ['6. Categories:','Items grouped by business categories for analysis'],
@@ -322,21 +320,17 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       let itemNetCost = itemCost;
       
       if (exportSettings.vatRegistered) {
-        if (exportSettings.calculationMethod === 'inclusive') {
-          itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-          itemNetCost = itemCost - itemVatRefund;
-        } else {
-          itemVatRefund = itemCost * (exportSettings.vatRate / 100);
-          itemNetCost = itemCost;
-        }
+        // VAT-inclusive calculation
+        itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
+        itemNetCost = itemCost - itemVatRefund;
       }
       
       return {
         'Item Name': item.name,
         'Category': item.category || 'Uncategorized',
         'Quantity': item.quantity,
-        'Unit Price': item.unitPrice,
-        'Total Cost': itemCost,
+        'Unit Price (Inc VAT)': item.unitPrice,
+        'Total Purchase Cost': itemCost,
         'VAT Refund Available': itemVatRefund,
         'Net Cost (Ex-VAT)': itemNetCost,
         'Status': item.status,
@@ -355,6 +349,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       `Period: ${exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`}`,
       `VAT Rate: ${exportSettings.vatRate}%`,
       `VAT Registered: ${exportSettings.vatRegistered ? 'Yes' : 'No'}`,
+      `Calculation: VAT extracted from VAT-inclusive purchase prices`,
       `Total VAT Refund Available: £${vatSummary?.vatRefundAmount?.toFixed(2) || '0.00'}`,
       '',
       // Column headers
@@ -409,6 +404,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           .summary-card p { margin: 0; font-size: 18px; font-weight: bold; }
           .refund-highlight { background: #dcfce7; border: 2px solid #10b981; padding: 15px; border-radius: 8px; margin: 20px 0; }
           .refund-highlight h3 { color: #047857; margin: 0 0 10px 0; }
+          .calculation-info { background: #dbeafe; border: 1px solid #60a5fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
           table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f2f2f2; font-weight: bold; }
@@ -433,17 +429,25 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           <p><strong>Export Date:</strong> ${new Date().toLocaleDateString('en-GB')}</p>
         </div>
 
+        <div class="calculation-info">
+          <h3>🧮 VAT Calculation Method</h3>
+          <p><strong>Price Type:</strong> VAT-Inclusive Purchase Prices (most common)</p>
+          <p><strong>Formula:</strong> VAT Amount = (Purchase Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
+          <p><strong>Example:</strong> £120 purchase price = (£120 × 20) ÷ 120 = £20 VAT refund</p>
+          <p><strong>Net Cost:</strong> £120 - £20 = £100 (actual item cost excluding VAT)</p>
+        </div>
+
         ${exportSettings.vatRegistered ? `
         <div class="refund-highlight">
-          <h3>💰 Potential VAT Refund Available</h3>
+          <h3>💰 VAT You Can Claim Back from HMRC</h3>
           <p style="font-size: 24px; margin: 10px 0;"><strong>£${(vatSummary?.vatRefundAmount || 0).toFixed(2)}</strong></p>
-          <p>This amount can be claimed back through your quarterly VAT return to HMRC.</p>
+          <p>This is the VAT amount you paid on purchases that can be claimed back through your quarterly VAT return.</p>
           <p><strong>Quarterly Potential:</strong> £${(vatSummary?.quarterlyRefund || 0).toFixed(2)} per quarter</p>
         </div>
         ` : `
         <div class="vat-notice">
           <strong>VAT Registration Required:</strong> To claim VAT refunds, your business must be registered for VAT with HMRC.
-          Consider voluntary registration if your VAT refunds would exceed the administrative costs.
+          This report shows potential VAT refunds if you were VAT registered.
         </div>
         `}
 
@@ -453,12 +457,12 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
             <p>${vatSummary?.totalItems || 0}</p>
           </div>
           <div class="summary-card">
-            <h3>Total Quantity</h3>
-            <p>${vatSummary?.totalQuantity || 0}</p>
+            <h3>Total Purchase Cost</h3>
+            <p>£${(vatSummary?.totalPurchaseCost || 0).toFixed(2)}</p>
           </div>
           <div class="summary-card">
-            <h3>Total Purchase Cost</h3>
-            <p>£${(vatSummary?.totalCostValue || 0).toFixed(2)}</p>
+            <h3>VAT Refund Available</h3>
+            <p>£${(vatSummary?.vatRefundAmount || 0).toFixed(2)}</p>
           </div>
           <div class="summary-card">
             <h3>Net Cost (Ex-VAT)</h3>
@@ -473,7 +477,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
               <th>Item Name</th>
               <th>Category</th>
               <th>Qty</th>
-              <th>Total Cost</th>
+              <th>Purchase Cost</th>
               <th>VAT Refund</th>
               <th>Net Cost</th>
               <th>Status</th>
@@ -486,13 +490,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
               let itemNetCost = itemCost;
               
               if (exportSettings.vatRegistered) {
-                if (exportSettings.calculationMethod === 'inclusive') {
-                  itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-                  itemNetCost = itemCost - itemVatRefund;
-                } else {
-                  itemVatRefund = itemCost * (exportSettings.vatRate / 100);
-                  itemNetCost = itemCost;
-                }
+                itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
+                itemNetCost = itemCost - itemVatRefund;
               }
               
               return `
@@ -511,10 +510,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         </table>
 
         <div class="footer">
-          <p><strong>Important:</strong> This report is generated from Trackio Inventory Management System.</p>
+          <p><strong>Important:</strong> This report calculates VAT refunds from VAT-inclusive purchase prices using the formula: VAT = (Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
           <p>VAT refunds are only available to VAT-registered businesses. Consult your accountant for VAT registration advice.</p>
-          <p>All calculations are estimates based on ${exportSettings.vatRate}% VAT rate. Verify with your purchase invoices.</p>
-          <p>For questions about this report, contact: ${user?.email || 'N/A'}</p>
+          <p>Keep all purchase receipts showing VAT separately for HMRC compliance.</p>
+          <p>Generated by Trackio Inventory Management System. For questions: ${user?.email || 'N/A'}</p>
         </div>
       </body>
       </html>
@@ -570,7 +569,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         format: exportSettings.format,
         fileName,
         recordCount: vatSummary.totalItems,
-        totalValue: vatSummary.totalCostValue,
+        totalValue: vatSummary.totalPurchaseCost,
         vatRefundAmount: vatSummary.vatRefundAmount,
         dateRange: exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`,
         settings: exportSettings
@@ -579,8 +578,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       // Success message and close modal
       setTimeout(()=> {
         const message = exportSettings.vatRegistered 
-          ? `VAT refund report exported successfully as ${fileName}!\n\nPotential VAT refund: £${vatSummary.vatRefundAmount.toFixed(2)}\n\nThis file is ready to send to your accountant for VAT return preparation.`
-          : `VAT report exported successfully as ${fileName}!\n\nNote: VAT registration required to claim refunds.\n\nThis file shows potential savings if you register for VAT.`;
+          ? `VAT refund report exported successfully as ${fileName}!\n\nVAT you can claim back: £${vatSummary.vatRefundAmount.toFixed(2)}\n\nThis file shows VAT extracted from your VAT-inclusive purchase prices and is ready for your accountant.`
+          : `VAT report exported successfully as ${fileName}!\n\nNote: VAT registration required to claim refunds.\n\nThis file shows potential VAT refunds if you register for VAT.`;
         
         alert(message);
         
@@ -825,19 +824,6 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                         <option value="20">20% (Standard Rate)</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Price Method
-                      </label>
-                      <select
-                        value={exportSettings.calculationMethod}
-                        onChange={(e)=> setExportSettings(prev=> ({...prev,calculationMethod: e.target.value}))}
-                        className="w-full rounded-md border-gray-600 bg-gray-700 text-white text-sm p-2"
-                      >
-                        <option value="inclusive">VAT Inclusive Prices</option>
-                        <option value="exclusive">VAT Exclusive Prices</option>
-                      </select>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -851,13 +837,16 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                     <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
                       <div className="flex items-center mb-2">
                         <RiRefund2Line className="h-5 w-5 text-green-400 mr-2" />
-                        <h5 className="text-green-400 font-medium">Potential VAT Refund</h5>
+                        <h5 className="text-green-400 font-medium">VAT You Can Claim Back</h5>
                       </div>
                       <div className="text-2xl font-bold text-green-400 mb-1">
                         £{vatSummary.vatRefundAmount.toFixed(2)}
                       </div>
-                      <div className="text-sm text-green-300">
+                      <div className="text-sm text-green-300 mb-2">
                         Quarterly: £{vatSummary.quarterlyRefund.toFixed(2)} • Annual: £{vatSummary.annualRefund.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-green-300">
+                        Calculated from VAT-inclusive purchase prices using: VAT = (Price × {exportSettings.vatRate}%) ÷ {100 + exportSettings.vatRate}%
                       </div>
                     </div>
                   ) : (
@@ -875,8 +864,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                       <div className="text-white font-bold text-lg">{vatSummary.totalItems}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
-                      <div className="text-gray-400">Total Cost</div>
-                      <div className="text-white font-bold text-lg">£{vatSummary.totalCostValue.toFixed(2)}</div>
+                      <div className="text-gray-400">Purchase Cost</div>
+                      <div className="text-white font-bold text-lg">£{vatSummary.totalPurchaseCost.toFixed(2)}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">VAT Refund</div>
@@ -895,14 +884,14 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                 <div className="flex items-start">
                   <RiAlertLine className="h-5 w-5 text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
                   <div>
-                    <h5 className="text-blue-400 font-medium mb-2">Important VAT Information</h5>
+                    <h5 className="text-blue-400 font-medium mb-2">VAT-Inclusive Price Calculation</h5>
                     <ul className="text-blue-300 text-sm space-y-1">
+                      <li>• Calculates VAT from VAT-inclusive purchase prices (most common)</li>
+                      <li>• Formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)</li>
+                      <li>• Example: £120 purchase = £20 VAT refund + £100 net cost</li>
                       <li>• VAT refunds only available to VAT-registered businesses</li>
                       <li>• Submit quarterly VAT returns to HMRC to claim refunds</li>
                       <li>• Keep all purchase invoices showing VAT separately</li>
-                      <li>• Consider voluntary VAT registration if refunds exceed costs</li>
-                      <li>• VAT registration mandatory if turnover exceeds £85,000 annually</li>
-                      <li>• Consult your accountant for VAT registration advice</li>
                     </ul>
                   </div>
                 </div>

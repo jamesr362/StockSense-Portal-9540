@@ -32,31 +32,36 @@ setError('');
 
 // Load inventory data for stats
 const items=await getInventoryItems(user.email);
-const totalCostValue=items.reduce((sum,item)=> sum + (item.quantity * item.unitPrice),0);
+const totalPurchaseCost=items.reduce((sum,item)=> sum + (item.quantity * item.unitPrice),0);
 
-// Calculate potential VAT refund (VAT that was paid on purchases)
-const vatRefundAmount=totalCostValue * 0.2 / 1.2; // Extract VAT from VAT-inclusive prices
-const netCostValue=totalCostValue - vatRefundAmount; // Net cost without VAT
+// Calculate VAT refund from VAT-inclusive prices (most common for purchases)
+// Formula: VAT Amount = (VAT-inclusive price × VAT rate) ÷ (100 + VAT rate)
+const vatRate = 20; // UK standard VAT rate
+const vatRefundAmount = totalPurchaseCost * (vatRate / (100 + vatRate));
+const netCostValue = totalPurchaseCost - vatRefundAmount; // Net cost excluding VAT
 
 const categoryBreakdown=items.reduce((acc,item)=> {
 const category=item.category || 'Uncategorized';
 if (!acc[category]) {
-acc[category]={items: 0,value: 0,vatRefund: 0};
+acc[category]={items: 0,value: 0,vatRefund: 0,netCost: 0};
 }
-const itemValue = item.quantity * item.unitPrice;
-const itemVatRefund = itemValue * 0.2 / 1.2;
+const itemTotalCost = item.quantity * item.unitPrice;
+const itemVatRefund = itemTotalCost * (vatRate / (100 + vatRate));
+const itemNetCost = itemTotalCost - itemVatRefund;
+
 acc[category].items++;
-acc[category].value +=itemValue;
-acc[category].vatRefund +=itemVatRefund;
+acc[category].value += itemTotalCost;
+acc[category].vatRefund += itemVatRefund;
+acc[category].netCost += itemNetCost;
 return acc;
 },{});
 
 setInventoryStats({
 totalItems: items.length,
-totalCostValue,
+totalPurchaseCost,
 netCostValue,
 vatRefundAmount,
-potentialSavings: vatRefundAmount, // Potential tax savings
+potentialSavings: vatRefundAmount,
 categoryBreakdown,
 lastUpdated: new Date().toISOString()
 });
@@ -154,7 +159,7 @@ transition={{duration: 0.5}}
 <div>
 <h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Refund Calculator</h1>
 <p className="mt-1 text-sm text-gray-400">
-Calculate potential VAT refunds on your inventory purchases
+Calculate how much VAT you can claim back from your inventory purchases
 </p>
 </div>
 </div>
@@ -171,7 +176,7 @@ Professional Feature
 </h3>
 
 <p className="text-gray-300 mb-6 max-w-2xl mx-auto">
-VAT refund calculation is available exclusively with the Professional plan. Calculate how much VAT you can claim back on your inventory purchases if you're VAT registered.
+VAT refund calculation is available exclusively with the Professional plan. Calculate how much VAT you can claim back from HMRC on your inventory purchases if you're VAT registered.
 </p>
 
 {/* Current Plan Info */}
@@ -196,8 +201,8 @@ VAT refund calculation is available exclusively with the Professional plan. Calc
 <div>
 <h5 className="text-white font-medium mb-2">💰 VAT Refund Features:</h5>
 <ul className="text-gray-300 text-sm space-y-1">
-<li>• Calculate VAT refunds on purchases</li>
-<li>• Professional tax reports</li>
+<li>• Calculate VAT refunds from VAT-inclusive prices</li>
+<li>• Professional VAT refund reports</li>
 <li>• Category-wise VAT breakdowns</li>
 <li>• HMRC-compliant documentation</li>
 <li>• Multi-format exports (Excel,CSV,PDF)</li>
@@ -254,11 +259,11 @@ All features included • No setup fees
 <div>
 <h5 className="text-green-400 font-medium mb-2">Why Calculate VAT Refunds?</h5>
 <ul className="text-green-300 text-sm space-y-1">
-<li>• <strong>Maximize Tax Savings:</strong> Claim back VAT on business purchases</li>
+<li>• <strong>Maximize Tax Savings:</strong> Claim back VAT already paid on purchases</li>
 <li>• <strong>Improve Cash Flow:</strong> Get money back from HMRC quarterly</li>
 <li>• <strong>Professional Reports:</strong> Accountant-ready VAT return documentation</li>
 <li>• <strong>Compliance:</strong> Proper records for HMRC VAT inspections</li>
-<li>• <strong>Time-Saving:</strong> Automated calculations reduce errors</li>
+<li>• <strong>Time-Saving:</strong> Automated calculations from VAT-inclusive prices</li>
 </ul>
 </div>
 </div>
@@ -289,7 +294,7 @@ transition={{duration: 0.5}}
 <div>
 <h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Refund Calculator</h1>
 <p className="mt-1 text-sm text-gray-400">
-Calculate potential VAT refunds on your inventory purchases
+Calculate how much VAT you can claim back from your inventory purchases
 </p>
 </div>
 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -317,7 +322,7 @@ Generate VAT Report
 <RiStarLine className="h-5 w-5 text-green-400 mr-2" />
 <div>
 <h3 className="text-green-400 font-medium">Professional Feature Active</h3>
-<p className="text-gray-300 text-sm">You have access to comprehensive VAT refund calculations</p>
+<p className="text-gray-300 text-sm">Calculate VAT refunds from your VAT-inclusive purchase prices</p>
 </div>
 </div>
 </div>
@@ -384,7 +389,7 @@ Total Purchase Cost
 </dt>
 <dd className="flex items-baseline mt-1">
 <div className="text-xl sm:text-2xl font-semibold text-white">
-{formatCurrency(inventoryStats.totalCostValue)}
+{formatCurrency(inventoryStats.totalPurchaseCost)}
 </div>
 </dd>
 </dl>
@@ -407,7 +412,7 @@ className="bg-gray-800 overflow-hidden rounded-lg shadow-sm border border-green-
 <div className="ml-3 sm:ml-4 w-0 flex-1">
 <dl>
 <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-Potential VAT Refund
+VAT You Can Claim Back
 </dt>
 <dd className="flex items-baseline mt-1">
 <div className="text-xl sm:text-2xl font-semibold text-green-400">
@@ -449,21 +454,22 @@ Net Cost (Ex-VAT)
 </div>
 )}
 
-{/* VAT Registration Notice */}
+{/* VAT Inclusive Pricing Notice */}
 <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-6 mb-8">
 <div className="flex items-start">
 <RiAlertLine className="h-6 w-6 text-blue-400 mr-3 mt-1 flex-shrink-0" />
 <div>
-<h5 className="text-blue-400 font-medium mb-2">VAT Registration Required</h5>
+<h5 className="text-blue-400 font-medium mb-2">VAT-Inclusive Pricing Calculation</h5>
 <p className="text-blue-300 text-sm mb-3">
-To claim VAT refunds, your business must be registered for VAT with HMRC. If you're not VAT registered, you cannot reclaim VAT on purchases but also don't need to charge VAT on sales.
+Most inventory purchases include VAT in the price you paid. This calculator extracts the VAT amount that you can claim back from HMRC if you're VAT registered.
 </p>
 <div className="bg-blue-800/30 rounded-lg p-3">
-<h6 className="text-blue-300 font-medium text-sm mb-1">VAT Registration Thresholds (2024):</h6>
+<h6 className="text-blue-300 font-medium text-sm mb-1">How it works:</h6>
 <ul className="text-blue-300 text-xs space-y-1">
-<li>• <strong>Mandatory:</strong> Annual turnover exceeds £85,000</li>
-<li>• <strong>Voluntary:</strong> Register below threshold to reclaim VAT</li>
-<li>• <strong>Benefits:</strong> Reclaim VAT on business purchases and expenses</li>
+<li>• <strong>Your Purchase Price:</strong> £120 (VAT-inclusive)</li>
+<li>• <strong>VAT Amount You Paid:</strong> £20 (that's 20% ÷ 120% × £120)</li>
+<li>• <strong>Net Cost:</strong> £100 (the actual item cost)</li>
+<li>• <strong>VAT Refund Available:</strong> £20 (claimable from HMRC)</li>
 </ul>
 </div>
 </div>
@@ -475,7 +481,7 @@ To claim VAT refunds, your business must be registered for VAT with HMRC. If you
 <div className="px-4 py-5 border-b border-gray-700 sm:px-6">
 <h3 className="text-lg leading-6 font-medium text-white">VAT Refund Guide</h3>
 <p className="mt-1 max-w-2xl text-sm text-gray-400">
-How to maximize your VAT refunds on business purchases
+How to claim back VAT from your business purchases
 </p>
 </div>
 <div className="px-4 py-5 sm:p-6">
@@ -486,7 +492,7 @@ How to maximize your VAT refunds on business purchases
 </div>
 <h4 className="text-white font-medium mb-2">VAT Registration</h4>
 <p className="text-gray-400 text-sm">
-Ensure your business is registered for VAT with HMRC to claim refunds.
+Register for VAT with HMRC to claim back VAT on business purchases.
 </p>
 </div>
 
@@ -496,7 +502,7 @@ Ensure your business is registered for VAT with HMRC to claim refunds.
 </div>
 <h4 className="text-white font-medium mb-2">Track Purchases</h4>
 <p className="text-gray-400 text-sm">
-Keep all VAT receipts and invoices for business purchases and inventory.
+Keep all VAT receipts showing VAT separately for business inventory purchases.
 </p>
 </div>
 
@@ -506,7 +512,7 @@ Keep all VAT receipts and invoices for business purchases and inventory.
 </div>
 <h4 className="text-white font-medium mb-2">Submit VAT Return</h4>
 <p className="text-gray-400 text-sm">
-Use this report with your quarterly VAT return to claim refunds.
+Use this report with your quarterly VAT return to claim back the VAT.
 </p>
 </div>
 </div>
@@ -523,7 +529,7 @@ Use this report with your quarterly VAT return to claim refunds.
 <div>
 <h4 className="text-white font-medium mb-3">💰 VAT Calculations</h4>
 <ul className="text-gray-300 text-sm space-y-2">
-<li>• Total VAT paid on inventory purchases</li>
+<li>• VAT amounts extracted from VAT-inclusive prices</li>
 <li>• VAT refund amounts by category</li>
 <li>• Net costs excluding VAT</li>
 <li>• Potential quarterly refund amounts</li>
@@ -536,7 +542,7 @@ Use this report with your quarterly VAT return to claim refunds.
 <ul className="text-gray-300 text-sm space-y-2">
 <li>• Business name and VAT details</li>
 <li>• Report date and period covered</li>
-<li>• Inventory purchase documentation</li>
+<li>• Purchase price breakdowns</li>
 <li>• HMRC-compliant formatting</li>
 <li>• Audit trail and reference numbers</li>
 <li>• Accountant guidance notes</li>
@@ -677,10 +683,10 @@ title="Delete export record"
 <div>
 <h5 className="text-green-400 font-medium mb-2">VAT Refund Information</h5>
 <ul className="text-green-300 text-sm space-y-1">
-<li>• Reports calculate VAT that can be reclaimed on business purchases</li>
+<li>• Calculates VAT refunds from VAT-inclusive purchase prices</li>
 <li>• Only VAT-registered businesses can claim VAT refunds</li>
 <li>• Submit VAT returns quarterly to HMRC for refunds</li>
-<li>• Keep all purchase receipts and invoices as proof</li>
+<li>• Keep all purchase receipts showing VAT separately</li>
 <li>• Reports are compatible with popular accounting software</li>
 <li>• Consult your accountant for VAT registration advice</li>
 </ul>
