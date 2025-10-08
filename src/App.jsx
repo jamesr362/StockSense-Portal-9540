@@ -19,65 +19,93 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import PlatformAdminRoute from './components/PlatformAdminRoute';
 import StripeProvider from './components/StripeProvider';
+import WebhookListener from './components/WebhookListener';
 
 function AppRoutes() {
   const location = useLocation();
 
-  // Handle payment return URLs
+  // Handle payment return URLs and webhook simulation
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
-    const paymentStatus = urlParams.get('payment_status');
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    
+    const paymentStatus = urlParams.get('payment_status') || hashParams.get('payment_status');
+    const sessionId = urlParams.get('session_id') || hashParams.get('session_id');
+    const planId = urlParams.get('plan') || hashParams.get('plan');
     
     // Log payment returns for debugging
-    if (paymentStatus) {
+    if (paymentStatus || sessionId) {
       console.log('Payment return detected:', {
         paymentStatus,
+        sessionId,
+        planId,
         currentPath: location.pathname,
-        fullUrl: window.location.href
+        fullUrl: window.location.href,
+        hash: window.location.hash
       });
+
+      // If we have payment success indicators, trigger webhook simulation
+      if (paymentStatus === 'success' || sessionId) {
+        console.log('Triggering webhook simulation for successful payment');
+        
+        // Dispatch custom event to trigger webhook processing
+        window.dispatchEvent(new CustomEvent('paymentReturnDetected', {
+          detail: {
+            paymentStatus,
+            sessionId,
+            planId,
+            timestamp: Date.now()
+          }
+        }));
+      }
     }
   }, [location]);
 
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/pricing" element={<Pricing />} />
-      <Route path="/payment-success" element={<PaymentSuccess />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="inventory" element={<Inventory />} />
-        <Route path="receipt-scanner" element={<ReceiptScanner />} />
-        <Route path="excel-importer" element={<ExcelImporter />} />
-        <Route path="tax-exports" element={<TaxExports />} />
-        <Route path="settings/*" element={<Settings />} />
-        <Route path="subscription" element={<SubscriptionManagement />} />
+    <>
+      {/* Webhook listener for processing Stripe events */}
+      <WebhookListener />
+      
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route
-          path="admin"
+          path="/"
           element={
-            <AdminRoute>
-              <Admin />
-            </AdminRoute>
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
           }
-        />
-        <Route
-          path="platform-admin"
-          element={
-            <PlatformAdminRoute>
-              <PlatformAdmin />
-            </PlatformAdminRoute>
-          }
-        />
-      </Route>
-    </Routes>
+        >
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="inventory" element={<Inventory />} />
+          <Route path="receipt-scanner" element={<ReceiptScanner />} />
+          <Route path="excel-importer" element={<ExcelImporter />} />
+          <Route path="tax-exports" element={<TaxExports />} />
+          <Route path="settings/*" element={<Settings />} />
+          <Route path="subscription" element={<SubscriptionManagement />} />
+          <Route
+            path="admin"
+            element={
+              <AdminRoute>
+                <Admin />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="platform-admin"
+            element={
+              <PlatformAdminRoute>
+                <PlatformAdmin />
+              </PlatformAdminRoute>
+            }
+          />
+        </Route>
+      </Routes>
+    </>
   );
 }
 

@@ -1,13 +1,15 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
-import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine, RiAlertLine } from 'react-icons/ri';
+import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine, RiLockLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
+
 import AddItemModal from '../components/AddItemModal';
 import EditItemModal from '../components/EditItemModal';
 import DeleteItemModal from '../components/DeleteItemModal';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import UsageLimitGate from '../components/UsageLimitGate';
 import FeatureGate from '../components/FeatureGate';
+
 import { getInventoryItems, addInventoryItem, updateInventoryItem, deleteInventoryItem, searchInventoryItems } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
@@ -23,8 +25,9 @@ export default function Inventory() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+
   const { user } = useAuth();
-  const { canAddInventoryItem, canUseFeature, currentPlan } = useFeatureAccess();
+  const { canAddInventoryItem, canUseFeature, currentPlan, planInfo } = useFeatureAccess();
 
   const loadInventoryItems = useCallback(async () => {
     if (!user?.email) return;
@@ -59,7 +62,7 @@ export default function Inventory() {
     console.log('User email:', user.email);
     console.log('New item data:', newItem);
 
-    // STRICT CHECK: Verify user can add more items (100 limit for free users)
+    // STRICT LIMIT CHECK: Check if user can add more items
     const limitCheck = canAddInventoryItem(inventoryItems.length);
     if (!limitCheck.allowed) {
       setError(limitCheck.reason);
@@ -69,6 +72,7 @@ export default function Inventory() {
     try {
       setError(null);
       console.log('===Calling addInventoryItem===');
+
       // Call the database function to add the item
       const savedItem = await addInventoryItem(newItem, user.email);
       console.log('===Item saved to database:', savedItem, '===');
@@ -79,9 +83,10 @@ export default function Inventory() {
       // Close modal and show success message
       setIsAddModalOpen(false);
       setSuccessMessage(`Successfully added "${newItem.name}" to inventory!`);
-      
+
       // Clear success message after 5 seconds
       setTimeout(() => setSuccessMessage(''), 5000);
+
       console.log('===Add item process completed successfully===');
     } catch (error) {
       console.error('===Error in handleAddItem===', error);
@@ -98,17 +103,17 @@ export default function Inventory() {
       return;
     }
 
-    // STRICT CHECK: Verify adding these items won't exceed the limit
+    // STRICT LIMIT CHECK: Check if adding these items would exceed the limit
     const totalItemsAfter = inventoryItems.length + scannedItems.length;
     const limitCheck = canAddInventoryItem(totalItemsAfter - 1); // Check for the last item
 
     if (!limitCheck.allowed && limitCheck.limit !== -1) {
       const itemsCanAdd = Math.max(0, limitCheck.limit - inventoryItems.length);
       if (itemsCanAdd === 0) {
-        setError('Cannot add items: You have reached your inventory limit for the Free plan. Upgrade to Professional for unlimited items.');
+        setError('Cannot add items: You have reached your inventory limit');
         return;
       } else {
-        setError(`Can only add ${itemsCanAdd} more items due to Free plan limits (${inventoryItems.length}/${limitCheck.limit} used). Consider upgrading to Professional for unlimited items.`);
+        setError(`Can only add ${itemsCanAdd} more items due to plan limits. Consider upgrading your plan.`);
         // Proceed with adding only the allowed number of items
         scannedItems = scannedItems.slice(0, itemsCanAdd);
       }
@@ -251,6 +256,7 @@ export default function Inventory() {
   };
 
   const handleAddItemClick = () => {
+    // STRICT LIMIT CHECK before opening modal
     const limitCheck = canAddInventoryItem(inventoryItems.length);
     if (!limitCheck.allowed) {
       setError(limitCheck.reason);
@@ -267,8 +273,10 @@ export default function Inventory() {
     setIsScannerOpen(true);
   };
 
-  // Get current limit status for display
+  // Check if user is approaching or at limit
   const limitCheck = canAddInventoryItem(inventoryItems.length);
+  const isAtLimit = !limitCheck.allowed;
+  const isNearLimit = limitCheck.allowed && limitCheck.limit !== -1 && limitCheck.remaining <= 10;
 
   return (
     <div className="h-full overflow-hidden">
@@ -282,23 +290,14 @@ export default function Inventory() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 flex-shrink-0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold text-white">Inventory</h1>
-            <div className="mt-1 flex flex-col">
-              <p className="text-sm text-gray-400">Manage your inventory items</p>
-              {/* Show current usage for free plan users */}
+            <p className="mt-1 text-sm text-gray-400">
+              Manage your inventory items
               {currentPlan === 'free' && (
-                <div className="flex items-center mt-1">
-                  <p className="text-xs text-gray-500">
-                    {inventoryItems.length}/100 items used
-                  </p>
-                  {inventoryItems.length >= 80 && (
-                    <div className="ml-2 flex items-center text-xs text-yellow-400">
-                      <RiAlertLine className="h-3 w-3 mr-1" />
-                      {inventoryItems.length >= 95 ? 'Limit almost reached!' : 'Approaching limit'}
-                    </div>
-                  )}
-                </div>
+                <span className="ml-2 text-yellow-400">
+                  ({inventoryItems.length}/100 items used)
+                </span>
               )}
-            </div>
+            </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <FeatureGate feature="receiptScanner" showUpgradePrompt={false}>
@@ -310,6 +309,7 @@ export default function Inventory() {
                 Receipt Scanner
               </Link>
             </FeatureGate>
+
             <button
               type="button"
               onClick={handleQuickScanClick}
@@ -318,18 +318,75 @@ export default function Inventory() {
               <RiScanLine className="mr-2 h-4 w-4" />
               Quick Scan
             </button>
+
             <button
               type="button"
               onClick={handleAddItemClick}
-              disabled={!limitCheck.allowed}
-              className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!limitCheck.allowed ? limitCheck.reason : 'Add new item'}
+              disabled={isAtLimit}
+              className={`inline-flex items-center justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 w-full sm:w-auto ${
+                isAtLimit
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                  : 'bg-primary-600 text-white hover:bg-primary-700'
+              }`}
             >
               <RiAddLine className="mr-2 h-4 w-4" />
-              Add Item
+              {isAtLimit ? 'Limit Reached' : 'Add Item'}
             </button>
           </div>
         </div>
+
+        {/* Limit Warning for Free Users */}
+        {currentPlan === 'free' && (isAtLimit || isNearLimit) && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-4 rounded-lg p-4 border ${
+              isAtLimit 
+                ? 'bg-red-900/20 border-red-700' 
+                : 'bg-yellow-900/20 border-yellow-700'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <RiLockLine className={`h-5 w-5 mr-2 ${isAtLimit ? 'text-red-400' : 'text-yellow-400'}`} />
+                <div>
+                  <h3 className={`font-medium ${isAtLimit ? 'text-red-300' : 'text-yellow-300'}`}>
+                    {isAtLimit 
+                      ? 'Free Plan Limit Reached (100/100)' 
+                      : `Approaching Free Plan Limit (${inventoryItems.length}/100)`
+                    }
+                  </h3>
+                  <p className="text-gray-300 text-sm mt-1">
+                    {isAtLimit 
+                      ? 'Upgrade to Professional for unlimited inventory items and premium features.'
+                      : 'You have few items remaining. Upgrade for unlimited inventory.'
+                    }
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/pricing"
+                className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+              >
+                <RiStarLine className="h-4 w-4 mr-2" />
+                Upgrade Now
+                <RiArrowRightLine className="h-4 w-4 ml-2" />
+              </Link>
+            </div>
+            {!isAtLimit && (
+              <div className="mt-3">
+                <div className="w-full bg-gray-600 rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      inventoryItems.length >= 90 ? 'bg-red-500' : 'bg-yellow-500'
+                    }`}
+                    style={{ width: `${(inventoryItems.length / 100) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Success Message */}
         {successMessage && (
@@ -353,263 +410,266 @@ export default function Inventory() {
           </motion.div>
         )}
 
-        {/* Usage Limit Gate for Inventory */}
-        <UsageLimitGate
-          limitType="inventoryItems"
-          currentUsage={inventoryItems.length}
-        >
-          <div className="flex flex-col h-full min-h-0 overflow-hidden">
-            {/* Search */}
-            <div className="mb-6 flex-shrink-0">
-              <div className="relative rounded-md shadow-sm">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                  <RiSearchLine className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  className="block w-full rounded-md border-gray-700 bg-gray-800 pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                  placeholder="Search inventory..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+        {/* Content Area - Fixed height to prevent scrolling */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {/* Search */}
+          <div className="mb-6 flex-shrink-0">
+            <div className="relative rounded-md shadow-sm">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                <RiSearchLine className="h-5 w-5 text-gray-400" />
               </div>
-            </div>
-
-            {/* Content Area - Fixed height to prevent scrolling */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {isLoading ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-                </div>
-              ) : inventoryItems.length === 0 ? (
-                <div className="text-center py-12 bg-gray-800 rounded-lg">
-                  <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-                  <h3 className="text-lg font-medium text-white mb-2">
-                    {searchTerm ? 'No items found' : 'No inventory items'}
-                  </h3>
-                  <p className="text-gray-400 text-sm mb-6">
-                    {searchTerm
-                      ? 'Try adjusting your search terms'
-                      : 'Add some items to get started with your inventory'}
-                  </p>
-                  {!searchTerm && (
-                    <div className="flex flex-col sm:flex-row justify-center gap-3">
-                      <FeatureGate feature="receiptScanner" showUpgradePrompt={false}>
-                        <Link
-                          to="/receipt-scanner"
-                          className="inline-flex items-center px-4 py-2 border border-primary-600 text-primary-400 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
-                        >
-                          <RiScanLine className="mr-2 h-4 w-4" />
-                          Scan Receipt
-                        </Link>
-                      </FeatureGate>
-                      <button
-                        onClick={handleAddItemClick}
-                        disabled={!limitCheck.allowed}
-                        className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={!limitCheck.allowed ? limitCheck.reason : 'Add new item'}
-                      >
-                        <RiAddLine className="mr-2 h-4 w-4" />
-                        Add Manually
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Mobile Card View */}
-                  <div className="block lg:hidden space-y-4 h-full overflow-y-auto">
-                    {inventoryItems.map((item) => (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                        className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
-                      >
-                        {/* Card Header */}
-                        <div className="px-4 py-3 border-b border-gray-700">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-lg font-medium text-white truncate">
-                                {item.name}
-                              </h3>
-                              <p className="text-sm text-gray-400 truncate">{item.category}</p>
-                            </div>
-                            <div className="flex space-x-2 ml-3 flex-shrink-0">
-                              <button
-                                onClick={() => handleEditItem(item)}
-                                className="p-2 text-blue-400 hover:text-blue-300 hover:bg-gray-700 rounded-md transition-colors"
-                              >
-                                <RiEditLine className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteItem(item)}
-                                className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-md transition-colors"
-                              >
-                                <RiDeleteBin6Line className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Card Body */}
-                        <div className="p-4">
-                          <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="space-y-3">
-                              <div className="flex flex-col">
-                                <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Quantity</span>
-                                <span className="text-white font-medium">{item.quantity}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Unit Price</span>
-                                <span className="text-white font-medium">{formatCurrency(item.unitPrice)}</span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Total Value</span>
-                                <span className="text-white font-medium">{formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}</span>
-                              </div>
-                            </div>
-                            <div className="space-y-3">
-                              <div className="flex flex-col">
-                                <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Status</span>
-                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold w-fit ${getStatusColor(item.status)}`}>
-                                  {item.status}
-                                </span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Date Added</span>
-                                <span className="text-white">{formatDate(item.dateAdded)}</span>
-                              </div>
-                              {item.description && (
-                                <div className="flex flex-col">
-                                  <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Description</span>
-                                  <span className="text-white text-sm leading-relaxed">{item.description}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  {/* Desktop Table View - Completely contained */}
-                  <div className="hidden lg:block h-full w-full overflow-hidden">
-                    <div className="h-full w-full flex flex-col bg-gray-800 rounded-lg shadow">
-                      {/* Table Container - Fixed height and width */}
-                      <div className="flex-1 min-h-0 w-full overflow-auto">
-                        <table className="w-full table-fixed">
-                          <thead className="bg-gray-700 sticky top-0 z-10">
-                            <tr>
-                              <th className="w-32 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
-                                Name
-                              </th>
-                              <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Category
-                              </th>
-                              <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Qty
-                              </th>
-                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Price
-                              </th>
-                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Total
-                              </th>
-                              <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Status
-                              </th>
-                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                <div className="flex items-center">
-                                  <RiCalendarLine className="h-4 w-4 mr-1" />
-                                  Date
-                                </div>
-                              </th>
-                              <th className="w-32 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Description
-                              </th>
-                              <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-700 bg-gray-800">
-                            {inventoryItems.map((item) => (
-                              <motion.tr
-                                key={item.id}
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                transition={{ duration: 0.3 }}
-                              >
-                                <td className="w-32 py-4 pl-4 pr-3 text-sm font-medium text-white">
-                                  <div className="truncate" title={item.name}>
-                                    {item.name}
-                                  </div>
-                                </td>
-                                <td className="w-24 px-3 py-4 text-sm text-gray-300">
-                                  <div className="truncate" title={item.category}>
-                                    {item.category}
-                                  </div>
-                                </td>
-                                <td className="w-16 px-3 py-4 text-sm text-gray-300">
-                                  {item.quantity}
-                                </td>
-                                <td className="w-20 px-3 py-4 text-sm text-gray-300">
-                                  <div className="truncate">
-                                    {formatCurrency(item.unitPrice)}
-                                  </div>
-                                </td>
-                                <td className="w-20 px-3 py-4 text-sm text-gray-300 font-medium">
-                                  <div className="truncate">
-                                    {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
-                                  </div>
-                                </td>
-                                <td className="w-24 px-3 py-4 text-sm">
-                                  <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
-                                    {item.status}
-                                  </span>
-                                </td>
-                                <td className="w-20 px-3 py-4 text-sm text-gray-300">
-                                  <div className="truncate">
-                                    {formatDate(item.dateAdded)}
-                                  </div>
-                                </td>
-                                <td className="w-32 px-3 py-4 text-sm text-gray-300">
-                                  <div className="truncate" title={item.description || 'No description'}>
-                                    {item.description || 'No description'}
-                                  </div>
-                                </td>
-                                <td className="w-20 px-3 py-4 text-sm">
-                                  <div className="flex space-x-2">
-                                    <button
-                                      onClick={() => handleEditItem(item)}
-                                      className="text-blue-400 hover:text-blue-300"
-                                      title="Edit item"
-                                    >
-                                      <RiEditLine className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteItem(item)}
-                                      className="text-red-400 hover:text-red-300"
-                                      title="Delete item"
-                                    >
-                                      <RiDeleteBin6Line className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </motion.tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+              <input
+                type="text"
+                className="block w-full rounded-md border-gray-700 bg-gray-800 pl-10 pr-4 py-3 text-white placeholder-gray-400 focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                placeholder="Search inventory..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </div>
-        </UsageLimitGate>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : inventoryItems.length === 0 ? (
+            <div className="text-center py-12 bg-gray-800 rounded-lg">
+              <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+              <h3 className="text-lg font-medium text-white mb-2">
+                {searchTerm ? 'No items found' : 'No inventory items'}
+              </h3>
+              <p className="text-gray-400 text-sm mb-6">
+                {searchTerm 
+                  ? 'Try adjusting your search terms' 
+                  : currentPlan === 'free' && isAtLimit
+                    ? 'You\'ve reached the 100 item limit for the Free plan. Upgrade to add more items.'
+                    : 'Add some items to get started with your inventory'
+                }
+              </p>
+              {!searchTerm && !isAtLimit && (
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
+                  <FeatureGate feature="receiptScanner" showUpgradePrompt={false}>
+                    <Link
+                      to="/receipt-scanner"
+                      className="inline-flex items-center px-4 py-2 border border-primary-600 text-primary-400 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
+                    >
+                      <RiScanLine className="mr-2 h-4 w-4" />
+                      Scan Receipt
+                    </Link>
+                  </FeatureGate>
+                  <button
+                    onClick={handleAddItemClick}
+                    className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                  >
+                    <RiAddLine className="mr-2 h-4 w-4" />
+                    Add Manually
+                  </button>
+                </div>
+              )}
+              {currentPlan === 'free' && isAtLimit && (
+                <Link
+                  to="/pricing"
+                  className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  <RiStarLine className="h-5 w-5 mr-2" />
+                  Upgrade to Professional
+                  <RiArrowRightLine className="h-5 w-5 ml-2" />
+                </Link>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Mobile Card View */}
+              <div className="block lg:hidden space-y-4 h-full overflow-y-auto">
+                {inventoryItems.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-gray-800 rounded-lg shadow-lg overflow-hidden"
+                  >
+                    {/* Card Header */}
+                    <div className="px-4 py-3 border-b border-gray-700">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-medium text-white truncate">
+                            {item.name}
+                          </h3>
+                          <p className="text-sm text-gray-400 truncate">{item.category}</p>
+                        </div>
+                        <div className="flex space-x-2 ml-3 flex-shrink-0">
+                          <button
+                            onClick={() => handleEditItem(item)}
+                            className="p-2 text-blue-400 hover:text-blue-300 hover:bg-gray-700 rounded-md transition-colors"
+                          >
+                            <RiEditLine className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            className="p-2 text-red-400 hover:text-red-300 hover:bg-gray-700 rounded-md transition-colors"
+                          >
+                            <RiDeleteBin6Line className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Body */}
+                    <div className="p-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="space-y-3">
+                          <div className="flex flex-col">
+                            <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Quantity</span>
+                            <span className="text-white font-medium">{item.quantity}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Unit Price</span>
+                            <span className="text-white font-medium">{formatCurrency(item.unitPrice)}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Total Value</span>
+                            <span className="text-white font-medium">{formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}</span>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex flex-col">
+                            <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Status</span>
+                            <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold w-fit ${getStatusColor(item.status)}`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Date Added</span>
+                            <span className="text-white">{formatDate(item.dateAdded)}</span>
+                          </div>
+                          {item.description && (
+                            <div className="flex flex-col">
+                              <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Description</span>
+                              <span className="text-white text-sm leading-relaxed">{item.description}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Desktop Table View - Completely contained */}
+              <div className="hidden lg:block h-full w-full overflow-hidden">
+                <div className="h-full w-full flex flex-col bg-gray-800 rounded-lg shadow">
+                  {/* Table Container - Fixed height and width */}
+                  <div className="flex-1 min-h-0 w-full overflow-auto">
+                    <table className="w-full table-fixed">
+                      <thead className="bg-gray-700 sticky top-0 z-10">
+                        <tr>
+                          <th className="w-32 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
+                            Name
+                          </th>
+                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Category
+                          </th>
+                          <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Qty
+                          </th>
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Price
+                          </th>
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Total
+                          </th>
+                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Status
+                          </th>
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            <div className="flex items-center">
+                              <RiCalendarLine className="h-4 w-4 mr-1" />
+                              Date
+                            </div>
+                          </th>
+                          <th className="w-32 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Description
+                          </th>
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-700 bg-gray-800">
+                        {inventoryItems.map((item) => (
+                          <motion.tr
+                            key={item.id}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.3 }}
+                          >
+                            <td className="w-32 py-4 pl-4 pr-3 text-sm font-medium text-white">
+                              <div className="truncate" title={item.name}>
+                                {item.name}
+                              </div>
+                            </td>
+                            <td className="w-24 px-3 py-4 text-sm text-gray-300">
+                              <div className="truncate" title={item.category}>
+                                {item.category}
+                              </div>
+                            </td>
+                            <td className="w-16 px-3 py-4 text-sm text-gray-300">
+                              {item.quantity}
+                            </td>
+                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                              <div className="truncate">
+                                {formatCurrency(item.unitPrice)}
+                              </div>
+                            </td>
+                            <td className="w-20 px-3 py-4 text-sm text-gray-300 font-medium">
+                              <div className="truncate">
+                                {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
+                              </div>
+                            </td>
+                            <td className="w-24 px-3 py-4 text-sm">
+                              <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                              <div className="truncate">
+                                {formatDate(item.dateAdded)}
+                              </div>
+                            </td>
+                            <td className="w-32 px-3 py-4 text-sm text-gray-300">
+                              <div className="truncate" title={item.description || 'No description'}>
+                                {item.description || 'No description'}
+                              </div>
+                            </td>
+                            <td className="w-20 px-3 py-4 text-sm">
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={() => handleEditItem(item)}
+                                  className="text-blue-400 hover:text-blue-300"
+                                  title="Edit item"
+                                >
+                                  <RiEditLine className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItem(item)}
+                                  className="text-red-400 hover:text-red-300"
+                                  title="Delete item"
+                                >
+                                  <RiDeleteBin6Line className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </motion.div>
 
       <AddItemModal

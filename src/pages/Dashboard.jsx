@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inventoryCount, setInventoryCount] = useState(0);
+
   const { user } = useAuth();
   const { subscription, planLimits, currentPlan, planInfo, canUseFeature, refresh } = useFeatureAccess();
   const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
@@ -34,6 +35,7 @@ export default function Dashboard() {
         const totalValue = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
         setInventoryCount(totalItems);
+
         setStats([
           {
             name: 'Total Items',
@@ -109,9 +111,10 @@ export default function Dashboard() {
               <SubscriptionStatus subscription={subscription} compact />
               {planLimits && (
                 <div className="text-xs text-gray-500">
-                  {planLimits.inventoryItems === -1 
-                    ? 'Unlimited items' 
-                    : `${inventoryCount}/${planLimits.inventoryItems} items used`}
+                  {planLimits.inventoryItems === -1
+                    ? 'Unlimited items'
+                    : `${inventoryCount}/${planLimits.inventoryItems} items used`
+                  }
                 </div>
               )}
             </div>
@@ -135,10 +138,7 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={dismissVerificationStatus}
-                className="text-green-400 hover:text-green-300"
-              >
+              <button onClick={dismissVerificationStatus} className="text-green-400 hover:text-green-300">
                 <RiCloseLine className="h-5 w-5" />
               </button>
             </div>
@@ -169,60 +169,58 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        {/* FREE PLAN STRICT LIMIT WARNING - Enhanced for 100 item limit */}
+        {/* Free Plan Usage Warning - Show when approaching or at limit */}
         {currentPlan === 'free' && inventoryCount >= 80 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className={`mb-6 rounded-lg p-4 border ${
               inventoryCount >= 100 
-                ? 'bg-red-900/30 border-red-600' 
-                : inventoryCount >= 95 
                 ? 'bg-red-900/20 border-red-700' 
-                : 'bg-yellow-900/20 border-yellow-700'
+                : inventoryCount >= 95 
+                  ? 'bg-red-900/20 border-red-700' 
+                  : 'bg-yellow-900/20 border-yellow-700'
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <RiAlertLine className={`h-5 w-5 mr-2 ${
                   inventoryCount >= 100 
-                    ? 'text-red-300' 
-                    : inventoryCount >= 95 
                     ? 'text-red-400' 
-                    : 'text-yellow-400'
+                    : inventoryCount >= 95 
+                      ? 'text-red-400' 
+                      : 'text-yellow-400'
                 }`} />
                 <div>
                   <h3 className={`font-medium ${
                     inventoryCount >= 100 
-                      ? 'text-red-200' 
-                      : inventoryCount >= 95 
                       ? 'text-red-300' 
-                      : 'text-yellow-300'
+                      : inventoryCount >= 95 
+                        ? 'text-red-300' 
+                        : 'text-yellow-300'
                   }`}>
                     {inventoryCount >= 100 
-                      ? `🚨 LIMIT REACHED: ${inventoryCount}/100 inventory items used` 
-                      : inventoryCount >= 95 
-                      ? `⚠️ CRITICAL: ${inventoryCount}/100 inventory items used` 
-                      : `⚡ WARNING: ${inventoryCount}/100 inventory items used`}
+                      ? 'Free Plan Limit Reached (100/100)' 
+                      : inventoryCount >= 95
+                        ? `Critical: ${inventoryCount}/100 inventory items used`
+                        : `Warning: ${inventoryCount}/100 inventory items used`
+                    }
                   </h3>
                   <p className="text-gray-300 text-sm mt-1">
                     {inventoryCount >= 100 
-                      ? 'You cannot add more items on the Free plan. Upgrade to Professional for unlimited inventory items.' 
-                      : inventoryCount >= 95 
-                      ? 'You\'re almost at your Free plan limit! Upgrade to Professional for unlimited items.' 
-                      : 'You\'re approaching your Free plan limit. Upgrade for unlimited inventory items.'}
+                      ? 'You cannot add more items. Upgrade to Professional for unlimited inventory items.'
+                      : inventoryCount >= 95
+                        ? 'You\'re almost at your limit! Upgrade to Professional for unlimited items.'
+                        : 'You\'re approaching your Free plan limit. Upgrade for unlimited inventory items.'
+                    }
                   </p>
                 </div>
               </div>
               <Link
                 to="/pricing"
-                className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                  inventoryCount >= 100 
-                    ? 'bg-red-600 hover:bg-red-700 text-white' 
-                    : 'bg-primary-600 hover:bg-primary-700 text-white'
-                }`}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
               >
-                {inventoryCount >= 100 ? 'Upgrade Required' : 'Upgrade Now'}
+                Upgrade Now
               </Link>
             </div>
             <div className="mt-3">
@@ -232,8 +230,8 @@ export default function Dashboard() {
                     inventoryCount >= 100 
                       ? 'bg-red-500' 
                       : inventoryCount >= 95 
-                      ? 'bg-red-500' 
-                      : 'bg-yellow-500'
+                        ? 'bg-red-500' 
+                        : 'bg-yellow-500'
                   }`}
                   style={{ width: `${Math.min((inventoryCount / 100) * 100, 100)}%` }}
                 />
@@ -243,11 +241,7 @@ export default function Dashboard() {
         )}
 
         {/* Stats Grid with Usage Limit Checking */}
-        <UsageLimitGate
-          limitType="inventoryItems"
-          currentUsage={inventoryCount}
-          showUpgradePrompt={false}
-        >
+        <UsageLimitGate limitType="inventoryItems" currentUsage={inventoryCount} showUpgradePrompt={false}>
           {stats && stats.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {stats.map((stat, index) => (
@@ -297,15 +291,27 @@ export default function Dashboard() {
               <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
               <h3 className="text-lg font-medium text-white mb-2">No inventory items yet</h3>
               <p className="text-sm">
-                Add some items to your inventory to see your dashboard statistics.
+                {currentPlan === 'free' && inventoryCount >= 100
+                  ? 'You\'ve reached the 100 item limit for the Free plan. Upgrade to add more items.'
+                  : 'Add some items to your inventory to see your dashboard statistics.'
+                }
               </p>
+              {currentPlan === 'free' && inventoryCount >= 100 && (
+                <Link
+                  to="/pricing"
+                  className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors mt-4"
+                >
+                  <RiStarLine className="h-5 w-5 mr-2" />
+                  Upgrade to Professional
+                </Link>
+              )}
             </motion.div>
           )}
         </UsageLimitGate>
 
         {/* Feature Cards */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Manual Entry Card - With Free Plan Limit Display */}
+          {/* Manual Entry Card - Always Available but with limit warning */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -330,22 +336,10 @@ export default function Dashboard() {
                 <RiArrowRightIcon className="ml-1 h-4 w-4" />
               </Link>
               {currentPlan === 'free' && (
-                <div className="mt-2 text-xs">
-                  <div className={`${inventoryCount >= 90 ? 'text-red-400' : inventoryCount >= 75 ? 'text-yellow-400' : 'text-gray-500'}`}>
-                    {inventoryCount}/100 items used ({Math.round((inventoryCount / 100) * 100)}%)
-                  </div>
-                  <div className="mt-1 w-full bg-gray-600 rounded-full h-1">
-                    <div
-                      className={`h-1 rounded-full transition-all duration-300 ${
-                        inventoryCount >= 90 ? 'bg-red-500' : inventoryCount >= 75 ? 'bg-yellow-500' : 'bg-green-500'
-                      }`}
-                      style={{ width: `${Math.min((inventoryCount / 100) * 100, 100)}%` }}
-                    />
-                  </div>
-                  {inventoryCount >= 90 && (
-                    <div className="mt-1 text-xs text-red-400">
-                      {inventoryCount >= 100 ? 'Upgrade required to add more items' : 'Approaching limit - consider upgrading'}
-                    </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  {inventoryCount}/100 items used
+                  {inventoryCount >= 100 && (
+                    <span className="text-red-400 ml-2">• Limit reached</span>
                   )}
                 </div>
               )}
@@ -381,10 +375,7 @@ export default function Dashboard() {
                 <div className="flex items-center">
                   <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
                   <span className="text-gray-500 text-sm">Professional plan only</span>
-                  <Link
-                    to="/pricing"
-                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
-                  >
+                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
                     Upgrade
                   </Link>
                 </div>
@@ -421,10 +412,7 @@ export default function Dashboard() {
                 <div className="flex items-center">
                   <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
                   <span className="text-gray-500 text-sm">Professional plan only</span>
-                  <Link
-                    to="/pricing"
-                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
-                  >
+                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
                     Upgrade
                   </Link>
                 </div>
@@ -461,10 +449,7 @@ export default function Dashboard() {
                 <div className="flex items-center">
                   <RiLockLine className="h-4 w-4 text-gray-500 mr-2" />
                   <span className="text-gray-500 text-sm">Professional plan only</span>
-                  <Link
-                    to="/pricing"
-                    className="ml-2 text-primary-400 hover:text-primary-300 text-sm"
-                  >
+                  <Link to="/pricing" className="ml-2 text-primary-400 hover:text-primary-300 text-sm">
                     Upgrade
                   </Link>
                 </div>
@@ -478,7 +463,7 @@ export default function Dashboard() {
           <UsageLimitGate
             limitType="inventoryItems"
             currentUsage={inventoryCount}
-            customMessage={`You're using ${inventoryCount} of ${planLimits?.inventoryItems === -1 ? '∞' : planLimits?.inventoryItems || 100} available inventory slots.`}
+            customMessage={`You're using ${inventoryCount} of ${planLimits?.inventoryItems || 0} available inventory slots.`}
           />
         </div>
       </motion.div>

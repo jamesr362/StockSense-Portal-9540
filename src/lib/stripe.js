@@ -33,14 +33,16 @@ export const getStripeConfig = () => {
   };
 };
 
-// Helper function to build return URLs for Stripe
+// Helper function to build return URLs for Stripe with proper routing and webhook parameters
 export const buildStripeReturnUrls = (planId) => {
   const baseUrl = window.location.origin;
   const basePath = window.location.pathname;
   
-  // Use hash routing for return URLs
-  const successUrl = `${baseUrl}${basePath}#/payment-success?payment_status=success&plan=${planId}`;
-  const cancelUrl = `${baseUrl}${basePath}#/pricing?payment_status=canceled`;
+  // Enhanced return URLs with webhook simulation parameters
+  const successUrl = `${baseUrl}${basePath}#/payment-success?payment_status=success&plan=${planId}&session_id={CHECKOUT_SESSION_ID}&timestamp=${Date.now()}&webhook_trigger=true`;
+  const cancelUrl = `${baseUrl}${basePath}#/pricing?payment_status=canceled&plan=${planId}&timestamp=${Date.now()}`;
+  
+  console.log('Built Stripe return URLs:', { successUrl, cancelUrl });
   
   return {
     success_url: successUrl,
@@ -48,7 +50,14 @@ export const buildStripeReturnUrls = (planId) => {
   };
 };
 
-// Subscription plans configuration - ENFORCED FREE PLAN LIMITS
+// Function to create webhook endpoint URL (for server-side webhook handling)
+export const getWebhookEndpointUrl = () => {
+  const baseUrl = window.location.origin;
+  // In production, this would point to your server-side webhook endpoint
+  return `${baseUrl}/api/webhooks/stripe`;
+};
+
+// Subscription plans configuration - STRICT FREE PLAN LIMITS
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -65,7 +74,7 @@ export const SUBSCRIPTION_PLANS = {
       'Basic reporting'
     ],
     limits: {
-      inventoryItems: 100, // STRICT LIMIT: Only 100 manual entries allowed
+      inventoryItems: 100, // STRICT LIMIT: 100 manual entries maximum
       receiptScans: 1, // 1 receipt scan per month
       excelImport: 1, // 1 Excel import per month
       teamMembers: 1,
@@ -82,7 +91,9 @@ export const SUBSCRIPTION_PLANS = {
       'Unlimited inventory items',
       'Unlimited receipt scans',
       'Unlimited Excel imports',
-      'Professional tax export reports'
+      'Professional tax export reports',
+      'Priority support',
+      'Advanced analytics'
     ],
     limits: {
       inventoryItems: -1, // unlimited
@@ -93,7 +104,9 @@ export const SUBSCRIPTION_PLANS = {
         'receipt_scanner',
         'excel_importer',
         'tax_exports',
-        'unlimited_items'
+        'unlimited_items',
+        'priority_support',
+        'advanced_analytics'
       ]
     },
     highlighted: true
@@ -157,34 +170,6 @@ export const hasReachedLimit = (userPlan, limitType, currentUsage) => {
   return currentUsage >= limit;
 };
 
-// STRICT LIMIT CHECKER FOR FREE USERS
-export const checkInventoryLimit = (userPlan, currentCount) => {
-  const limits = getUserPlanLimits(userPlan);
-  const inventoryLimit = limits.inventoryItems;
-  
-  // For unlimited plans (Professional)
-  if (inventoryLimit === -1) {
-    return {
-      allowed: true,
-      unlimited: true,
-      limit: -1,
-      remaining: -1
-    };
-  }
-  
-  // For free plan - STRICT enforcement
-  const allowed = currentCount < inventoryLimit;
-  return {
-    allowed,
-    unlimited: false,
-    limit: inventoryLimit,
-    remaining: Math.max(0, inventoryLimit - currentCount),
-    usage: currentCount,
-    usagePercentage: (currentCount / inventoryLimit) * 100,
-    reason: allowed ? null : `You have reached your ${inventoryLimit} item limit for the Free plan. Upgrade to Professional for unlimited inventory items.`
-  };
-};
-
 // Plan comparison helper
 export const comparePlans = (currentPlan, targetPlan) => {
   const current = getPlanById(currentPlan);
@@ -236,5 +221,59 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
     refund: refund,
     newCharge: newCharge,
     difference: newCharge - refund
+  };
+};
+
+// Webhook signature verification helper (for server-side use)
+export const verifyWebhookSignature = (payload, signature, secret) => {
+  // This would typically be done server-side with the Stripe library
+  // For demo purposes, we'll simulate verification
+  console.log('Webhook signature verification (simulated):', {
+    payloadLength: payload.length,
+    signature: signature.substring(0, 20) + '...',
+    secretLength: secret.length
+  });
+  
+  // In production, use: stripe.webhooks.constructEvent(payload, signature, secret)
+  return true; // Simulated success
+};
+
+// Enhanced Stripe checkout session creation
+export const createEnhancedCheckoutSession = async (planId, userEmail, options = {}) => {
+  const plan = getPlanById(planId);
+  if (!plan || !plan.paymentLink) {
+    throw new Error('Invalid plan or missing payment link');
+  }
+
+  // Build enhanced payment URL with webhook parameters
+  const returnUrls = buildStripeReturnUrls(planId);
+  const enhancedPaymentUrl = new URL(plan.paymentLink);
+  
+  // Add return URLs
+  enhancedPaymentUrl.searchParams.set('success_url', returnUrls.success_url);
+  enhancedPaymentUrl.searchParams.set('cancel_url', returnUrls.cancel_url);
+  
+  // Add customer metadata
+  enhancedPaymentUrl.searchParams.set('client_reference_id', userEmail);
+  enhancedPaymentUrl.searchParams.set('customer_email', userEmail);
+  
+  // Add plan metadata
+  enhancedPaymentUrl.searchParams.set('metadata[plan_id]', planId);
+  enhancedPaymentUrl.searchParams.set('metadata[customer_email]', userEmail);
+  enhancedPaymentUrl.searchParams.set('metadata[webhook_enabled]', 'true');
+  
+  // Add webhook endpoint if available
+  const webhookUrl = getWebhookEndpointUrl();
+  if (webhookUrl) {
+    enhancedPaymentUrl.searchParams.set('metadata[webhook_url]', webhookUrl);
+  }
+
+  console.log('Enhanced checkout session URL:', enhancedPaymentUrl.toString());
+  
+  return {
+    url: enhancedPaymentUrl.toString(),
+    planId,
+    userEmail,
+    returnUrls
   };
 };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { SUBSCRIPTION_PLANS, checkInventoryLimit } from '../lib/stripe';
+import { SUBSCRIPTION_PLANS } from '../lib/stripe';
 
 export const useFeatureAccess = () => {
   const [subscription, setSubscription] = useState(null);
@@ -13,7 +13,7 @@ export const useFeatureAccess = () => {
   });
   const { user } = useAuth();
 
-  const loadSubscriptionData = async () => {
+  const loadSubscriptionData = async (forceRefresh = false) => {
     if (!user?.email) {
       setLoading(false);
       return;
@@ -21,7 +21,28 @@ export const useFeatureAccess = () => {
 
     try {
       setLoading(true);
-      
+
+      // Check cache first (unless force refresh)
+      const cacheKey = `featureCache_${user.email}`;
+      if (!forceRefresh) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const { subscription: cachedSub, planLimits: cachedLimits, timestamp } = JSON.parse(cached);
+            // Use cache if it's less than 5 minutes old
+            if (Date.now() - timestamp < 5 * 60 * 1000) {
+              setSubscription(cachedSub);
+              setPlanLimits(cachedLimits);
+              setLoading(false);
+              await loadUsageStats();
+              return;
+            }
+          } catch (e) {
+            console.log('Invalid cache data, refreshing...');
+          }
+        }
+      }
+
       // Load usage statistics
       await loadUsageStats();
 
@@ -35,11 +56,22 @@ export const useFeatureAccess = () => {
             .single();
 
           if (!error && data) {
+            console.log('Loaded subscription from Supabase:', data);
             setSubscription(data);
+            
             // Get plan limits based on subscription
             const planName = data.plan_id ? data.plan_id.split('_')[1] : 'free';
             const plan = SUBSCRIPTION_PLANS[planName] || SUBSCRIPTION_PLANS.free;
             setPlanLimits(plan.limits);
+
+            // Cache the data
+            localStorage.setItem(cacheKey, JSON.stringify({
+              subscription: data,
+              planLimits: plan.limits,
+              timestamp: Date.now()
+            }));
+
+            console.log(`User has ${planName} plan with limits:`, plan.limits);
             setLoading(false);
             return;
           }
@@ -49,8 +81,17 @@ export const useFeatureAccess = () => {
       }
 
       // Fallback to free plan
+      console.log('No subscription found, defaulting to free plan');
       setPlanLimits(SUBSCRIPTION_PLANS.free.limits);
       setSubscription(null);
+      
+      // Cache free plan
+      localStorage.setItem(cacheKey, JSON.stringify({
+        subscription: null,
+        planLimits: SUBSCRIPTION_PLANS.free.limits,
+        timestamp: Date.now()
+      }));
+
     } catch (error) {
       console.error('Error loading subscription data:', error);
       setPlanLimits(SUBSCRIPTION_PLANS.free.limits);
@@ -97,6 +138,18 @@ export const useFeatureAccess = () => {
     loadSubscriptionData();
   }, [user?.email]);
 
+  // Listen for subscription updates
+  useEffect(() => {
+    const handleSubscriptionUpdate = (event) => {
+      console.log('Subscription update event received:', event.detail);
+      // Force refresh the subscription data
+      loadSubscriptionData(true);
+    };
+
+    window.addEventListener('subscriptionUpdated', handleSubscriptionUpdate);
+    return () => window.removeEventListener('subscriptionUpdated', handleSubscriptionUpdate);
+  }, [user?.email]);
+
   // Feature access checkers
   const canUseFeature = (featureName) => {
     if (!planLimits) return false;
@@ -127,12 +180,24 @@ export const useFeatureAccess = () => {
     }
   };
 
-  // STRICT INVENTORY LIMIT CHECKER
+  // Usage limit checkers with STRICT enforcement
   const canAddInventoryItem = (currentCount) => {
     if (!planLimits) return { allowed: false, reason: 'Plan not loaded' };
     
-    const currentPlan = getCurrentPlan();
-    return checkInventoryLimit(currentPlan, currentCount);
+    // STRICT ENFORCEMENT: Free plan limited to 100 items
+    if (planLimits.inventoryItems === -1) return { allowed: true, unlimited: true };
+    if (planLimits.inventoryItems === 0) return { 
+      allowed: false, 
+      reason: 'Inventory items not available on this plan' 
+    };
+
+    const allowed = currentCount < planLimits.inventoryItems;
+    return {
+      allowed,
+      limit: planLimits.inventoryItems,
+      remaining: planLimits.inventoryItems - currentCount,
+      reason: allowed ? null : `You have reached your ${planLimits.inventoryItems} item limit for the Free plan. Upgrade to Professional for unlimited items.`
+    };
   };
 
   const canScanReceipt = (currentScans = null) => {
@@ -142,7 +207,10 @@ export const useFeatureAccess = () => {
     const scansUsed = currentScans !== null ? currentScans : usageStats.receiptScans;
 
     if (planLimits.receiptScans === -1) return { allowed: true, unlimited: true };
-    if (planLimits.receiptScans === 0) return { allowed: false, reason: 'Receipt scanning not available on this plan' };
+    if (planLimits.receiptScans === 0) return { 
+      allowed: false, 
+      reason: 'Receipt scanning not available on this plan' 
+    };
 
     const allowed = scansUsed < planLimits.receiptScans;
     return {
@@ -161,7 +229,10 @@ export const useFeatureAccess = () => {
     const importsUsed = currentImports !== null ? currentImports : usageStats.excelImports;
 
     if (planLimits.excelImport === -1) return { allowed: true, unlimited: true };
-    if (planLimits.excelImport === 0 || !planLimits.excelImport) return { allowed: false, reason: 'Excel import not available on this plan' };
+    if (planLimits.excelImport === 0 || !planLimits.excelImport) return { 
+      allowed: false, 
+      reason: 'Excel import not available on this plan' 
+    };
 
     const allowed = importsUsed < planLimits.excelImport;
     return {
@@ -175,9 +246,12 @@ export const useFeatureAccess = () => {
 
   const canAddTeamMember = (currentMembers) => {
     if (!planLimits) return { allowed: false, reason: 'Plan not loaded' };
-
+    
     if (planLimits.teamMembers === -1) return { allowed: true, unlimited: true };
-    if (planLimits.teamMembers === 0) return { allowed: false, reason: 'Team members not available on this plan' };
+    if (planLimits.teamMembers === 0) return { 
+      allowed: false, 
+      reason: 'Team members not available on this plan' 
+    };
 
     const allowed = currentMembers < planLimits.teamMembers;
     return {
@@ -218,7 +292,8 @@ export const useFeatureAccess = () => {
 
   // Refresh function to reload subscription data
   const refresh = async () => {
-    await loadSubscriptionData();
+    console.log('Manually refreshing feature access data...');
+    await loadSubscriptionData(true);
   };
 
   return {
@@ -228,17 +303,17 @@ export const useFeatureAccess = () => {
     usageStats,
     currentPlan: getCurrentPlan(),
     planInfo: getPlanInfo(),
-    
+
     // Feature checkers
     canUseFeature,
-    canAddInventoryItem, // STRICT 100-item limit for free users
+    canAddInventoryItem,
     canScanReceipt,
     canImportExcel,
     canAddTeamMember,
-    
+
     // Usage tracking
     incrementUsage,
-    
+
     // Refresh function
     refresh
   };

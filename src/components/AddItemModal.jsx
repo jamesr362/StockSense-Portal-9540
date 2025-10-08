@@ -1,8 +1,9 @@
-import {motion, AnimatePresence} from 'framer-motion';
-import {RiCloseLine} from 'react-icons/ri';
-import {useState} from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RiCloseLine, RiAlertLine } from 'react-icons/ri';
+import { useState } from 'react';
+import useFeatureAccess from '../hooks/useFeatureAccess';
 
-export default function AddItemModal({isOpen, onClose, onAdd}) {
+export default function AddItemModal({ isOpen, onClose, onAdd }) {
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -15,63 +16,66 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const { canAddInventoryItem, currentPlan } = useFeatureAccess();
+
   const categories = [
-    {value: '', label: 'Select a category'},
-    {value: 'Electronics', label: '📱 Electronics'},
-    {value: 'Clothing', label: '👕 Clothing & Apparel'},
-    {value: 'Food & Beverages', label: '🍎 Food & Beverages'},
-    {value: 'Home & Garden', label: '🏠 Home & Garden'},
-    {value: 'Sports & Outdoors', label: '⚽ Sports & Outdoors'},
-    {value: 'Books & Media', label: '📚 Books & Media'},
-    {value: 'Health & Beauty', label: '💄 Health & Beauty'},
-    {value: 'Automotive', label: '🚗 Automotive'},
-    {value: 'Tools & Hardware', label: '🔧 Tools & Hardware'},
-    {value: 'Office Supplies', label: '📎 Office Supplies'},
-    {value: 'Toys & Games', label: '🎮 Toys & Games'},
-    {value: 'Pet Supplies', label: '🐕 Pet Supplies'},
-    {value: 'Jewelry & Accessories', label: '💍 Jewelry & Accessories'},
-    {value: 'Art & Crafts', label: '🎨 Art & Crafts'},
-    {value: 'Music & Instruments', label: '🎵 Music & Instruments'},
-    {value: 'Baby & Kids', label: '👶 Baby & Kids'},
-    {value: 'Furniture', label: '🪑 Furniture'},
-    {value: 'Appliances', label: '🔌 Appliances'},
-    {value: 'Medical & Healthcare', label: '🏥 Medical & Healthcare'},
-    {value: 'Industrial', label: '🏭 Industrial'},
-    {value: 'Other', label: '📦 Other'}
+    { value: '', label: 'Select a category' },
+    { value: 'Electronics', label: '📱 Electronics' },
+    { value: 'Clothing', label: '👕 Clothing & Apparel' },
+    { value: 'Food & Beverages', label: '🍎 Food & Beverages' },
+    { value: 'Home & Garden', label: '🏠 Home & Garden' },
+    { value: 'Sports & Outdoors', label: '⚽ Sports & Outdoors' },
+    { value: 'Books & Media', label: '📚 Books & Media' },
+    { value: 'Health & Beauty', label: '💄 Health & Beauty' },
+    { value: 'Automotive', label: '🚗 Automotive' },
+    { value: 'Tools & Hardware', label: '🔧 Tools & Hardware' },
+    { value: 'Office Supplies', label: '📎 Office Supplies' },
+    { value: 'Toys & Games', label: '🎮 Toys & Games' },
+    { value: 'Pet Supplies', label: '🐕 Pet Supplies' },
+    { value: 'Jewelry & Accessories', label: '💍 Jewelry & Accessories' },
+    { value: 'Art & Crafts', label: '🎨 Art & Crafts' },
+    { value: 'Music & Instruments', label: '🎵 Music & Instruments' },
+    { value: 'Baby & Kids', label: '👶 Baby & Kids' },
+    { value: 'Furniture', label: '🪑 Furniture' },
+    { value: 'Appliances', label: '🔌 Appliances' },
+    { value: 'Medical & Healthcare', label: '🏥 Medical & Healthcare' },
+    { value: 'Industrial', label: '🏭 Industrial' },
+    { value: 'Other', label: '📦 Other' }
   ];
 
   const handleChange = (e) => {
-    const {name, value} = e.target;
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
     // Clear error when user starts typing
     if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Clear any previous errors
     setError('');
-    
+
     // Validate required fields
     if (!formData.name.trim()) {
       setError('Item name is required');
       return;
     }
-    
+
     if (!formData.category) {
       setError('Please select a category');
       return;
     }
-    
+
     if (!formData.quantity || formData.quantity === '') {
       setError('Quantity is required');
       return;
     }
-    
+
     if (!formData.unitPrice || formData.unitPrice === '') {
       setError('Unit price is required');
       return;
@@ -80,12 +84,12 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
     // Parse and validate numeric values
     const quantity = parseInt(formData.quantity);
     const unitPrice = parseFloat(formData.unitPrice);
-    
+
     if (isNaN(quantity) || quantity < 0) {
       setError('Please enter a valid quantity (0 or greater)');
       return;
     }
-    
+
     if (isNaN(unitPrice) || unitPrice < 0) {
       setError('Please enter a valid unit price (0 or greater)');
       return;
@@ -101,7 +105,7 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
 
     try {
       setIsSubmitting(true);
-      
+
       // Create the item object with proper structure
       const newItem = {
         name: formData.name.trim(),
@@ -113,7 +117,7 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
         dateAdded: formData.dateAdded
       };
 
-      console.log('=== AddItemModal: Submitting item ===');
+      console.log('===AddItemModal: Submitting item===');
       console.log('Form data:', formData);
       console.log('Processed item:', newItem);
       console.log('=====================================');
@@ -133,7 +137,6 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
 
       // Close modal
       onClose();
-      
     } catch (error) {
       console.error('Error submitting form:', error);
       setError(error.message || 'Failed to add item. Please try again.');
@@ -162,22 +165,28 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{opacity: 0}}
-          animate={{opacity: 1}}
-          exit={{opacity: 0}}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 overflow-y-auto"
         >
           <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" onClick={handleClose} />
-            
-            <span className="hidden sm:inline-block sm:h-screen sm:align-middle" aria-hidden="true">
+            <div
+              className="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity"
+              onClick={handleClose}
+            />
+
+            <span
+              className="hidden sm:inline-block sm:h-screen sm:align-middle"
+              aria-hidden="true"
+            >
               &#8203;
             </span>
-            
+
             <motion.div
-              initial={{opacity: 0, scale: 0.95}}
-              animate={{opacity: 1, scale: 1}}
-              exit={{opacity: 0, scale: 0.95}}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               className="relative inline-block transform overflow-hidden rounded-lg bg-gray-800 px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle"
             >
               <div className="absolute right-0 top-0 pr-4 pt-4">
@@ -191,22 +200,34 @@ export default function AddItemModal({isOpen, onClose, onAdd}) {
                   <RiCloseLine className="h-6 w-6" />
                 </button>
               </div>
-              
+
               <div className="sm:flex sm:items-start">
                 <div className="mt-3 w-full text-center sm:mt-0 sm:text-left">
                   <h3 className="text-lg font-medium leading-6 text-white">Add New Item</h3>
-                  
+
+                  {/* Free Plan Limit Warning */}
+                  {currentPlan === 'free' && (
+                    <div className="mt-3 p-3 bg-blue-900/30 border border-blue-700 rounded-md">
+                      <div className="flex items-center">
+                        <RiAlertLine className="h-4 w-4 text-blue-400 mr-2" />
+                        <p className="text-blue-300 text-sm">
+                          Free Plan: Limited to 100 inventory items total
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Error Message */}
                   {error && (
                     <motion.div
-                      initial={{opacity: 0, y: -10}}
-                      animate={{opacity: 1, y: 0}}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
                       className="mt-3 p-3 bg-red-900/50 border border-red-700 rounded-md"
                     >
                       <p className="text-red-300 text-sm">{error}</p>
                     </motion.div>
                   )}
-                  
+
                   <form onSubmit={handleSubmit} className="mt-6 space-y-4 sm:space-y-6">
                     <div>
                       <label htmlFor="name" className="block text-sm font-medium text-white">
