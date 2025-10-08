@@ -9,6 +9,7 @@
   from = "/api/webhooks/stripe"
   to = "/.netlify/functions/stripe-webhook"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/*"
@@ -17,3 +18,7 @@
 
 [functions]
   directory = "netlify/functions"
+
+# Ensure functions can handle raw request bodies
+[functions."stripe-webhook"]
+  included_files = ["netlify/functions/stripe-webhook.js"]
