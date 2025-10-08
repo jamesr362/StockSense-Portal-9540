@@ -1,326 +1,74 @@
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { RiCheckLine, RiArrowRightLine, RiStarLine, RiRefreshLine, RiAlertLine } from 'react-icons/ri';
-import { logSecurityEvent } from '../utils/security';
-import { SUBSCRIPTION_PLANS, handlePostPaymentReturn } from '../lib/stripe';
+import { motion } from 'framer-motion';
+import * as RiIcons from 'react-icons/ri';
+import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../context/AuthContext';
+import { SUBSCRIPTION_PLANS, handlePostPaymentReturn, formatTrialInfo } from '../lib/stripe';
 import { updateUserSubscription } from '../services/subscriptionService';
+
+const { RiCheckboxCircleFill, RiGiftLine, RiCalendarLine, RiArrowRightLine } = RiIcons;
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(true);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
   const { user } = useAuth();
-  const [planDetails, setPlanDetails] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isUpdatingSubscription, setIsUpdatingSubscription] = useState(false);
-  const [subscriptionUpdated, setSubscriptionUpdated] = useState(false);
-  const [error, setError] = useState('');
-  const [debugInfo, setDebugInfo] = useState({});
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const handlePaymentSuccess = async () => {
+    const processPaymentReturn = async () => {
       try {
-        const planId = searchParams.get('plan');
-        const sessionId = searchParams.get('session_id');
-        const paymentStatus = searchParams.get('payment_status');
-        const source = searchParams.get('source');
-        
-        // **CRITICAL FIX**: Handle literal {CHECKOUT_SESSION_ID} from Stripe Payment Links
-        const isLiteralSessionId = sessionId === '{CHECKOUT_SESSION_ID}';
-        const actualSessionId = isLiteralSessionId ? `pl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}` : sessionId;
-        
-        // Enhanced debugging information
-        const debugData = {
-          planId, 
-          sessionId,
-          actualSessionId,
-          isLiteralSessionId,
-          paymentStatus,
-          source,
-          userEmail: user?.email,
-          allParams: Object.fromEntries(searchParams.entries()),
-          referrer: document.referrer,
-          timestamp: new Date().toISOString(),
-          isFromStripe: document.referrer.includes('stripe.com') || document.referrer.includes('buy.stripe.com'),
-          pendingPayment: JSON.parse(localStorage.getItem('pendingPayment') || 'null'),
-          sessionStorage: {
-            stripePaymentAttempt: sessionStorage.getItem('stripePaymentAttempt'),
-            paymentPlanId: sessionStorage.getItem('paymentPlanId'),
-            paymentUserEmail: sessionStorage.getItem('paymentUserEmail'),
-            paymentTracking: JSON.parse(sessionStorage.getItem('paymentTracking') || 'null')
-          }
-        };
-        
-        setDebugInfo(debugData);
-        
-        console.log('🎉 PaymentSuccess page loaded with FIXED session ID handling:', debugData);
+        console.log('🎉 Payment Success page loaded');
 
         if (!user?.email) {
-          setError('User not authenticated. Please log in and try again.');
-          setLoading(false);
+          setError('User not authenticated');
+          setIsProcessing(false);
           return;
         }
 
-        // Determine plan details with fallbacks
-        const finalPlanId = planId || 
-                           debugData.pendingPayment?.planId || 
-                           debugData.sessionStorage.paymentPlanId || 
-                           'professional';
+        // Process the payment return
+        const result = await handlePostPaymentReturn(searchParams, user.email);
         
-        const plan = SUBSCRIPTION_PLANS[finalPlanId] || SUBSCRIPTION_PLANS.professional;
-        setPlanDetails(plan);
+        if (result.success) {
+          setResult(result);
+          console.log('✅ Payment processing completed:', result);
+        } else {
+          setError(result.reason || 'Payment processing failed');
+        }
 
-        logSecurityEvent('PAYMENT_SUCCESS_PAGE_VIEW', {
-          planId: finalPlanId,
-          userEmail: user.email,
-          sessionId: actualSessionId,
-          originalSessionId: sessionId,
-          isLiteralSessionId,
-          paymentStatus,
-          source,
-          debugData
-        });
-
-        // **ENHANCED**: Process payment return with fixed session ID
-        await processPaymentReturn(finalPlanId, actualSessionId, paymentStatus, source, isLiteralSessionId);
-        
-      } catch (error) {
-        console.error('❌ Error handling payment success:', error);
-        setError('Error processing payment confirmation. Please contact support.');
+      } catch (err) {
+        console.error('❌ Error processing payment success:', err);
+        setError(err.message || 'An error occurred while processing your payment');
       } finally {
-        setLoading(false);
+        setIsProcessing(false);
       }
     };
 
-    if (user?.email) {
-      handlePaymentSuccess();
-    } else {
-      setLoading(false);
-    }
-  }, [searchParams, user?.email]);
-
-  const processPaymentReturn = async (planId, sessionId, paymentStatus, source, isLiteralSessionId) => {
-    try {
-      setIsUpdatingSubscription(true);
-      setError('');
-
-      console.log('🔄 Processing payment return with FIXED logic...', {
-        planId,
-        sessionId,
-        paymentStatus,
-        source,
-        userEmail: user.email,
-        isLiteralSessionId
-      });
-
-      // **NEW LOGIC**: For Payment Links with literal session IDs, directly activate subscription
-      if (isLiteralSessionId || paymentStatus === 'success' || document.referrer.includes('stripe.com')) {
-        console.log('✅ Detected successful Payment Link return, activating subscription directly...');
-        
-        await activateSubscriptionDirectly(planId, sessionId);
-        return;
-      }
-
-      // **FALLBACK**: Try the standard post-payment handler
-      const postPaymentResult = await handlePostPaymentReturn(searchParams, user.email);
-      
-      if (postPaymentResult.success) {
-        console.log('✅ Post-payment processing successful:', postPaymentResult);
-        setSubscriptionUpdated(true);
-        
-        // Force immediate feature refresh
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('forceFeatureRefresh', {
-            detail: {
-              userEmail: user.email,
-              planId,
-              immediate: true,
-              source: 'payment_success_force_refresh'
-            }
-          }));
-        }, 1000);
-        
-        return;
-      }
-
-      // **FINAL FALLBACK**
-      console.log('⚠️ All methods failed, using direct activation fallback...');
-      await activateSubscriptionDirectly(planId, sessionId);
-
-    } catch (error) {
-      console.error('❌ Error processing payment return:', error);
-      setError(`Failed to activate subscription: ${error.message}`);
-      
-      logSecurityEvent('SUBSCRIPTION_UPDATE_ERROR_AFTER_PAYMENT', {
-        error: error.message,
-        userEmail: user?.email,
-        planId,
-        sessionId,
-        source
-      });
-    } finally {
-      setIsUpdatingSubscription(false);
-    }
-  };
-
-  // **NEW**: Direct subscription activation method
-  const activateSubscriptionDirectly = async (planId, sessionId) => {
-    try {
-      console.log('🚀 Activating subscription directly...', { planId, sessionId, userEmail: user.email });
-      
-      let updateSuccess = false;
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (!updateSuccess && attempts < maxAttempts) {
-        try {
-          attempts++;
-          console.log(`🔄 Direct activation attempt ${attempts}/${maxAttempts}...`);
-          
-          await updateUserSubscription(user.email, planId, sessionId);
-          updateSuccess = true;
-          console.log('✅ Subscription activated successfully');
-          
-        } catch (updateError) {
-          console.warn(`⚠️ Activation attempt ${attempts} failed:`, updateError);
-          
-          if (attempts === maxAttempts) {
-            throw updateError;
-          }
-          
-          // Wait before retry
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
-      }
-
-      // **ENHANCED**: Comprehensive cache clearing
-      const cacheKeys = [
-        `featureCache_${user.email}`,
-        `subscriptionCache_${user.email}`,
-        `planLimits_${user.email}`,
-        `userSubscription_${user.email}`,
-        'pendingPayment',
-        'stripePaymentAttempt',
-        'paymentPlanId',
-        'paymentUserEmail',
-        'paymentTracking',
-        'awaitingPayment',
-        'routeCache',
-        'componentCache'
-      ];
-      
-      cacheKeys.forEach(key => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      });
-      
-      // **ENHANCED**: Multiple event dispatching with delays
-      const updateEvents = [
-        { name: 'subscriptionUpdated', delay: 0 },
-        { name: 'refreshFeatureAccess', delay: 200 },
-        { name: 'planChanged', delay: 400 },
-        { name: 'userUpgraded', delay: 600 },
-        { name: 'forceAppRefresh', delay: 800 },
-        { name: 'subscriptionActivated', delay: 1000 },
-        { name: 'forceFeatureRefresh', delay: 1200 }
-      ];
-
-      updateEvents.forEach(({ name, delay }) => {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent(name, {
-            detail: { 
-              userEmail: user.email, 
-              planId,
-              sessionId,
-              immediate: true,
-              source: 'direct_activation',
-              timestamp: Date.now(),
-              attempt: attempts
-            }
-          }));
-        }, delay);
-      });
-
-      setSubscriptionUpdated(true);
-
-      logSecurityEvent('SUBSCRIPTION_ACTIVATED_DIRECTLY', {
-        userEmail: user.email,
-        planId: `price_${planId}`,
-        sessionId,
-        method: 'direct_activation',
-        attempts,
-        source: 'payment_link_literal_session'
-      });
-
-    } catch (error) {
-      console.error('❌ Error in direct subscription activation:', error);
-      throw error;
-    }
-  };
+    // Small delay to ensure proper component mounting
+    const timer = setTimeout(processPaymentReturn, 500);
+    return () => clearTimeout(timer);
+  }, [searchParams, user]);
 
   const handleContinue = () => {
-    console.log('🔄 Redirecting to dashboard with complete app refresh...');
-    
-    // **ENHANCED**: Multiple refresh strategies
-    
-    // Strategy 1: Clear all possible caches
-    const allCacheKeys = Object.keys(localStorage).concat(Object.keys(sessionStorage));
-    allCacheKeys.forEach(key => {
-      if (key.includes('Cache') || key.includes('cache') || key.includes('feature') || key.includes('subscription')) {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      }
-    });
-    
-    // Strategy 2: Force multiple feature refresh events
-    const refreshEvents = ['refreshFeatureAccess', 'forceFeatureRefresh', 'subscriptionActivated'];
-    refreshEvents.forEach((event, index) => {
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(event, {
-          detail: {
-            source: 'payment_success_continue',
-            immediate: true,
-            force: true,
-            userEmail: user?.email,
-            timestamp: Date.now()
-          }
-        }));
-      }, index * 100);
-    });
-    
-    // Strategy 3: Use window.location.href for complete refresh
-    setTimeout(() => {
-      window.location.href = '/#/dashboard?subscription_activated=true&timestamp=' + Date.now();
-    }, 500);
+    navigate('/dashboard');
   };
 
-  const handleRefreshPage = () => {
-    console.log('🔄 Manual page refresh requested');
-    window.location.reload();
-  };
+  const planId = searchParams.get('plan') || result?.planId || 'professional';
+  const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.professional;
+  const trialActivated = searchParams.get('trial_activated') === 'true' || result?.trialActivated;
+  const trialInfo = trialActivated ? formatTrialInfo(planId) : null;
 
-  const handleViewBilling = () => {
-    navigate('/settings');
-  };
-
-  if (loading) {
+  if (isProcessing) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-400 mb-2">Processing your payment confirmation...</p>
-          <p className="text-gray-500 text-sm mb-4">Activating premium features...</p>
-          
-          {/* Debug info for troubleshooting */}
-          {Object.keys(debugInfo).length > 0 && (
-            <details className="text-left text-xs text-gray-600 mt-4 bg-gray-800 p-3 rounded">
-              <summary className="cursor-pointer text-gray-400 mb-2">Debug Information</summary>
-              <pre className="whitespace-pre-wrap overflow-auto max-h-32">
-                {JSON.stringify(debugInfo, null, 2)}
-              </pre>
-            </details>
-          )}
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-6"></div>
+          <h2 className="text-2xl font-bold text-white mb-2">Processing Your Payment</h2>
+          <p className="text-gray-400">
+            {trialActivated ? 'Setting up your free trial...' : 'Activating your subscription...'}
+          </p>
         </div>
       </div>
     );
@@ -328,247 +76,223 @@ export default function PaymentSuccess() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-gray-800 rounded-lg shadow-xl p-8 text-center"
-        >
-          <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <RiAlertLine className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-4">Payment Processing</h1>
-          <p className="text-gray-300 mb-6 whitespace-pre-line">{error}</p>
-          <div className="space-y-3">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center">
+          <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
+            <h2 className="text-2xl font-bold text-red-300 mb-2">Payment Issue</h2>
+            <p className="text-red-200 mb-4">{error}</p>
             <button
-              onClick={handleRefreshPage}
-              className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
+              onClick={() => navigate('/pricing')}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
             >
-              <RiRefreshLine className="h-5 w-5 mr-2" />
-              Refresh Page
-            </button>
-            <button
-              onClick={() => window.location.href = '/#/dashboard'}
-              className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
-            >
-              Continue to Dashboard
-            </button>
-            <button
-              onClick={() => window.location.href = '/#/pricing'}
-              className="w-full py-2 px-6 bg-gray-500 text-white rounded-lg font-medium hover:bg-gray-600 transition-colors"
-            >
-              Back to Pricing
+              Return to Pricing
             </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-md w-full bg-gray-800 rounded-lg shadow-xl p-8 text-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-2xl w-full"
       >
-        {/* Success Icon */}
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-          className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6"
-        >
-          <RiCheckLine className="h-8 w-8 text-white" />
-        </motion.div>
-
-        {/* Title */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="text-2xl font-bold text-white mb-4"
-        >
-          Payment Successful! 🎉
-        </motion.h1>
-
-        {/* Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="text-gray-300 mb-6"
-        >
-          Welcome to {planDetails?.name} Plan! Your subscription has been activated and all premium features are now available.
-        </motion.p>
-
-        {/* Subscription Update Status */}
-        {isUpdatingSubscription && (
+        <div className="text-center mb-8">
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-6 p-3 bg-blue-900/30 border border-blue-700 rounded-lg"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: 'spring' }}
+            className="inline-flex items-center justify-center w-20 h-20 bg-green-500 rounded-full mb-6"
           >
-            <div className="flex items-center justify-center text-blue-300">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 mr-2"></div>
-              Activating your premium features...
-            </div>
-            <p className="text-blue-400 text-xs mt-1">This may take a few seconds</p>
+            <SafeIcon icon={RiCheckboxCircleFill} className="h-12 w-12 text-white" />
           </motion.div>
-        )}
 
-        {/* Success Status */}
-        {subscriptionUpdated && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-6 p-3 bg-green-900/30 border border-green-700 rounded-lg"
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="text-4xl font-bold text-white mb-4"
           >
-            <div className="flex items-center justify-center text-green-300">
-              <RiCheckLine className="h-4 w-4 mr-2" />
-              🚀 Premium features activated successfully!
-            </div>
-            <p className="text-green-400 text-xs mt-1">All Professional features are now unlocked</p>
-          </motion.div>
-        )}
+            {trialActivated ? '🎉 Free Trial Activated!' : '🎉 Payment Successful!'}
+          </motion.h1>
 
-        {/* Plan Details */}
-        {planDetails && (
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-xl text-gray-300 mb-8"
+          >
+            {trialActivated 
+              ? `Welcome to your ${plan.name} free trial!`
+              : `Welcome to ${plan.name}! Your subscription is now active.`
+            }
+          </motion.p>
+        </div>
+
+        {/* Trial Information */}
+        {trialActivated && trialInfo && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-gray-700 rounded-lg p-4 mb-6 text-left"
+            className="bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-700/50 rounded-xl p-6 mb-8"
           >
-            <h3 className="text-white font-semibold mb-3 text-center">Your Active Plan</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <div className="text-gray-400">Plan:</div>
-                <div className="text-white font-medium">{planDetails.name}</div>
-              </div>
-              <div>
-                <div className="text-gray-400">Price:</div>
-                <div className="text-white font-medium">£{planDetails.price}/month</div>
-              </div>
-              <div>
-                <div className="text-gray-400">Status:</div>
-                <div className="text-green-400 font-medium">✅ Active</div>
-              </div>
-              <div>
-                <div className="text-gray-400">Next Billing:</div>
-                <div className="text-white font-medium">
-                  {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}
+            <div className="flex items-center justify-center mb-4">
+              <SafeIcon icon={RiGiftLine} className="h-8 w-8 text-green-400 mr-3" />
+              <h2 className="text-2xl font-bold text-green-400">5-Day FREE Trial Details</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="text-center">
+                <div className="bg-green-800/30 rounded-lg p-4">
+                  <SafeIcon icon={RiCalendarLine} className="h-6 w-6 text-green-400 mx-auto mb-2" />
+                  <h3 className="text-white font-semibold mb-1">Trial Period</h3>
+                  <p className="text-green-300 text-sm">
+                    {trialInfo.trialDays} days of full access
+                  </p>
+                  <p className="text-green-200 text-xs mt-1">
+                    Ends: {trialInfo.trialEndFormatted}
+                  </p>
                 </div>
               </div>
+              
+              <div className="text-center">
+                <div className="bg-green-800/30 rounded-lg p-4">
+                  <SafeIcon icon={RiCheckboxCircleFill} className="h-6 w-6 text-green-400 mx-auto mb-2" />
+                  <h3 className="text-white font-semibold mb-1">No Charge</h3>
+                  <p className="text-green-300 text-sm">
+                    Card secured, not charged
+                  </p>
+                  <p className="text-green-200 text-xs mt-1">
+                    Then £{trialInfo.monthlyPrice}/month
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 bg-green-800/20 rounded-lg p-4">
+              <h4 className="text-green-400 font-semibold mb-3 text-center">
+                🚀 What's Included in Your Trial:
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {plan.features.slice(0, 6).map((feature, index) => (
+                  <div key={index} className="flex items-center text-green-300 text-sm">
+                    <div className="w-2 h-2 bg-green-400 rounded-full mr-3 flex-shrink-0"></div>
+                    {feature}
+                  </div>
+                ))}
+              </div>
+              {plan.features.length > 6 && (
+                <p className="text-green-400 text-center text-sm mt-3">
+                  + {plan.features.length - 6} more premium features!
+                </p>
+              )}
             </div>
           </motion.div>
         )}
 
-        {/* Plan Features */}
+        {/* Plan Summary */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="bg-gradient-to-r from-blue-900/20 to-green-900/20 border border-blue-700 rounded-lg p-4 mb-6"
+          className="bg-gray-800 rounded-xl p-6 mb-8"
         >
-          <h3 className="text-blue-400 font-semibold mb-3 text-center">🎯 Now Available:</h3>
-          <ul className="text-blue-300 text-sm space-y-2 text-left">
-            {planDetails?.features.slice(0, 4).map((feature, index) => (
-              <li key={index} className="flex items-center">
-                <RiCheckLine className="h-4 w-4 mr-2 text-green-400 flex-shrink-0" />
-                {feature}
-              </li>
-            ))}
-            {planDetails?.features.length > 4 && (
-              <li className="text-gray-400 text-xs mt-2">
-                + {planDetails.features.length - 4} more premium features
-              </li>
+          <h2 className="text-2xl font-bold text-white mb-4 text-center">
+            {trialActivated ? 'Trial' : 'Subscription'} Summary
+          </h2>
+          
+          <div className="space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-gray-700">
+              <span className="text-gray-300">Plan:</span>
+              <span className="text-white font-semibold">{plan.name}</span>
+            </div>
+            
+            {trialActivated ? (
+              <>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-700">
+                  <span className="text-gray-300">Trial Period:</span>
+                  <span className="text-green-400 font-semibold">5 Days FREE</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-700">
+                  <span className="text-gray-300">After Trial:</span>
+                  <span className="text-white font-semibold">£{plan.price}/month</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Next Billing:</span>
+                  <span className="text-white font-semibold">
+                    {trialInfo?.trialEndFormatted || 'In 5 days'}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center pb-2 border-b border-gray-700">
+                  <span className="text-gray-300">Price:</span>
+                  <span className="text-white font-semibold">£{plan.price}/month</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Status:</span>
+                  <span className="text-green-400 font-semibold">Active</span>
+                </div>
+              </>
             )}
-          </ul>
+          </div>
         </motion.div>
 
-        {/* Action Buttons */}
+        {/* Important Notes */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
-          className="space-y-3"
+          className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-4 mb-8"
+        >
+          <h3 className="text-blue-400 font-semibold mb-3">📋 Important Information:</h3>
+          <ul className="text-blue-300 text-sm space-y-2">
+            {trialActivated ? (
+              <>
+                <li>• Your free trial is now active with full access to all premium features</li>
+                <li>• No charges will be made during the 5-day trial period</li>
+                <li>• Cancel anytime during the trial to avoid any charges</li>
+                <li>• After the trial, you'll be charged £{plan.price}/month automatically</li>
+              </>
+            ) : (
+              <>
+                <li>• Your subscription is now active with immediate access to all features</li>
+                <li>• You'll be billed £{plan.price} monthly until you cancel</li>
+                <li>• You can manage your subscription in Settings</li>
+              </>
+            )}
+            <li>• You'll receive email confirmations for all billing activities</li>
+            <li>• Contact support if you have any questions or need assistance</li>
+          </ul>
+        </motion.div>
+
+        {/* Continue Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8 }}
+          className="text-center"
         >
           <button
             onClick={handleContinue}
-            className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center"
+            className="inline-flex items-center bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-8 rounded-lg transition-colors shadow-lg hover:shadow-xl"
           >
-            <RiStarLine className="h-5 w-5 mr-2" />
-            Start Using Premium Features
-            <RiArrowRightLine className="h-5 w-5 ml-2" />
+            {trialActivated ? 'Start Using Your Trial' : 'Go to Dashboard'}
+            <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
           </button>
           
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleViewBilling}
-              className="py-2 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm"
-            >
-              Manage Billing
-            </button>
-            <button
-              onClick={handleRefreshPage}
-              className="py-2 px-4 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors text-sm flex items-center justify-center"
-            >
-              <RiRefreshLine className="h-4 w-4 mr-1" />
-              Refresh
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Auto-refresh notice */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="mt-6 p-3 bg-gray-700 rounded-lg"
-        >
-          <div className="flex items-center justify-center text-gray-300 text-sm">
-            <RiRefreshLine className="h-4 w-4 mr-2" />
-            The app will refresh completely to ensure all premium features are activated
-          </div>
-        </motion.div>
-
-        {/* Support Info */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.9 }}
-          className="mt-8 pt-6 border-t border-gray-700"
-        >
-          <p className="text-gray-400 text-sm">
-            Need help? Contact support at{' '}
-            <a
-              href="mailto:support@trackio.com"
-              className="text-primary-400 hover:text-primary-300 transition-colors"
-            >
-              support@trackio.com
-            </a>
-          </p>
-          <p className="text-gray-500 text-xs mt-2">
-            💡 If premium features don't appear immediately, try refreshing the page
+          <p className="text-gray-400 text-sm mt-4">
+            {trialActivated 
+              ? 'Ready to explore all premium features!'
+              : 'Your subscription is ready to use!'
+            }
           </p>
         </motion.div>
-
-        {/* Debug Info (only show if there's an issue) */}
-        {debugInfo.isLiteralSessionId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.0 }}
-            className="mt-4 p-2 bg-yellow-900/20 border border-yellow-700 rounded text-xs"
-          >
-            <p className="text-yellow-400 font-medium mb-1">🔧 Technical Note:</p>
-            <p className="text-yellow-300">
-              Payment Link redirect URL needs configuration in Stripe Dashboard for optimal experience.
-            </p>
-          </motion.div>
-        )}
       </motion.div>
     </div>
   );

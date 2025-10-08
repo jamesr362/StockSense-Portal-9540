@@ -61,7 +61,7 @@ export const getWebhookEndpointUrl = () => {
   return `${baseUrl}/.netlify/functions/stripe-webhook`;
 };
 
-// Subscription plans configuration - STRICT FREE PLAN LIMITS
+// Subscription plans configuration - UPDATED WITH FREE TRIAL MESSAGING
 export const SUBSCRIPTION_PLANS = {
   free: {
     id: 'free',
@@ -91,6 +91,9 @@ export const SUBSCRIPTION_PLANS = {
     price: 9.99,
     priceId: 'price_1RxEcJEw1FLYKy8h3FDMZ6QP',
     paymentLink: 'https://buy.stripe.com/test_9B6fZh4xneOXcdN4zCcjS07',
+    // **UPDATED**: Enhanced free trial messaging
+    trialPeriod: 5, // 5 days
+    trialDescription: '5-Day FREE Trial - No charge for 5 days, then £9.99/month',
     // **NEW**: Dynamic payment link with proper redirect URLs
     dynamicPaymentLink: null, // Will be built dynamically
     features: [
@@ -230,6 +233,34 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
   };
 };
 
+// **NEW**: Get trial end date
+export const getTrialEndDate = (startDate = new Date(), trialDays = 5) => {
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + trialDays);
+  return endDate;
+};
+
+// **NEW**: Format trial information
+export const formatTrialInfo = (planId) => {
+  const plan = getPlanById(planId);
+  if (!plan || plan.price === 0) return null;
+  
+  const trialEndDate = getTrialEndDate();
+  
+  return {
+    trialDays: plan.trialPeriod || 5,
+    trialEndDate,
+    trialEndFormatted: trialEndDate.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }),
+    monthlyPrice: plan.price,
+    description: plan.trialDescription || `${plan.trialPeriod || 5}-Day FREE Trial - No charge for ${plan.trialPeriod || 5} days, then £${plan.price}/month`
+  };
+};
+
 // **ENHANCED**: Payment return detection with improved reliability
 export const detectPaymentReturn = () => {
   const urlParams = new URLSearchParams(window.location.search);
@@ -288,23 +319,25 @@ export const createEnhancedCheckoutSession = async (planId, userEmail, options =
   console.log('🚀 Creating enhanced checkout session for Payment Link...', {
     planId,
     userEmail,
-    paymentLink: plan.paymentLink
+    paymentLink: plan.paymentLink,
+    trialInfo: formatTrialInfo(planId)
   });
   
-  // **SIMPLIFIED APPROACH**: Store minimal tracking data
+  // **SIMPLIFIED APPROACH**: Store minimal tracking data with trial info
   const paymentData = {
     planId,
     userEmail,
     timestamp: Date.now(),
     sessionId: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-    source: 'payment_link'
+    source: 'payment_link',
+    trialInfo: formatTrialInfo(planId)
   };
   
   // Store tracking data
   sessionStorage.setItem('paymentTracking', JSON.stringify(paymentData));
   sessionStorage.setItem('awaitingPayment', 'true');
   
-  console.log('💾 Stored payment tracking data:', paymentData);
+  console.log('💾 Stored payment tracking data with trial info:', paymentData);
   
   // **NEW**: Set up comprehensive return monitoring
   setupPaymentReturnMonitoring(paymentData);
@@ -315,13 +348,14 @@ export const createEnhancedCheckoutSession = async (planId, userEmail, options =
     sessionId: paymentData.sessionId,
     planId,
     userEmail,
-    paymentData
+    paymentData,
+    trialInfo: paymentData.trialInfo
   };
 };
 
-// **NEW**: Comprehensive payment return monitoring system
+// **UPDATED**: Comprehensive payment return monitoring system with trial messaging
 const setupPaymentReturnMonitoring = (paymentData) => {
-  console.log('🎯 Setting up payment return monitoring...');
+  console.log('🎯 Setting up payment return monitoring with trial support...');
   
   // **METHOD 1**: Window focus monitoring (most reliable)
   const handleFocus = () => {
@@ -334,19 +368,28 @@ const setupPaymentReturnMonitoring = (paymentData) => {
       if (tracking && awaitingPayment) {
         console.log('💡 Payment tracking found, checking with user...');
         
-        // **SIMPLE USER CONFIRMATION**
+        const trialInfo = tracking.trialInfo;
+        const trialMessage = trialInfo ? 
+          `\n🎁 Your 5-day FREE trial has been activated!\n` +
+          `• Full access to all premium features\n` +
+          `• No charge until ${trialInfo.trialEndFormatted}\n` +
+          `• Then £${trialInfo.monthlyPrice}/month\n\n` :
+          '';
+        
+        // **ENHANCED USER CONFIRMATION WITH TRIAL INFO**
         const userConfirmed = confirm(
-          `🔔 Payment Confirmation\n\n` +
-          `Did you successfully complete your payment for the ${tracking.planId.toUpperCase()} plan?\n\n` +
-          `✅ Click OK if payment was successful\n` +
-          `❌ Click Cancel if you didn't complete payment or had issues`
+          `🔔 Payment Setup Confirmation\n\n` +
+          `Did you successfully complete the setup for your ${tracking.planId.toUpperCase()} plan?\n\n` +
+          trialMessage +
+          `✅ Click OK if setup was successful\n` +
+          `❌ Click Cancel if you didn't complete setup or had issues`
         );
         
         if (userConfirmed) {
-          console.log('✅ User confirmed payment success');
+          console.log('✅ User confirmed payment/trial setup success');
           processSuccessfulPayment(tracking);
         } else {
-          console.log('❌ User indicated payment was not successful');
+          console.log('❌ User indicated payment/trial setup was not successful');
           clearPaymentTracking();
         }
       }
@@ -406,32 +449,33 @@ const setupPaymentReturnMonitoring = (paymentData) => {
   }, 30 * 60 * 1000);
 };
 
-// **NEW**: Process successful payment
+// **UPDATED**: Process successful payment with trial info
 const processSuccessfulPayment = async (tracking) => {
   try {
-    console.log('🎉 Processing successful payment...', tracking);
+    console.log('🎉 Processing successful payment with trial info...', tracking);
     
     // Clear tracking
     clearPaymentTracking();
     
-    // Build success URL with all necessary parameters
+    // Build success URL with all necessary parameters including trial info
     const successUrl = `/#/payment-success?` + new URLSearchParams({
       payment_status: 'success',
       plan: tracking.planId,
       session_id: tracking.sessionId,
       user_email: tracking.userEmail,
       source: 'user_confirmation',
+      trial_activated: tracking.trialInfo ? 'true' : 'false',
       timestamp: Date.now().toString()
     }).toString();
     
-    console.log('🎯 Redirecting to success page:', successUrl);
+    console.log('🎯 Redirecting to success page with trial info:', successUrl);
     
     // Redirect to success page
     window.location.href = successUrl;
     
   } catch (error) {
     console.error('❌ Error processing successful payment:', error);
-    alert('Payment confirmation successful, but there was an issue. Please refresh the page or contact support.');
+    alert('Payment/trial setup confirmation successful, but there was an issue. Please refresh the page or contact support.');
   }
 };
 
@@ -442,10 +486,10 @@ const clearPaymentTracking = () => {
   console.log('🧹 Payment tracking cleared');
 };
 
-// **ENHANCED**: Handle post-payment processing
+// **ENHANCED**: Handle post-payment processing with trial support
 export const handlePostPaymentReturn = async (searchParams, userEmail) => {
   try {
-    console.log('🔄 Processing post-payment return...', {
+    console.log('🔄 Processing post-payment return with trial support...', {
       searchParams: Object.fromEntries(searchParams.entries()),
       userEmail
     });
@@ -454,6 +498,7 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
     const paymentStatus = searchParams.get('payment_status');
     const planId = searchParams.get('plan');
     const source = searchParams.get('source');
+    const trialActivated = searchParams.get('trial_activated') === 'true';
 
     // Enhanced success detection
     const isSuccessfulPayment = (
@@ -463,7 +508,10 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
     );
 
     if (isSuccessfulPayment && userEmail) {
-      console.log('✅ Valid payment return detected, activating subscription...');
+      console.log('✅ Valid payment/trial return detected, activating subscription...', {
+        trialActivated,
+        planId
+      });
 
       // Import subscription service
       const { updateUserSubscription } = await import('../services/subscriptionService');
@@ -472,7 +520,12 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
       const finalSessionId = sessionId || `pl_manual_${Date.now()}`;
       const finalPlanId = planId || 'professional';
       
-      await updateUserSubscription(userEmail, finalPlanId, finalSessionId);
+      // Add trial information to the subscription update
+      await updateUserSubscription(userEmail, finalPlanId, finalSessionId, {
+        trialActivated,
+        trialStartDate: new Date().toISOString(),
+        trialEndDate: trialActivated ? getTrialEndDate().toISOString() : null
+      });
       
       // Clear all relevant caches
       const cacheKeys = [
@@ -488,11 +541,12 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
         sessionStorage.removeItem(key);
       });
       
-      // Dispatch subscription update events
+      // Dispatch subscription update events with trial info
       const events = [
         'subscriptionUpdated',
         'refreshFeatureAccess',
-        'planActivated'
+        'planActivated',
+        ...(trialActivated ? ['trialActivated'] : [])
       ];
       
       events.forEach((eventName, index) => {
@@ -503,7 +557,9 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
               planId: finalPlanId,
               sessionId: finalSessionId,
               immediate: true,
-              source: 'post_payment_return'
+              source: 'post_payment_return',
+              trialActivated,
+              trialInfo: trialActivated ? formatTrialInfo(finalPlanId) : null
             }
           }));
         }, index * 100);
@@ -514,6 +570,8 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
         planId: finalPlanId,
         sessionId: finalSessionId,
         activated: true,
+        trialActivated,
+        trialInfo: trialActivated ? formatTrialInfo(finalPlanId) : null,
         source: 'payment_link_confirmed'
       };
     }
@@ -532,16 +590,17 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
   }
 };
 
-// **SIMPLIFIED**: Auto redirect handler
+// **SIMPLIFIED**: Auto redirect handler with trial support
 export const handlePaymentLinkReturn = () => {
   const detection = detectPaymentReturn();
   
   if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
-    console.log('🔄 Auto-handling payment return...');
+    console.log('🔄 Auto-handling payment return with trial support...');
     
     const sessionId = detection.sessionId || `pl_auto_${Date.now()}`;
     const planId = detection.planId || 'professional';
     const userEmail = sessionStorage.getItem('paymentUserEmail') || '';
+    const trialInfo = formatTrialInfo(planId);
     
     const successUrl = `/#/payment-success?` + new URLSearchParams({
       payment_status: 'success',
@@ -549,10 +608,11 @@ export const handlePaymentLinkReturn = () => {
       session_id: sessionId,
       user_email: userEmail,
       source: 'auto_redirect',
+      trial_activated: trialInfo ? 'true' : 'false',
       timestamp: Date.now().toString()
     }).toString();
     
-    console.log('🎯 Auto-redirecting to:', successUrl);
+    console.log('🎯 Auto-redirecting to success page with trial info:', successUrl);
     window.location.href = successUrl;
     
     return true;

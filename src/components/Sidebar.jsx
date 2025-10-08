@@ -76,14 +76,16 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
-      {/* Logo - Restored Original Branding */}
+      {/* Logo - Trackio Branding with Focus Icon */}
       <div className="flex items-center flex-shrink-0 px-4 py-6">
         <div className="flex items-center">
-          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
             <RiFocus3Line className="h-5 w-5 text-white" />
           </div>
           <div className="ml-3">
-            <h1 className="text-xl font-bold text-white">GoTrack</h1>
+            <h1 className="text-xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+              Trackio
+            </h1>
             <p className="text-xs text-gray-400">Inventory System</p>
           </div>
         </div>
@@ -101,7 +103,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
         {currentPlan === 'free' && (
           <Link
             to="/pricing"
-            className="block mt-2 px-3 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg text-center hover:bg-blue-700 transition-colors"
+            className="block mt-2 px-3 py-2 bg-primary-600 text-white text-xs font-medium rounded-lg text-center hover:bg-primary-700 transition-colors"
           >
             Upgrade to Pro
           </Link>
@@ -120,7 +122,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               onClick={() => handleNavClick(item.href, item.requiresFeature)}
               className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                 isActive(item.href)
-                  ? 'bg-blue-900 text-blue-100'
+                  ? 'bg-primary-900 text-primary-100'
                   : hasFeatureAccess
                     ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
                     : 'text-gray-500 hover:bg-gray-800 hover:text-gray-400'
@@ -129,7 +131,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               <item.icon
                 className={`mr-3 flex-shrink-0 h-5 w-5 ${
                   isActive(item.href)
-                    ? 'text-blue-300'
+                    ? 'text-primary-300'
                     : hasFeatureAccess
                       ? 'text-gray-400 group-hover:text-gray-300'
                       : 'text-gray-600'
@@ -150,7 +152,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
       <div className="flex-shrink-0 px-4 py-4 border-t border-gray-700">
         <div className="flex items-center">
           <div className="flex-shrink-0">
-            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
               <span className="text-sm font-medium text-white">
                 {user?.businessName?.charAt(0) || user?.email?.charAt(0) || 'U'}
               </span>

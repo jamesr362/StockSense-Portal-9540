@@ -1,5 +1,5 @@
 import {motion} from 'framer-motion';
-import {RiCheckLine, RiStarLine, RiArrowRightLine} from 'react-icons/ri';
+import {RiCheckLine, RiStarLine, RiArrowRightLine, RiGiftLine} from 'react-icons/ri';
 import {formatPrice} from '../lib/stripe';
 
 export default function PricingCard({
@@ -8,7 +8,8 @@ export default function PricingCard({
   onSelectPlan,
   currentPlan = null,
   isLoading = false,
-  buttonText = null
+  buttonText = null,
+  showFreeTrial = false
 }) {
   const isCurrentPlan = currentPlan === plan.id;
   const defaultButtonText = isCurrentPlan ? 'Current Plan' : 'Get Started';
@@ -43,26 +44,82 @@ export default function PricingCard({
         </div>
       )}
 
+      {/* Free Trial Badge */}
+      {showFreeTrial && plan.price > 0 && (
+        <div className="absolute top-0 left-0 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 text-xs font-bold rounded-br-lg">
+          <div className="flex items-center">
+            <RiGiftLine className="h-3 w-3 mr-1" />
+            5-DAY FREE TRIAL
+          </div>
+        </div>
+      )}
+
       <div className="px-6 py-8">
         {/* Plan name and price */}
         <div className="text-center mb-6">
           <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-          <div className="flex items-baseline justify-center">
-            <span className="text-4xl font-extrabold text-white">
-              {plan.price === 0 ? 'Free' : `£${plan.price}`}
-            </span>
-            {plan.price > 0 && (
-              <span className="text-xl font-semibold text-gray-400 ml-1">
-                /month
+          
+          {/* Free Trial Pricing Display */}
+          {showFreeTrial && plan.price > 0 ? (
+            <div className="space-y-2">
+              {/* Trial Period */}
+              <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3">
+                <div className="text-3xl font-extrabold text-green-400 mb-1">
+                  FREE
+                </div>
+                <div className="text-sm text-green-300 font-medium">
+                  First 5 days
+                </div>
+              </div>
+              
+              {/* Then Regular Price */}
+              <div className="text-gray-400">
+                <span className="text-lg">Then </span>
+                <span className="text-2xl font-bold text-white">£{plan.price}</span>
+                <span className="text-lg text-gray-400">/month</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-baseline justify-center">
+              <span className="text-4xl font-extrabold text-white">
+                {plan.price === 0 ? 'Free' : `£${plan.price}`}
               </span>
-            )}
-          </div>
+              {plan.price > 0 && (
+                <span className="text-xl font-semibold text-gray-400 ml-1">
+                  /month
+                </span>
+              )}
+            </div>
+          )}
+          
           {plan.price > 0 && (
-            <p className="text-gray-400 mt-2 text-sm">
-              Billed monthly • Cancel anytime
-            </p>
+            <div className="mt-3 space-y-1">
+              {showFreeTrial && (
+                <p className="text-green-400 text-sm font-medium">
+                  🎯 Try all features risk-free for 5 days
+                </p>
+              )}
+              <p className="text-gray-400 text-sm">
+                {showFreeTrial ? 'No charge during trial • ' : ''}Cancel anytime
+              </p>
+            </div>
           )}
         </div>
+
+        {/* Free Trial Benefits */}
+        {showFreeTrial && plan.price > 0 && (
+          <div className="mb-6 bg-green-900/20 border border-green-700/30 rounded-lg p-4">
+            <h4 className="text-green-400 font-semibold text-sm mb-2">
+              ⭐ 5-Day Trial Includes:
+            </h4>
+            <ul className="text-green-300 text-xs space-y-1">
+              <li>• Full access to all premium features</li>
+              <li>• No setup fees or hidden costs</li>
+              <li>• Cancel anytime during trial</li>
+              <li>• Card secured but not charged</li>
+            </ul>
+          </div>
+        )}
 
         {/* Features list */}
         <div className="space-y-4 mb-8">
@@ -111,8 +168,13 @@ export default function PricingCard({
         {!isCurrentPlan && plan.price > 0 && (
           <div className="mt-4 text-center">
             <p className="text-green-400 text-xs font-medium">
-              ⚡ Instant access after payment
+              {showFreeTrial ? '🎉 Start free trial instantly' : '⚡ Instant access after payment'}
             </p>
+            {showFreeTrial && (
+              <p className="text-gray-400 text-xs mt-1">
+                Billing starts after 5-day trial period
+              </p>
+            )}
           </div>
         )}
       </div>

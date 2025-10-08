@@ -34,9 +34,11 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
             </button>
           </div>
 
-          {/* Logo - Perfectly centered - Restored Original Branding */}
+          {/* Logo - Perfectly centered - Restored Original Trackio Branding */}
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:static lg:left-auto lg:transform-none">
-            <h1 className="text-xl sm:text-2xl font-bold text-white">GoTrack</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+              Trackio
+            </h1>
           </div>
 
           {/* User menu - Right side */}
