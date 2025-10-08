@@ -230,29 +230,41 @@ export const calculateProration = (currentPlan, newPlan, daysRemaining) => {
   };
 };
 
-// **NEW**: Enhanced payment return detection and handling
+// **ENHANCED**: Payment return detection with improved reliability
 export const detectPaymentReturn = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const referrer = document.referrer || '';
+  const currentUrl = window.location.href;
   
-  // Multiple detection methods
+  // Multiple detection methods with enhanced logic
   const indicators = {
     hasStripeParams: urlParams.has('session_id') || hashParams.has('session_id'),
     hasPaymentStatus: urlParams.get('payment_status') === 'success' || hashParams.get('payment_status') === 'success',
-    isFromStripe: referrer.includes('stripe.com') || referrer.includes('buy.stripe.com'),
+    isFromStripe: referrer.includes('stripe.com') || referrer.includes('buy.stripe.com') || referrer.includes('checkout.stripe.com'),
     hasSessionStorage: sessionStorage.getItem('stripePaymentAttempt') === 'true',
     hasPendingPayment: localStorage.getItem('pendingPayment') !== null,
-    isPaymentSuccessPage: window.location.href.includes('payment-success')
+    isPaymentSuccessPage: currentUrl.includes('payment-success'),
+    hasReturnTimestamp: urlParams.has('timestamp') || hashParams.has('timestamp'),
+    recentReturn: (() => {
+      const timestamp = urlParams.get('timestamp') || hashParams.get('timestamp');
+      if (timestamp) {
+        const timeDiff = Date.now() - parseInt(timestamp);
+        return timeDiff < 5 * 60 * 1000; // Within 5 minutes
+      }
+      return false;
+    })()
   };
   
   const isPaymentReturn = Object.values(indicators).some(Boolean);
   
-  console.log('🔍 Payment return detection:', {
+  console.log('🔍 Enhanced payment return detection:', {
     indicators,
     isPaymentReturn,
-    currentUrl: window.location.href,
-    referrer
+    currentUrl,
+    referrer,
+    urlParams: Object.fromEntries(urlParams.entries()),
+    hashParams: Object.fromEntries(hashParams.entries())
   });
   
   return {
@@ -260,11 +272,13 @@ export const detectPaymentReturn = () => {
     indicators,
     sessionId: urlParams.get('session_id') || hashParams.get('session_id'),
     planId: urlParams.get('plan') || hashParams.get('plan'),
-    paymentStatus: urlParams.get('payment_status') || hashParams.get('payment_status')
+    paymentStatus: urlParams.get('payment_status') || hashParams.get('payment_status'),
+    source: urlParams.get('source') || hashParams.get('source'),
+    timestamp: urlParams.get('timestamp') || hashParams.get('timestamp')
   };
 };
 
-// **ENHANCED**: Create checkout session for Payment Links with better redirect handling
+// **COMPLETELY REWRITTEN**: Simpler, more reliable approach
 export const createEnhancedCheckoutSession = async (planId, userEmail, options = {}) => {
   const plan = getPlanById(planId);
   if (!plan || !plan.paymentLink) {
@@ -277,114 +291,161 @@ export const createEnhancedCheckoutSession = async (planId, userEmail, options =
     paymentLink: plan.paymentLink
   });
   
-  // **STEP 1**: Store payment attempt for return detection
-  const paymentAttempt = {
+  // **SIMPLIFIED APPROACH**: Store minimal tracking data
+  const paymentData = {
     planId,
     userEmail,
     timestamp: Date.now(),
-    sessionId: `cs_link_${Math.random().toString(36).substring(2, 15)}`,
-    source: 'payment_link',
-    originalUrl: plan.paymentLink
+    sessionId: `pl_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    source: 'payment_link'
   };
   
-  // Store in both localStorage and sessionStorage for redundancy
-  localStorage.setItem('pendingPayment', JSON.stringify(paymentAttempt));
-  sessionStorage.setItem('stripePaymentAttempt', 'true');
-  sessionStorage.setItem('paymentPlanId', planId);
-  sessionStorage.setItem('paymentUserEmail', userEmail);
+  // Store tracking data
+  sessionStorage.setItem('paymentTracking', JSON.stringify(paymentData));
+  sessionStorage.setItem('awaitingPayment', 'true');
   
-  // **STEP 2**: Set up return detection with multiple methods
-  const setupReturnDetection = () => {
-    // Method 1: Window focus detection
-    const handleWindowFocus = () => {
-      setTimeout(() => {
-        const pendingPayment = JSON.parse(localStorage.getItem('pendingPayment') || 'null');
-        
-        if (pendingPayment && (Date.now() - pendingPayment.timestamp) < 30 * 60 * 1000) {
-          console.log('🔍 Window focused after payment attempt, checking return...');
-          
-          // Check if we're already on payment success page
-          if (window.location.href.includes('payment-success')) {
-            console.log('✅ Already on payment success page');
-            return;
-          }
-          
-          // **IMPORTANT**: Ask user to confirm payment
-          const confirmPayment = () => {
-            const result = confirm(
-              `🎉 Welcome back!\n\n` +
-              `Did you successfully complete your payment for the ${plan.name} plan?\n\n` +
-              `💳 Price: £${plan.price}/month\n\n` +
-              `✅ Click OK if payment was successful\n` +
-              `❌ Click Cancel if you didn't complete the payment`
-            );
-            
-            if (result) {
-              console.log('✅ User confirmed successful payment');
-              
-              // Clear storage
-              localStorage.removeItem('pendingPayment');
-              sessionStorage.removeItem('stripePaymentAttempt');
-              
-              // Redirect to success page
-              const successUrl = `/#/payment-success?payment_status=success&plan=${pendingPayment.planId}&session_id=${pendingPayment.sessionId}&user_email=${encodeURIComponent(pendingPayment.userEmail)}&source=user_confirmation&timestamp=${Date.now()}`;
-              
-              window.location.href = successUrl;
-            } else {
-              console.log('❌ User cancelled or payment was unsuccessful');
-              localStorage.removeItem('pendingPayment');
-              sessionStorage.removeItem('stripePaymentAttempt');
-            }
-          };
-          
-          // Small delay to ensure page is fully loaded
-          setTimeout(confirmPayment, 1000);
-        }
-      }, 2000); // Wait 2 seconds after focus
-    };
-    
-    // Method 2: Periodic check for return
-    const checkInterval = setInterval(() => {
-      const detection = detectPaymentReturn();
-      
-      if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
-        console.log('🔄 Payment return detected via periodic check');
-        clearInterval(checkInterval);
-        
-        const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${detection.sessionId || paymentAttempt.sessionId}&user_email=${encodeURIComponent(userEmail)}&source=periodic_check&timestamp=${Date.now()}`;
-        
-        window.location.href = successUrl;
-      }
-    }, 5000); // Check every 5 seconds
-    
-    // Clean up after 30 minutes
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      window.removeEventListener('focus', handleWindowFocus);
-    }, 30 * 60 * 1000);
-    
-    // Add focus listener
-    window.addEventListener('focus', handleWindowFocus);
-  };
+  console.log('💾 Stored payment tracking data:', paymentData);
   
-  // **STEP 3**: Set up detection after small delay
-  setTimeout(setupReturnDetection, 1000);
+  // **NEW**: Set up comprehensive return monitoring
+  setupPaymentReturnMonitoring(paymentData);
   
-  // **STEP 4**: Return payment link data
+  // Return the payment link
   return {
     url: plan.paymentLink,
-    originalUrl: plan.paymentLink,
-    sessionId: paymentAttempt.sessionId,
+    sessionId: paymentData.sessionId,
     planId,
     userEmail,
-    paymentAttempt
+    paymentData
   };
 };
 
-// **NEW**: Function to handle post-payment processing for Payment Links
+// **NEW**: Comprehensive payment return monitoring system
+const setupPaymentReturnMonitoring = (paymentData) => {
+  console.log('🎯 Setting up payment return monitoring...');
+  
+  // **METHOD 1**: Window focus monitoring (most reliable)
+  const handleFocus = () => {
+    console.log('👁️ Window focused - checking payment status...');
+    
+    setTimeout(() => {
+      const tracking = JSON.parse(sessionStorage.getItem('paymentTracking') || 'null');
+      const awaitingPayment = sessionStorage.getItem('awaitingPayment') === 'true';
+      
+      if (tracking && awaitingPayment) {
+        console.log('💡 Payment tracking found, checking with user...');
+        
+        // **SIMPLE USER CONFIRMATION**
+        const userConfirmed = confirm(
+          `🔔 Payment Confirmation\n\n` +
+          `Did you successfully complete your payment for the ${tracking.planId.toUpperCase()} plan?\n\n` +
+          `✅ Click OK if payment was successful\n` +
+          `❌ Click Cancel if you didn't complete payment or had issues`
+        );
+        
+        if (userConfirmed) {
+          console.log('✅ User confirmed payment success');
+          processSuccessfulPayment(tracking);
+        } else {
+          console.log('❌ User indicated payment was not successful');
+          clearPaymentTracking();
+        }
+      }
+    }, 1500); // Give page time to load
+  };
+  
+  // **METHOD 2**: Page visibility monitoring
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      console.log('👀 Page became visible - checking payment...');
+      setTimeout(handleFocus, 1000);
+    }
+  };
+  
+  // **METHOD 3**: Periodic background checking
+  let checkCount = 0;
+  const maxChecks = 20; // Check for 10 minutes (30s intervals)
+  
+  const periodicCheck = () => {
+    checkCount++;
+    const tracking = JSON.parse(sessionStorage.getItem('paymentTracking') || 'null');
+    const awaitingPayment = sessionStorage.getItem('awaitingPayment') === 'true';
+    
+    console.log(`🔄 Periodic check ${checkCount}/${maxChecks}`, { tracking: !!tracking, awaitingPayment });
+    
+    if (!tracking || !awaitingPayment || checkCount >= maxChecks) {
+      console.log('🛑 Stopping periodic checks');
+      return;
+    }
+    
+    // Check if we're back from Stripe based on referrer
+    const referrer = document.referrer || '';
+    if (referrer.includes('stripe.com') || referrer.includes('buy.stripe.com')) {
+      console.log('🎯 Detected return from Stripe!');
+      setTimeout(() => {
+        handleFocus(); // Trigger the confirmation dialog
+      }, 2000);
+      return;
+    }
+    
+    // Continue checking
+    setTimeout(periodicCheck, 30000); // Check every 30 seconds
+  };
+  
+  // Start monitoring
+  window.addEventListener('focus', handleFocus);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  // Start periodic checking after initial delay
+  setTimeout(periodicCheck, 10000); // Start checking after 10 seconds
+  
+  // Cleanup after 30 minutes
+  setTimeout(() => {
+    window.removeEventListener('focus', handleFocus);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    console.log('🧹 Payment monitoring cleanup completed');
+  }, 30 * 60 * 1000);
+};
+
+// **NEW**: Process successful payment
+const processSuccessfulPayment = async (tracking) => {
+  try {
+    console.log('🎉 Processing successful payment...', tracking);
+    
+    // Clear tracking
+    clearPaymentTracking();
+    
+    // Build success URL with all necessary parameters
+    const successUrl = `/#/payment-success?` + new URLSearchParams({
+      payment_status: 'success',
+      plan: tracking.planId,
+      session_id: tracking.sessionId,
+      user_email: tracking.userEmail,
+      source: 'user_confirmation',
+      timestamp: Date.now().toString()
+    }).toString();
+    
+    console.log('🎯 Redirecting to success page:', successUrl);
+    
+    // Redirect to success page
+    window.location.href = successUrl;
+    
+  } catch (error) {
+    console.error('❌ Error processing successful payment:', error);
+    alert('Payment confirmation successful, but there was an issue. Please refresh the page or contact support.');
+  }
+};
+
+// **NEW**: Clear payment tracking
+const clearPaymentTracking = () => {
+  sessionStorage.removeItem('paymentTracking');
+  sessionStorage.removeItem('awaitingPayment');
+  console.log('🧹 Payment tracking cleared');
+};
+
+// **ENHANCED**: Handle post-payment processing
 export const handlePostPaymentReturn = async (searchParams, userEmail) => {
   try {
-    console.log('🔄 Processing post-payment return for Payment Links...', {
+    console.log('🔄 Processing post-payment return...', {
       searchParams: Object.fromEntries(searchParams.entries()),
       userEmail
     });
@@ -394,34 +455,32 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
     const planId = searchParams.get('plan');
     const source = searchParams.get('source');
 
-    // Check for various success indicators
-    const isSuccessfulPayment = paymentStatus === 'success' || 
-                               sessionId?.startsWith('cs_') ||
-                               source === 'user_confirmation' ||
-                               source === 'periodic_check' ||
-                               source === 'focus_detection';
+    // Enhanced success detection
+    const isSuccessfulPayment = (
+      paymentStatus === 'success' ||
+      source === 'user_confirmation' ||
+      (sessionId && sessionId.startsWith('pl_'))
+    );
 
     if (isSuccessfulPayment && userEmail) {
-      console.log('✅ Valid payment return detected, processing subscription activation...');
+      console.log('✅ Valid payment return detected, activating subscription...');
 
       // Import subscription service
       const { updateUserSubscription } = await import('../services/subscriptionService');
       
-      // Update subscription directly to ensure immediate activation
-      const finalSessionId = sessionId || `cs_manual_${Date.now()}`;
+      // Update subscription
+      const finalSessionId = sessionId || `pl_manual_${Date.now()}`;
       const finalPlanId = planId || 'professional';
       
       await updateUserSubscription(userEmail, finalPlanId, finalSessionId);
       
-      // Clear all caches for immediate refresh
+      // Clear all relevant caches
       const cacheKeys = [
         `featureCache_${userEmail}`,
         `subscriptionCache_${userEmail}`,
         `planLimits_${userEmail}`,
-        'pendingPayment',
-        'stripePaymentAttempt',
-        'paymentPlanId',
-        'paymentUserEmail'
+        'paymentTracking',
+        'awaitingPayment'
       ];
       
       cacheKeys.forEach(key => {
@@ -429,45 +488,43 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
         sessionStorage.removeItem(key);
       });
       
-      // Dispatch immediate subscription update event
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: {
-          userEmail,
-          planId: finalPlanId,
-          sessionId: finalSessionId,
-          immediate: true,
-          source: 'post_payment_return_payment_link'
-        }
-      }));
-
-      // Force feature access refresh
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-          detail: {
-            source: 'post_payment_payment_link',
-            immediate: true,
-            userEmail,
-            force: true
-          }
-        }));
-      }, 500);
+      // Dispatch subscription update events
+      const events = [
+        'subscriptionUpdated',
+        'refreshFeatureAccess',
+        'planActivated'
+      ];
+      
+      events.forEach((eventName, index) => {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(eventName, {
+            detail: {
+              userEmail,
+              planId: finalPlanId,
+              sessionId: finalSessionId,
+              immediate: true,
+              source: 'post_payment_return'
+            }
+          }));
+        }, index * 100);
+      });
 
       return {
         success: true,
         planId: finalPlanId,
         sessionId: finalSessionId,
         activated: true,
-        source: 'payment_link'
+        source: 'payment_link_confirmed'
       };
     }
 
     return {
       success: false,
-      reason: 'Invalid payment return parameters for Payment Link'
+      reason: 'Invalid payment return parameters'
     };
 
   } catch (error) {
-    console.error('❌ Error processing post-payment return for Payment Link:', error);
+    console.error('❌ Error processing post-payment return:', error);
     return {
       success: false,
       error: error.message
@@ -475,27 +532,28 @@ export const handlePostPaymentReturn = async (searchParams, userEmail) => {
   }
 };
 
-// **NEW**: Manual redirect handler for when payment links don't support redirect URLs
+// **SIMPLIFIED**: Auto redirect handler
 export const handlePaymentLinkReturn = () => {
   const detection = detectPaymentReturn();
   
   if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
-    console.log('🔄 Detected payment return, redirecting to payment success...');
+    console.log('🔄 Auto-handling payment return...');
     
-    // Extract available parameters
-    const sessionId = detection.sessionId || `cs_auto_${Date.now()}`;
-    const planId = detection.planId || sessionStorage.getItem('paymentPlanId') || 'professional';
+    const sessionId = detection.sessionId || `pl_auto_${Date.now()}`;
+    const planId = detection.planId || 'professional';
     const userEmail = sessionStorage.getItem('paymentUserEmail') || '';
     
-    // Build success URL
-    const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${sessionId}&user_email=${encodeURIComponent(userEmail)}&source=auto_redirect&timestamp=${Date.now()}`;
+    const successUrl = `/#/payment-success?` + new URLSearchParams({
+      payment_status: 'success',
+      plan: planId,
+      session_id: sessionId,
+      user_email: userEmail,
+      source: 'auto_redirect',
+      timestamp: Date.now().toString()
+    }).toString();
     
     console.log('🎯 Auto-redirecting to:', successUrl);
-    
-    // Redirect to payment success page
-    setTimeout(() => {
-      window.location.href = successUrl;
-    }, 100);
+    window.location.href = successUrl;
     
     return true;
   }
