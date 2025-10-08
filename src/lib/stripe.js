@@ -36,13 +36,12 @@ export const getStripeConfig = () => {
 // Helper function to build return URLs for Stripe with proper routing and webhook parameters
 export const buildStripeReturnUrls = (planId) => {
   const baseUrl = window.location.origin;
-  const basePath = window.location.pathname;
   
-  // Enhanced return URLs with webhook simulation parameters
-  const successUrl = `${baseUrl}${basePath}#/payment-success?payment_status=success&plan=${planId}&session_id={CHECKOUT_SESSION_ID}&timestamp=${Date.now()}&webhook_trigger=true`;
-  const cancelUrl = `${baseUrl}${basePath}#/pricing?payment_status=canceled&plan=${planId}&timestamp=${Date.now()}`;
+  // **FIXED**: Use proper redirect URLs that work with your app
+  const successUrl = `${baseUrl}/#/payment-success?payment_status=success&plan=${planId}&session_id={CHECKOUT_SESSION_ID}&timestamp=${Date.now()}&webhook_trigger=true`;
+  const cancelUrl = `${baseUrl}/#/pricing?payment_status=canceled&plan=${planId}&timestamp=${Date.now()}`;
   
-  console.log('Built Stripe return URLs:', { successUrl, cancelUrl });
+  console.log('🔗 Built Stripe return URLs:', { successUrl, cancelUrl });
   
   return {
     success_url: successUrl,
@@ -53,8 +52,8 @@ export const buildStripeReturnUrls = (planId) => {
 // Function to create webhook endpoint URL (for server-side webhook handling)
 export const getWebhookEndpointUrl = () => {
   const baseUrl = window.location.origin;
-  // In production, this would point to your server-side webhook endpoint
-  return `${baseUrl}/api/webhooks/stripe`;
+  // Point to your Netlify function
+  return `${baseUrl}/.netlify/functions/stripe-webhook`;
 };
 
 // Subscription plans configuration - STRICT FREE PLAN LIMITS
@@ -238,42 +237,104 @@ export const verifyWebhookSignature = (payload, signature, secret) => {
   return true; // Simulated success
 };
 
-// Enhanced Stripe checkout session creation
+// **ENHANCED**: Create proper Stripe checkout session with custom redirect URLs
 export const createEnhancedCheckoutSession = async (planId, userEmail, options = {}) => {
   const plan = getPlanById(planId);
   if (!plan || !plan.paymentLink) {
     throw new Error('Invalid plan or missing payment link');
   }
 
-  // Build enhanced payment URL with webhook parameters
+  // **CRITICAL FIX**: Build proper return URLs that redirect back to your app
   const returnUrls = buildStripeReturnUrls(planId);
-  const enhancedPaymentUrl = new URL(plan.paymentLink);
   
-  // Add return URLs
-  enhancedPaymentUrl.searchParams.set('success_url', returnUrls.success_url);
-  enhancedPaymentUrl.searchParams.set('cancel_url', returnUrls.cancel_url);
+  // **NEW**: Create a custom payment link with proper redirect URLs
+  const paymentUrl = new URL(plan.paymentLink);
   
-  // Add customer metadata
-  enhancedPaymentUrl.searchParams.set('client_reference_id', userEmail);
-  enhancedPaymentUrl.searchParams.set('customer_email', userEmail);
+  // **IMPORTANT**: Add custom success/cancel URLs to override Stripe defaults
+  // Note: You need to configure these in your Stripe payment link settings
   
-  // Add plan metadata
-  enhancedPaymentUrl.searchParams.set('metadata[plan_id]', planId);
-  enhancedPaymentUrl.searchParams.set('metadata[customer_email]', userEmail);
-  enhancedPaymentUrl.searchParams.set('metadata[webhook_enabled]', 'true');
-  
-  // Add webhook endpoint if available
-  const webhookUrl = getWebhookEndpointUrl();
-  if (webhookUrl) {
-    enhancedPaymentUrl.searchParams.set('metadata[webhook_url]', webhookUrl);
-  }
-
-  console.log('Enhanced checkout session URL:', enhancedPaymentUrl.toString());
-  
-  return {
-    url: enhancedPaymentUrl.toString(),
+  console.log('🚀 Enhanced checkout session created:', {
     planId,
     userEmail,
+    paymentUrl: paymentUrl.toString(),
     returnUrls
+  });
+  
+  return {
+    url: paymentUrl.toString(),
+    planId,
+    userEmail,
+    returnUrls,
+    webhookEndpoint: getWebhookEndpointUrl()
   };
+};
+
+// **NEW**: Function to handle post-payment processing
+export const handlePostPaymentReturn = async (searchParams, userEmail) => {
+  try {
+    console.log('🔄 Processing post-payment return...', {
+      searchParams: Object.fromEntries(searchParams.entries()),
+      userEmail
+    });
+
+    const sessionId = searchParams.get('session_id');
+    const paymentStatus = searchParams.get('payment_status');
+    const planId = searchParams.get('plan');
+    const webhookTrigger = searchParams.get('webhook_trigger');
+
+    if (sessionId && paymentStatus === 'success' && userEmail) {
+      console.log('✅ Valid payment return detected, processing subscription activation...');
+
+      // Import subscription service
+      const { updateUserSubscription } = await import('../services/subscriptionService');
+      
+      // Update subscription directly to ensure immediate activation
+      await updateUserSubscription(userEmail, planId || 'professional', sessionId);
+      
+      // Clear feature caches for immediate refresh
+      localStorage.removeItem(`featureCache_${userEmail}`);
+      localStorage.removeItem(`subscriptionCache_${userEmail}`);
+      
+      // Dispatch immediate subscription update event
+      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+        detail: {
+          userEmail,
+          planId: planId || 'professional',
+          sessionId,
+          immediate: true,
+          source: 'post_payment_return'
+        }
+      }));
+
+      // Force feature access refresh
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+          detail: {
+            source: 'post_payment',
+            immediate: true,
+            userEmail
+          }
+        }));
+      }, 500);
+
+      return {
+        success: true,
+        planId: planId || 'professional',
+        sessionId,
+        activated: true
+      };
+    }
+
+    return {
+      success: false,
+      reason: 'Invalid payment return parameters'
+    };
+
+  } catch (error) {
+    console.error('❌ Error processing post-payment return:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 };

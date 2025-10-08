@@ -3,9 +3,9 @@ import { motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { RiCheckLine, RiArrowRightLine, RiStarLine, RiRefreshLine, RiAlertLine } from 'react-icons/ri';
 import { logSecurityEvent } from '../utils/security';
-import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import { SUBSCRIPTION_PLANS, handlePostPaymentReturn } from '../lib/stripe';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { updateUserSubscription } from '../services/subscriptionService';
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -24,7 +24,13 @@ export default function PaymentSuccess() {
         const sessionId = searchParams.get('session_id');
         const paymentStatus = searchParams.get('payment_status');
         
-        console.log('🎉 PaymentSuccess page loaded:', { planId, sessionId, paymentStatus, userEmail: user?.email });
+        console.log('🎉 PaymentSuccess page loaded:', { 
+          planId, 
+          sessionId, 
+          paymentStatus, 
+          userEmail: user?.email,
+          allParams: Object.fromEntries(searchParams.entries())
+        });
 
         if (!user?.email) {
           setError('User not authenticated. Please log in and try again.');
@@ -44,8 +50,8 @@ export default function PaymentSuccess() {
           paymentStatus
         });
 
-        // Update subscription in database
-        await updateUserSubscription(finalPlanId, sessionId);
+        // **ENHANCED**: Process payment return and activate subscription
+        await processPaymentReturn(finalPlanId, sessionId, paymentStatus);
         
       } catch (error) {
         console.error('❌ Error handling payment success:', error);
@@ -62,82 +68,69 @@ export default function PaymentSuccess() {
     }
   }, [searchParams, user?.email]);
 
-  const updateUserSubscription = async (planId, sessionId) => {
+  const processPaymentReturn = async (planId, sessionId, paymentStatus) => {
     try {
       setIsUpdatingSubscription(true);
       setError('');
 
-      console.log('📝 Updating subscription for user:', user.email, 'Plan:', planId);
+      console.log('🔄 Processing payment return for subscription activation...', {
+        planId,
+        sessionId,
+        paymentStatus,
+        userEmail: user.email
+      });
 
-      if (!supabase) {
-        throw new Error('Database connection not available');
+      // **STEP 1**: Use the enhanced post-payment handler
+      const postPaymentResult = await handlePostPaymentReturn(searchParams, user.email);
+      
+      if (postPaymentResult.success) {
+        console.log('✅ Post-payment processing successful:', postPaymentResult);
+        setSubscriptionUpdated(true);
+        return;
       }
 
-      // Check if user already has a subscription
-      const { data: existingSubscription, error: fetchError } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .select('*')
-        .eq('user_email', user.email.toLowerCase())
-        .single();
+      // **STEP 2**: Fallback - Direct subscription update
+      console.log('⚠️ Post-payment handler failed, using direct subscription update...');
+      
+      await updateUserSubscription(user.email, planId, sessionId);
 
-      const subscriptionData = {
-        user_email: user.email.toLowerCase(),
-        stripe_customer_id: sessionId ? `cus_${sessionId.substring(0, 10)}` : `cus_${Math.random().toString(36).substring(2, 15)}`,
-        stripe_subscription_id: sessionId || `sub_${Math.random().toString(36).substring(2, 15)}`,
-        stripe_session_id: sessionId,
-        plan_id: `price_${planId}`,
-        status: 'active',
-        current_period_start: new Date().toISOString(),
-        current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        cancel_at_period_end: false,
-        canceled_at: null,
-        updated_at: new Date().toISOString()
-      };
-
-      if (existingSubscription && !fetchError) {
-        // Update existing subscription
-        const { error: updateError } = await supabase
-          .from('subscriptions_tb2k4x9p1m')
-          .update(subscriptionData)
-          .eq('user_email', user.email.toLowerCase());
-
-        if (updateError) throw updateError;
-        console.log('✅ Successfully updated existing subscription');
-      } else {
-        // Create new subscription
-        subscriptionData.created_at = new Date().toISOString();
-        const { error: insertError } = await supabase
-          .from('subscriptions_tb2k4x9p1m')
-          .insert([subscriptionData]);
-
-        if (insertError) throw insertError;
-        console.log('✅ Successfully created new subscription');
-      }
-
-      // Clear feature access cache for immediate refresh
+      // **STEP 3**: Clear all caches for immediate refresh
       localStorage.removeItem(`featureCache_${user.email}`);
       localStorage.removeItem(`subscriptionCache_${user.email}`);
+      localStorage.removeItem(`planLimits_${user.email}`);
       
-      // Dispatch subscription update event
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { 
-          userEmail: user.email, 
-          planId,
-          immediate: true,
-          source: 'payment_success'
-        }
-      }));
+      // **STEP 4**: Dispatch multiple update events for maximum compatibility
+      const updateEvents = [
+        'subscriptionUpdated',
+        'refreshFeatureAccess',
+        'planChanged',
+        'userUpgraded'
+      ];
+
+      updateEvents.forEach(eventName => {
+        window.dispatchEvent(new CustomEvent(eventName, {
+          detail: { 
+            userEmail: user.email, 
+            planId,
+            sessionId,
+            immediate: true,
+            source: 'payment_success_page',
+            timestamp: Date.now()
+          }
+        }));
+      });
 
       setSubscriptionUpdated(true);
 
       logSecurityEvent('SUBSCRIPTION_ACTIVATED_FROM_PAYMENT', {
         userEmail: user.email,
         planId: `price_${planId}`,
-        sessionId
+        sessionId,
+        method: 'direct_update'
       });
 
     } catch (error) {
-      console.error('❌ Error updating subscription after payment:', error);
+      console.error('❌ Error processing payment return:', error);
       setError(`Failed to activate subscription: ${error.message}`);
       logSecurityEvent('SUBSCRIPTION_UPDATE_ERROR_AFTER_PAYMENT', {
         error: error.message,
@@ -149,9 +142,26 @@ export default function PaymentSuccess() {
   };
 
   const handleContinue = () => {
-    // Force refresh to ensure all components update with new subscription
-    console.log('🔄 Redirecting to dashboard with feature refresh...');
-    window.location.href = '/dashboard';
+    // **ENHANCED**: Force complete app refresh to ensure all components update
+    console.log('🔄 Redirecting to dashboard with full app refresh...');
+    
+    // Clear additional caches
+    localStorage.removeItem('routeCache');
+    localStorage.removeItem('componentCache');
+    
+    // Force refresh feature access one more time
+    window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+      detail: {
+        source: 'payment_success_continue',
+        immediate: true,
+        force: true
+      }
+    }));
+
+    // Use window.location for complete refresh instead of navigate
+    setTimeout(() => {
+      window.location.href = '/#/dashboard';
+    }, 100);
   };
 
   const handleViewBilling = () => {
@@ -164,6 +174,7 @@ export default function PaymentSuccess() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-4"></div>
           <p className="text-gray-400">Processing your payment confirmation...</p>
+          <p className="text-gray-500 text-sm mt-2">Activating premium features...</p>
         </div>
       </div>
     );
@@ -180,17 +191,17 @@ export default function PaymentSuccess() {
           <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <RiAlertLine className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-4">Payment Error</h1>
+          <h1 className="text-2xl font-bold text-white mb-4">Payment Processing Error</h1>
           <p className="text-gray-300 mb-6">{error}</p>
           <div className="space-y-3">
             <button
-              onClick={() => navigate('/pricing')}
+              onClick={() => window.location.href = '/#/pricing'}
               className="w-full py-3 px-6 bg-primary-600 text-white rounded-lg font-semibold hover:bg-primary-700 transition-colors"
             >
               Try Again
             </button>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => window.location.href = '/#/dashboard'}
               className="w-full py-2 px-6 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
             >
               Return to Dashboard
@@ -250,6 +261,7 @@ export default function PaymentSuccess() {
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400 mr-2"></div>
               Activating your premium features...
             </div>
+            <p className="text-blue-400 text-xs mt-1">This may take a few seconds</p>
           </motion.div>
         )}
 
@@ -264,6 +276,7 @@ export default function PaymentSuccess() {
               <RiCheckLine className="h-4 w-4 mr-2" />
               🚀 Premium features activated successfully!
             </div>
+            <p className="text-green-400 text-xs mt-1">All Professional features are now unlocked</p>
           </motion.div>
         )}
 
@@ -354,7 +367,7 @@ export default function PaymentSuccess() {
         >
           <div className="flex items-center justify-center text-gray-300 text-sm">
             <RiRefreshLine className="h-4 w-4 mr-2" />
-            The app will refresh when you continue to ensure all features are activated
+            The app will refresh completely to ensure all premium features are activated
           </div>
         </motion.div>
 
