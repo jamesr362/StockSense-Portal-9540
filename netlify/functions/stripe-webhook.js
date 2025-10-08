@@ -190,9 +190,6 @@ exports.handler = async (event, context) => {
   });
 
   try {
-    // Ensure database is properly set up before processing
-    await ensureTablesExist();
-
     // Handle the event
     switch (stripeEvent.type) {
       case 'checkout.session.completed':
@@ -270,150 +267,6 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function ensureTablesExist() {
-  console.log('🔧 Ensuring database tables exist...');
-  
-  try {
-    // First, try to query the table to see if it exists
-    const { data, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('id')
-      .limit(1);
-    
-    if (error && error.message?.includes('relation') && error.message?.includes('does not exist')) {
-      console.log('📋 Subscriptions table does not exist, creating...');
-      await createSubscriptionsTable();
-    } else if (error && error.message?.includes('column') && error.message?.includes('does not exist')) {
-      console.log('📋 Table exists but missing columns, updating schema...');
-      await updateTableSchema();
-    } else if (error) {
-      console.error('❌ Unexpected database error:', error);
-      // Try to create the table anyway
-      await createSubscriptionsTable();
-    } else {
-      console.log('✅ Subscriptions table already exists');
-    }
-  } catch (error) {
-    console.error('❌ Error ensuring tables exist:', error);
-    // Try to create the table as a fallback
-    await createSubscriptionsTable();
-  }
-}
-
-async function createSubscriptionsTable() {
-  console.log('🏗️ Creating subscriptions table...');
-  
-  try {
-    // Use direct SQL execution
-    const { error } = await supabase.rpc('exec_sql', {
-      sql: `
-        -- Create subscriptions table with all required columns
-        CREATE TABLE IF NOT EXISTS subscriptions_tb2k4x9p1m (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          user_email TEXT NOT NULL UNIQUE,
-          stripe_customer_id TEXT,
-          stripe_subscription_id TEXT UNIQUE,
-          stripe_session_id TEXT,
-          plan_id TEXT NOT NULL DEFAULT 'price_free',
-          status TEXT NOT NULL DEFAULT 'active',
-          current_period_start TIMESTAMPTZ DEFAULT NOW(),
-          current_period_end TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
-          cancel_at_period_end BOOLEAN DEFAULT FALSE,
-          canceled_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ DEFAULT NOW(),
-          updated_at TIMESTAMPTZ DEFAULT NOW()
-        );
-
-        -- Enable RLS
-        ALTER TABLE subscriptions_tb2k4x9p1m ENABLE ROW LEVEL SECURITY;
-
-        -- Drop existing policies if they exist
-        DROP POLICY IF EXISTS "Users can view own subscription" ON subscriptions_tb2k4x9p1m;
-        DROP POLICY IF EXISTS "Service role can manage all subscriptions" ON subscriptions_tb2k4x9p1m;
-        DROP POLICY IF EXISTS "Allow webhook access" ON subscriptions_tb2k4x9p1m;
-
-        -- Create policies
-        CREATE POLICY "Users can view own subscription" 
-        ON subscriptions_tb2k4x9p1m FOR SELECT 
-        USING (user_email = auth.jwt() ->> 'email' OR user_email = current_setting('app.current_user_email', true));
-
-        CREATE POLICY "Service role can manage all subscriptions" 
-        ON subscriptions_tb2k4x9p1m FOR ALL 
-        USING (auth.role() = 'service_role');
-
-        CREATE POLICY "Allow webhook access" 
-        ON subscriptions_tb2k4x9p1m FOR ALL 
-        USING (true);
-
-        -- Create indexes
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_user_email 
-        ON subscriptions_tb2k4x9p1m (user_email);
-        
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer 
-        ON subscriptions_tb2k4x9p1m (stripe_customer_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription 
-        ON subscriptions_tb2k4x9p1m (stripe_subscription_id);
-      `
-    }).catch(async (rpcError) => {
-      // If RPC doesn't work, try alternative approach
-      console.log('⚠️ RPC failed, trying alternative table creation...');
-      throw rpcError;
-    });
-
-    if (error) {
-      console.error('❌ Error creating subscriptions table:', error);
-      throw error;
-    } else {
-      console.log('✅ Subscriptions table created successfully');
-    }
-  } catch (error) {
-    console.error('❌ Failed to create subscriptions table:', error);
-    // Continue processing anyway - we'll handle the error in the subscription functions
-  }
-}
-
-async function updateTableSchema() {
-  console.log('🔧 Updating table schema...');
-  
-  try {
-    const { error } = await supabase.rpc('exec_sql', {
-      sql: `
-        -- Add missing columns if they don't exist
-        ALTER TABLE subscriptions_tb2k4x9p1m 
-        ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
-        ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT,
-        ADD COLUMN IF NOT EXISTS stripe_session_id TEXT,
-        ADD COLUMN IF NOT EXISTS current_period_start TIMESTAMPTZ DEFAULT NOW(),
-        ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
-        ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE,
-        ADD COLUMN IF NOT EXISTS canceled_at TIMESTAMPTZ,
-        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-
-        -- Create unique constraint if it doesn't exist
-        ALTER TABLE subscriptions_tb2k4x9p1m 
-        ADD CONSTRAINT IF NOT EXISTS subscriptions_stripe_subscription_id_key 
-        UNIQUE (stripe_subscription_id);
-
-        -- Create indexes if they don't exist
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer 
-        ON subscriptions_tb2k4x9p1m (stripe_customer_id);
-        
-        CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_subscription 
-        ON subscriptions_tb2k4x9p1m (stripe_subscription_id);
-      `
-    });
-
-    if (error) {
-      console.error('❌ Error updating table schema:', error);
-    } else {
-      console.log('✅ Table schema updated successfully');
-    }
-  } catch (error) {
-    console.error('❌ Failed to update table schema:', error);
-  }
-}
-
 async function handleCheckoutSessionCompleted(session) {
   console.log('💳 Processing checkout session completed:', {
     sessionId: session.id,
@@ -456,12 +309,12 @@ async function handleCheckoutSessionCompleted(session) {
 
   console.log('📋 Plan ID determined:', planId);
 
-  // Create subscription data
+  // **FIXED**: Create subscription data WITHOUT stripe_session_id to match actual database schema
   const subscriptionData = {
     user_email: customerEmail.toLowerCase(),
     stripe_customer_id: session.customer,
     stripe_subscription_id: subscriptionId,
-    stripe_session_id: session.id,
+    // REMOVED: stripe_session_id: session.id, // This column doesn't exist in the actual schema
     plan_id: `price_${planId}`,
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -472,7 +325,7 @@ async function handleCheckoutSessionCompleted(session) {
     updated_at: new Date().toISOString()
   };
 
-  console.log('💾 Saving subscription data:', {
+  console.log('💾 Saving subscription data (matching database schema):', {
     email: subscriptionData.user_email,
     planId: subscriptionData.plan_id,
     status: subscriptionData.status,
@@ -481,104 +334,93 @@ async function handleCheckoutSessionCompleted(session) {
   });
 
   try {
-    // **FIXED**: Check if subscription already exists first
-    const { data: existingData, error: existingError } = await supabase
+    // **STRATEGY 1**: Try to update existing subscription first
+    const { data: updateData, error: updateError } = await supabase
       .from('subscriptions_tb2k4x9p1m')
-      .select('*')
+      .update({
+        stripe_customer_id: subscriptionData.stripe_customer_id,
+        stripe_subscription_id: subscriptionData.stripe_subscription_id,
+        plan_id: subscriptionData.plan_id,
+        status: subscriptionData.status,
+        current_period_start: subscriptionData.current_period_start,
+        current_period_end: subscriptionData.current_period_end,
+        cancel_at_period_end: subscriptionData.cancel_at_period_end,
+        canceled_at: subscriptionData.canceled_at,
+        updated_at: subscriptionData.updated_at
+      })
       .eq('user_email', customerEmail.toLowerCase())
-      .single();
+      .select();
 
-    if (existingError && existingError.code !== 'PGRST116') {
-      console.error('❌ Error checking existing subscription:', existingError);
-    }
-
-    let result;
-    if (existingData) {
-      // Update existing subscription
-      console.log('🔄 Updating existing subscription...');
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update({
-          stripe_customer_id: subscriptionData.stripe_customer_id,
-          stripe_subscription_id: subscriptionData.stripe_subscription_id,
-          stripe_session_id: subscriptionData.stripe_session_id,
-          plan_id: subscriptionData.plan_id,
-          status: subscriptionData.status,
-          current_period_start: subscriptionData.current_period_start,
-          current_period_end: subscriptionData.current_period_end,
-          cancel_at_period_end: subscriptionData.cancel_at_period_end,
-          canceled_at: subscriptionData.canceled_at,
-          updated_at: subscriptionData.updated_at
-        })
-        .eq('user_email', customerEmail.toLowerCase())
-        .select();
-
-      if (error) {
-        console.error('❌ Error updating subscription:', error);
-        throw error;
-      }
-
-      result = data;
-      console.log('✅ Subscription updated successfully');
-    } else {
-      // Insert new subscription
-      console.log('➕ Creating new subscription...');
-      const { data, error } = await supabase
+    if (updateError) {
+      console.log('⚠️ Update failed, trying insert:', updateError.message);
+      
+      // **STRATEGY 2**: If update fails (no existing record), try insert
+      const { data: insertData, error: insertError } = await supabase
         .from('subscriptions_tb2k4x9p1m')
         .insert(subscriptionData)
         .select();
 
-      if (error) {
-        console.error('❌ Error inserting subscription:', error);
-        
-        // If it's a duplicate key error, try updating instead
-        if (error.message?.includes('duplicate key') || error.message?.includes('already exists')) {
-          console.log('⚠️ Duplicate key error, attempting update instead...');
-          
-          const { data: updateData, error: updateError } = await supabase
-            .from('subscriptions_tb2k4x9p1m')
-            .update({
-              stripe_customer_id: subscriptionData.stripe_customer_id,
-              stripe_subscription_id: subscriptionData.stripe_subscription_id,
-              stripe_session_id: subscriptionData.stripe_session_id,
-              plan_id: subscriptionData.plan_id,
-              status: subscriptionData.status,
-              current_period_start: subscriptionData.current_period_start,
-              current_period_end: subscriptionData.current_period_end,
-              cancel_at_period_end: subscriptionData.cancel_at_period_end,
-              canceled_at: subscriptionData.canceled_at,
-              updated_at: subscriptionData.updated_at
-            })
-            .eq('user_email', customerEmail.toLowerCase())
-            .select();
-
-          if (updateError) {
-            console.error('❌ Update also failed:', updateError);
-            throw updateError;
-          }
-
-          result = updateData;
-          console.log('✅ Subscription updated after duplicate key error');
-        } else {
-          throw error;
-        }
-      } else {
-        result = data;
-        console.log('✅ Subscription inserted successfully');
+      if (insertError) {
+        console.error('❌ Both update and insert failed:', insertError);
+        throw insertError;
       }
+
+      console.log('✅ Subscription inserted successfully');
+      return insertData;
+    } else if (updateData && updateData.length > 0) {
+      console.log('✅ Subscription updated successfully');
+      return updateData;
+    } else {
+      // **STRATEGY 3**: Update succeeded but no rows affected, try insert
+      console.log('⚠️ Update succeeded but no rows affected, trying insert...');
+      
+      const { data: insertData, error: insertError } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .insert(subscriptionData)
+        .select();
+
+      if (insertError) {
+        console.error('❌ Insert after empty update failed:', insertError);
+        throw insertError;
+      }
+
+      console.log('✅ Subscription inserted after empty update');
+      return insertData;
     }
 
-    console.log('✅ Subscription processed successfully:', {
-      customerEmail,
-      planId,
-      subscriptionId,
-      recordId: result?.[0]?.id
-    });
-
-    return result;
   } catch (supabaseError) {
     console.error('❌ Supabase operation failed:', supabaseError);
-    throw supabaseError;
+    
+    // **STRATEGY 4**: Emergency fallback - try with minimal data
+    console.log('🚨 EMERGENCY: Trying with minimal subscription data...');
+    
+    try {
+      const minimalData = {
+        user_email: customerEmail.toLowerCase(),
+        plan_id: `price_${planId}`,
+        status: 'active'
+      };
+
+      const { data: emergencyData, error: emergencyError } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .upsert(minimalData, { 
+          onConflict: 'user_email',
+          ignoreDuplicates: false 
+        })
+        .select();
+
+      if (emergencyError) {
+        console.error('❌ Emergency fallback also failed:', emergencyError);
+        throw emergencyError;
+      }
+
+      console.log('✅ Emergency subscription saved with minimal data');
+      return emergencyData;
+
+    } catch (emergencyFallbackError) {
+      console.error('❌ All strategies failed:', emergencyFallbackError);
+      throw emergencyFallbackError;
+    }
   }
 }
 
@@ -611,6 +453,7 @@ async function handleSubscriptionCreated(subscription) {
   const priceId = subscription.items.data[0]?.price?.id;
   const planId = priceId ? extractPlanFromPriceId(priceId) : 'professional';
 
+  // **FIXED**: Remove stripe_session_id from subscription data
   const subscriptionData = {
     user_email: customerEmail.toLowerCase(),
     stripe_customer_id: subscription.customer,
@@ -625,50 +468,51 @@ async function handleSubscriptionCreated(subscription) {
     updated_at: new Date().toISOString()
   };
 
-  // Check if subscription already exists first
-  const { data: existingData, error: existingError } = await supabase
-    .from('subscriptions_tb2k4x9p1m')
-    .select('*')
-    .eq('user_email', customerEmail.toLowerCase())
-    .single();
-
-  if (existingError && existingError.code !== 'PGRST116') {
-    console.error('❌ Error checking existing subscription:', existingError);
-  }
-
-  let result;
-  if (existingData) {
-    // Update existing subscription
-    const { data, error } = await supabase
+  try {
+    // Try update first, then insert if no rows affected
+    const { data: updateData, error: updateError } = await supabase
       .from('subscriptions_tb2k4x9p1m')
       .update(subscriptionData)
       .eq('user_email', customerEmail.toLowerCase())
       .select();
 
-    if (error) {
-      console.error('❌ Error updating subscription:', error);
-      throw error;
-    }
-    result = data;
-  } else {
-    // Insert new subscription
-    const { data, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .insert(subscriptionData)
-      .select();
+    if (updateError) {
+      console.log('⚠️ Update failed, trying insert:', updateError.message);
+      
+      const { data: insertData, error: insertError } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .insert(subscriptionData)
+        .select();
 
-    if (error) {
-      console.error('❌ Error inserting subscription:', error);
-      throw error;
+      if (insertError) {
+        console.error('❌ Insert failed:', insertError);
+        throw insertError;
+      }
+      
+      console.log('✅ Subscription created successfully via insert');
+      return insertData;
+    } else if (updateData && updateData.length > 0) {
+      console.log('✅ Subscription created successfully via update');
+      return updateData;
+    } else {
+      // Update succeeded but no rows affected, try insert
+      const { data: insertData, error: insertError } = await supabase
+        .from('subscriptions_tb2k4x9p1m')
+        .insert(subscriptionData)
+        .select();
+
+      if (insertError) {
+        console.error('❌ Insert after empty update failed:', insertError);
+        throw insertError;
+      }
+      
+      console.log('✅ Subscription created successfully via insert after empty update');
+      return insertData;
     }
-    result = data;
+  } catch (error) {
+    console.error('❌ Error in handleSubscriptionCreated:', error);
+    throw error;
   }
-  
-  console.log('✅ Subscription created successfully:', {
-    customerEmail,
-    planId,
-    status: subscription.status
-  });
 }
 
 async function handleSubscriptionUpdated(subscription) {
@@ -701,7 +545,8 @@ async function handleSubscriptionUpdated(subscription) {
   console.log('✅ Subscription updated successfully:', {
     subscriptionId: subscription.id,
     status: subscription.status,
-    planId
+    planId,
+    recordsUpdated: data?.length || 0
   });
 }
 
@@ -723,7 +568,10 @@ async function handleSubscriptionDeleted(subscription) {
     throw error;
   }
   
-  console.log('✅ Subscription canceled successfully:', subscription.id);
+  console.log('✅ Subscription canceled successfully:', {
+    subscriptionId: subscription.id,
+    recordsUpdated: data?.length || 0
+  });
 }
 
 async function handlePaymentSucceeded(invoice) {
