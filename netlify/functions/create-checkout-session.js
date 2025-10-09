@@ -1,21 +1,27 @@
-// netlify/functions/create-checkout-session.js
+```javascript
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const handler = async (event) => {
-  try {
-    const { priceId, userId, userEmail } = JSON.parse(event.body);
+  if (event.httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      body: 'Method Not Allowed',
+    };
+  }
 
-    if (!priceId || !userId || !userEmail) {
+  try {
+    const { priceId, customerId } = JSON.parse(event.body);
+
+    if (!priceId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'Missing required fields' }),
+        body: JSON.stringify({ error: 'Missing priceId' }),
       };
     }
 
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
         {
@@ -23,24 +29,22 @@ export const handler = async (event) => {
           quantity: 1,
         },
       ],
-      customer_email: userEmail,
-      metadata: {
-        user_id: userId,
-        user_email: userEmail,
-      },
-      success_url: `${process.env.URL || 'http://localhost:8888'}/payment-success`,
-      cancel_url: `${process.env.URL || 'http://localhost:8888'}/payment-cancelled`,
+      mode: 'subscription',
+      customer: customerId,
+      success_url: `${process.env.URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.URL}/billing`,
     });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ url: session.url }),
+      body: JSON.stringify({ id: session.id }),
     };
-  } catch (err) {
-    console.error('Error creating checkout session:', err);
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: err.message }),
+      body: JSON.stringify({ error: 'Internal Server Error' }),
     };
   }
 };
+```
