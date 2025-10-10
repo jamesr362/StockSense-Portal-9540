@@ -167,7 +167,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
-      <div className="bg-gray-800 rounded-lg shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col text-white">
+      <div className="bg-gray-800 rounded-lg shadow-2xl p-4 sm:p-6 w-full max-w-4xl max-h-[90vh] flex flex-col text-white">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-100">Receipt Scanner</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
@@ -176,7 +176,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
         </div>
 
         {!image ? (
-          <div className="flex-grow flex flex-col justify-center items-center border-2 border-dashed border-gray-600 rounded-lg p-12 text-center">
+          <div className="flex-grow flex flex-col justify-center items-center border-2 border-dashed border-gray-600 rounded-lg p-6 sm:p-12 text-center">
             <SafeIcon icon={FiUpload} className="text-5xl text-gray-500 mb-4" />
             <h3 className="text-xl font-semibold mb-2">Upload a receipt image</h3>
             <p className="text-gray-400 mb-6">Your receipt will be saved automatically for your records.</p>
@@ -186,9 +186,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
             </label>
           </div>
         ) : (
-          <div className="flex-grow flex gap-4 overflow-hidden">
-            <div className="w-1/2 flex flex-col bg-gray-900 p-4 rounded-lg">
-              <div className="flex-grow flex items-center justify-center overflow-hidden">
+          <div className="flex-grow flex flex-col md:flex-row gap-4 overflow-hidden min-h-0">
+            <div className="w-full md:w-1/2 flex flex-col bg-gray-900 p-4 rounded-lg">
+              <div className="flex-grow flex items-center justify-center overflow-hidden min-h-0">
                 <ReactCrop
                   crop={crop}
                   onChange={(_, percentCrop) => setCrop(percentCrop)}
@@ -199,7 +199,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                     ref={imgRef}
                     src={image}
                     alt="Receipt"
-                    className="max-w-full max-h-[60vh] object-contain"
+                    className="max-w-full max-h-[40vh] md:max-h-[60vh] object-contain"
                   />
                 </ReactCrop>
               </div>
@@ -207,7 +207,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                 <p className="text-sm text-gray-400 truncate">{imageName}</p>
               </div>
             </div>
-            <div className="w-1/2 flex flex-col">
+            <div className="w-full md:w-1/2 flex flex-col mt-4 md:mt-0 min-h-0">
               {isScanning && (
                 <div className="flex-grow flex flex-col justify-center items-center bg-gray-900 p-4 rounded-lg">
                   <p className="text-lg mb-4">Scanning...</p>
@@ -235,11 +235,11 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                 </div>
               )}
               {!isScanning && parsedItems.length > 0 && (
-                <div className="flex-grow flex flex-col bg-gray-900 p-4 rounded-lg">
+                <div className="flex-grow flex flex-col bg-gray-900 p-4 rounded-lg min-h-0">
                   <h3 className="text-xl font-semibold mb-3 text-gray-100">Scanned Items</h3>
                   <div className="flex-grow overflow-y-auto pr-2">
                     <table className="w-full text-sm text-left text-gray-300">
-                      <thead className="text-xs text-gray-400 uppercase bg-gray-700">
+                      <thead className="text-xs text-gray-400 uppercase bg-gray-700 sticky top-0">
                         <tr>
                           <th scope="col" className="px-4 py-2">Item Name</th>
                           <th scope="col" className="px-4 py-2 text-right">Qty</th>
@@ -257,7 +257,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 flex gap-4">
+                  <div className="mt-4 flex flex-col sm:flex-row gap-4">
                      <button
                       onClick={handleRetry}
                       className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
