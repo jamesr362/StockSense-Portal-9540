@@ -1,72 +1,57 @@
 export const parseReceipt = (text) => {
-  const items = [];
   const lines = text.split('\n');
+  const items = [];
 
-  // Regex patterns to capture various formats of item lines.
-  // Format 1: Item Name, optional quantity (e.g., 2 @), Price, Total Price (e.g., "ITEM NAME 2 @ 1.00 2.00")
-  const itemRegexWithAt = new RegExp(
-    /^(.*?)\s+(?:(\d+)\s*@\s*)?\$?(\d+\.\d{2})\s+\$?(\d+\.\d{2})$/,
+  // More robust regex to capture various item/price formats.
+  // Handles optional quantity, item names (can include spaces), and various price formats.
+  const itemRegex = new RegExp(
+    /^(?:(\d+)\s+)?(.+?)\s+(\$?(\d+\.\d{2}))$/,
     'i'
   );
-  // Format 2: Quantity, Item Name, Price (e.g., "1 ITEM NAME 5.99")
-  const qtyFirstRegex = new RegExp(
-    /^(\d+)\s+(.*?)\s+\$?(\d+\.\d{2})$/
-  );
-  // Format 3: Item Name, optional quantity, Price (e.g., "ITEM NAME 2 9.99" or "ITEM NAME 9.99")
-  const generalItemRegex = new RegExp(
-    /^(.*?)\s+(?:(\d+)\s*[xX]?\s*)?\$?(\d+\.\d{2})$/
-  );
 
-  // Keywords to identify lines that are likely not items
+  // Expanded list of keywords to exclude non-item lines.
   const exclusionKeywords = [
-    'total', 'subtotal', 'tax', 'vat', 'cash', 'card', 'change', 'discount', 'savings',
-    'phone', 'tel', 'date', 'time', 'receipt', 'invoice', 'gst', 'hst', 'pst',
-    'www', '.com', 'order', 'clerk', 'server', 'customer', 'loyalty', 'points',
-    'balance', 'approved', 'authorization', 'reference'
+    'subtotal', 'total', 'tax', 'cash', 'credit', 'debit', 'change',
+    'balance', 'tip', 'gratuity', 'discount', 'savings', 'coupon',
+    'customer', 'copy', 'merchant', 'duplicate', 'phone', 'date',
+    'invoice', 'order', 'gst', 'hst', 'pst', 'vat', 'amount', 'auth'
   ];
-  const exclusionRegex = new RegExp(exclusionKeywords.join('|'), 'i');
 
-  for (const line of lines) {
-    const trimmedLine = line.trim().replace(/\s+/g, ' ');
+  lines.forEach(line => {
+    const cleanedLine = line.trim().toLowerCase();
 
-    if (trimmedLine.length < 3 || exclusionRegex.test(trimmedLine) || !/\d/.test(trimmedLine)) {
-      continue;
+    // Skip empty lines or lines that are too short to be an item
+    if (cleanedLine.length < 3) {
+      return;
     }
 
-    let match;
-    let name, quantity, price;
+    // Check if the line contains any exclusion keywords
+    const containsKeyword = exclusionKeywords.some(keyword => cleanedLine.includes(keyword));
+    if (containsKeyword) {
+      return;
+    }
 
-    // Try matching different formats in order of specificity
-    match = trimmedLine.match(itemRegexWithAt);
+    const match = line.trim().match(itemRegex);
+
     if (match) {
-        name = match[1].trim();
-        quantity = match[2] ? parseInt(match[2], 10) : 1;
-        price = parseFloat(match[4]); // Total price for the line
-    } else {
-        match = trimmedLine.match(qtyFirstRegex);
-        if (match) {
-            quantity = parseInt(match[1], 10);
-            name = match[2].trim();
-            price = parseFloat(match[3]);
-        } else {
-            match = trimmedLine.match(generalItemRegex);
-            if (match) {
-                name = match[1].trim();
-                quantity = match[2] ? parseInt(match[2], 10) : 1;
-                price = parseFloat(match[3]);
-            }
-        }
+      let quantity = parseInt(match[1], 10);
+      if (isNaN(quantity)) {
+        quantity = 1; // Default quantity to 1 if not found
+      }
+
+      const name = match[2].trim();
+      const price = parseFloat(match[4]);
+
+      // Final sanity check for valid data
+      if (name && !isNaN(price) && name.length > 1) {
+        items.push({
+          name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
+          quantity,
+          price,
+        });
+      }
     }
-    
-    // Final validation before adding the item
-    if (name && !/qty|item|description|price|amount/i.test(name) && name.length > 1) {
-      items.push({ 
-        name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(), 
-        quantity: quantity || 1, 
-        price: price || 0 
-      });
-    }
-  }
+  });
 
   return items;
 };

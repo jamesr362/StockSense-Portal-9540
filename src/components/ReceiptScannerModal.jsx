@@ -90,10 +90,14 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
       const imageBuffer = canvas.toDataURL('image/png');
+      
+      // Advanced image preprocessing for better OCR accuracy
       const imgJs = await ImageJS.load(imageBuffer);
-      const grey = imgJs.grey();
-      const mask = grey.mask();
-      const preprocessedImage = mask.toDataURL();
+      const preprocessedImage = imgJs
+        .grey() // Convert to grayscale
+        .contrast(1.5) // Increase contrast
+        .toDataURL();
+
       const worker = await createWorker('eng');
       const { data: { text } } = await worker.recognize(preprocessedImage);
       await worker.terminate();
@@ -101,11 +105,11 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       const items = parseReceipt(text);
       setParsedItems(items);
       if (items.length === 0) {
-        setError('Could not parse any items. For best results, crop tightly around the list of items.');
+        setError('Could not parse any items. For best results, crop tightly around the list of items and ensure the image is clear.');
       }
     } catch (err) {
       console.error(err);
-      setError('An error occurred during scanning. Please try again.');
+      setError('An error occurred during scanning. Please try again with a clearer image.');
     } finally {
       setIsScanning(false);
     }
@@ -166,19 +170,19 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                   <div className="flex-grow flex flex-col justify-center items-center bg-gray-900 p-4 rounded-lg">
                     <p className="text-lg mb-4">Scanning...</p>
                     <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin border-t-indigo-500"></div>
-                    <p className="text-gray-400 text-sm">Processing image, this may take a moment.</p>
+                    <p className="text-gray-400 text-sm">Enhancing image and extracting text...</p>
                   </div>
                 )}
                 {!isScanning && parsedItems.length === 0 && (
                   <div className="h-full flex flex-col">
                     <div className="flex-grow flex flex-col justify-center items-center bg-gray-900 p-4 rounded-lg text-center">
                       <SafeIcon icon={FiCrop} className="text-4xl sm:text-5xl text-gray-500 mb-4" />
-                      <h3 className="text-lg sm:text-xl font-semibold mb-2">Crop and Scan</h3>
+                      <h3 className="text-lg sm:text-xl font-semibold mb-2">Crop to Scan Items</h3>
                       <p className="text-gray-400 mb-4 sm:mb-6 px-2 sm:px-4 text-sm sm:text-base">
-                        <span className="font-bold text-indigo-300">For best results,</span> draw a tight box around the list of items.
+                        <span className="font-bold text-indigo-300">For best accuracy,</span> draw a box tightly around only the item lines. Exclude headers and totals.
                       </p>
                       <button onClick={handleScan} disabled={!completedCrop || isScanning} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center">
-                        Scan Receipt
+                        Scan Cropped Area
                       </button>
                       {error && <p className="text-red-400 mt-4 text-sm">{error}</p>}
                     </div>
@@ -209,7 +213,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                     </div>
                     <div className="mt-4 flex flex-col sm:flex-row gap-4">
                       <button onClick={handleRetry} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <SafeIcon icon={FiRefreshCw} /> Retry
+                        <SafeIcon icon={FiRefreshCw} /> Retry Scan
                       </button>
                       <button onClick={handleAddItems} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
                         <SafeIcon icon={FiCheck} /> Add Items
