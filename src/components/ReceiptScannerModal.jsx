@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createWorker } from 'tesseract.js';
-import ReactCrop from 'react-image-crop';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { FiUpload, FiX, FiCrop, FiCheck, FiRefreshCw } from 'react-icons/fi';
+import { FiUpload, FiX, FiCrop, FiCheck, FiRefreshCw, FiTrash2, FiSave, FiArrowLeft } from 'react-icons/fi';
 import { Image as ImageJS } from 'image-js';
 import { parseReceipt } from '../utils/receipt-parser';
 import SafeIcon from '../common/SafeIcon';
@@ -11,235 +11,297 @@ import { useAuth } from '../context/AuthContext';
 
 const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [image, setImage] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
   const [crop, setCrop] = useState();
   const [completedCrop, setCompletedCrop] = useState(null);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [scanStatus, setScanStatus] = useState('');
   const [scannedText, setScannedText] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [view, setView] = useState('upload'); // 'upload', 'crop', 'edit'
   const [parsedItems, setParsedItems] = useState([]);
-  const imgRef = useRef(null);
-  const [imageName, setImageName] = useState('');
-  const { user } = useAuth();
 
-  const resetState = useCallback(() => {
-    setImage(null);
-    setImageFile(null);
-    setCrop(undefined);
-    setCompletedCrop(null);
-    setScannedText('');
-    setIsScanning(false);
-    setError('');
-    setParsedItems([]);
-    if (imgRef.current) {
-      imgRef.current.src = '';
-    }
-    setImageName('');
-  }, []);
+  const imgRef = useRef(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!isOpen) {
-      resetState();
+      // Reset state when modal is closed
+      setImage(null);
+      setCrop(undefined);
+      setCompletedCrop(null);
+      setScanProgress(0);
+      setScanStatus('');
+      setScannedText('');
+      setError('');
+      setIsLoading(false);
+      setView('upload');
+      setParsedItems([]);
     }
-  }, [isOpen, resetState]);
+  }, [isOpen]);
 
-  const uploadReceiptToSupabase = async (file) => {
-    if (!file || !user) return;
-    const filePath = `${user.id}/${Date.now()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('receipts').upload(filePath, file);
-    if (uploadError) {
-      console.error('Error uploading receipt:', uploadError);
-      setError('Failed to save the receipt image. Please try again.');
-      return;
-    }
-    await supabase.from('receipts').insert({ user_id: user.id, storage_path: filePath, file_name: file.name });
-  };
-
-  const onSelectFile = async (e) => {
+  const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-      setImageName(file.name);
-      setImageFile(file);
       const reader = new FileReader();
-      reader.addEventListener('load', () => setImage(reader.result.toString()));
-      reader.readAsDataURL(file);
-      await uploadReceiptToSupabase(file);
+      reader.addEventListener('load', () => {
+        setImage(reader.result?.toString() || '');
+        setView('crop');
+        setError('');
+      });
+      reader.readAsDataURL(e.target.files[0]);
     }
   };
 
-  const handleScan = useCallback(async () => {
+  const onImageLoad = (e) => {
+    const { width, height } = e.currentTarget;
+    const initialCrop = centerCrop(
+      makeAspectCrop({ unit: '%', width: 90 }, 16 / 9, width, height),
+      width,
+      height
+    );
+    setCrop(initialCrop);
+  };
+
+  const getCroppedImg = async (sourceImage, crop) => {
+    const image = await ImageJS.load(sourceImage);
+    const cropped = image.crop({
+      x: Math.round(crop.x),
+      y: Math.round(crop.y),
+      width: Math.round(crop.width),
+      height: Math.round(crop.height),
+    });
+    return cropped;
+  };
+
+  const handleScan = async () => {
     if (!completedCrop || !imgRef.current) {
       setError('Please select an area to scan.');
       return;
     }
     if (completedCrop.width === 0 || completedCrop.height === 0) {
-      setError('Invalid crop area. Please select a larger area to scan.');
+      setError('Invalid crop selection. Please select a valid area.');
       return;
     }
 
-    setIsScanning(true);
+    setIsLoading(true);
+    setScanStatus('Initializing...');
+    setScanProgress(0);
     setError('');
-    setParsedItems([]);
+    setScannedText('');
 
     try {
-      const image = imgRef.current;
-      const canvas = document.createElement('canvas');
-      const scaleX = image.naturalWidth / image.width;
-      const scaleY = image.naturalHeight / image.height;
-      
-      const cropX = completedCrop.x * scaleX;
-      const cropY = completedCrop.y * scaleY;
-      const cropWidth = completedCrop.width * scaleX;
-      const cropHeight = completedCrop.height * scaleY;
+      const imageElement = imgRef.current;
+      const scaleX = imageElement.naturalWidth / imageElement.width;
+      const scaleY = imageElement.naturalHeight / imageElement.height;
 
-      if (cropWidth < 1 || cropHeight < 1) {
-        setError('Crop area is too small. Please select a larger area.');
-        setIsScanning(false);
-        return;
-      }
+      const pixelCrop = {
+        x: completedCrop.x * scaleX,
+        y: completedCrop.y * scaleY,
+        width: completedCrop.width * scaleX,
+        height: completedCrop.height * scaleY,
+      };
 
-      canvas.width = cropWidth;
-      canvas.height = cropHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-      const croppedImageDataUrl = canvas.toDataURL('image/png');
-      
-      // Advanced image preprocessing for better OCR accuracy
-      const imgJs = await ImageJS.load(croppedImageDataUrl);
-      const preprocessedImage = imgJs
-        .grey()  // Convert to grayscale for better processing
-        .mask(); // Binarize the image (convert to pure black and white)
-      
-      const preprocessedImageDataUrl = preprocessedImage.toDataURL();
+      const croppedImage = await getCroppedImg(image, pixelCrop);
 
-      const worker = await createWorker('eng');
-      const { data: { text } } = await worker.recognize(preprocessedImageDataUrl);
+      setScanStatus('Preprocessing image...');
+      setScanProgress(20);
+
+      // Advanced Binarization
+      let processedImage = croppedImage.grey();
+      const mask = processedImage.mask({ algorithm: 'li' });
+      processedImage = mask;
+
+      const imageForTesseract = processedImage.toDataURL();
+
+      setScanStatus('Recognizing text...');
+      const worker = await createWorker({
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            setScanProgress(20 + Math.floor(m.progress * 60));
+          }
+        },
+      });
+
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+      const { data: { text } } = await worker.recognize(imageForTesseract);
       await worker.terminate();
 
-      setScannedText(text);
+      setScanStatus('Parsing items...');
+      setScanProgress(90);
+
       const items = parseReceipt(text);
-      setParsedItems(items);
       if (items.length === 0) {
-        setError('Could not parse any items. For best results, crop tightly around the list of items and ensure the image is clear and level.');
+        throw new Error("Could not parse any items. Please try adjusting the crop or use a clearer image.");
       }
+      
+      setParsedItems(items);
+      setView('edit');
+      setScanProgress(100);
+      setScanStatus('Scan complete!');
+      
     } catch (err) {
-      console.error('OCR Scanning Error:', err);
-      setError('An unexpected error occurred during scanning. The image might be in an unsupported format. Please try again with a different image.');
+      setError(err.message || 'An error occurred during scanning.');
+      console.error(err);
+      setView('crop'); // Go back to cropping view on error
     } finally {
-      setIsScanning(false);
+      setIsLoading(false);
     }
-  }, [completedCrop]);
-
-
-  const handleAddItems = () => {
-    onItemsScanned(parsedItems);
-    onClose();
   };
 
-  const handleRetry = () => {
-    setScannedText('');
-    setParsedItems([]);
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...parsedItems];
+    const item = newItems[index];
+
+    if (field === 'quantity' || field === 'price') {
+      const numValue = parseFloat(value);
+      item[field] = isNaN(numValue) ? 0 : numValue;
+    } else {
+      item[field] = value;
+    }
+    
+    setParsedItems(newItems);
+  };
+  
+  const handleRemoveItem = (index) => {
+    setParsedItems(parsedItems.filter((_, i) => i !== index));
+  };
+  
+  const handleSaveItems = async () => {
+    setIsLoading(true);
     setError('');
-    setCompletedCrop(null);
-    setCrop(undefined);
+    try {
+        const { data: uploadedImage, error: uploadError } = await onItemsScanned(parsedItems, image);
+        if (uploadError) throw uploadError;
+
+        onClose();
+    } catch (err) {
+        setError('Failed to save items. Please try again.');
+        console.error('Error saving items:', err);
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;
 
+  const renderUploadView = () => (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-200 mb-4">Upload a Receipt</h3>
+      <div className="border-2 border-dashed border-gray-600 p-6 text-center rounded-lg">
+        <SafeIcon icon={FiUpload} className="mx-auto h-12 w-12 text-gray-500" />
+        <p className="mt-2 text-sm text-gray-400">Drag & drop or click to upload</p>
+        <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+      </div>
+      <div className="mt-6 prose prose-invert prose-sm text-gray-400 max-w-none">
+        <h4>Instructions:</h4>
+        <ol>
+          <li>Take a clear, well-lit photo of your receipt.</li>
+          <li>Ensure the text is horizontal and not blurry.</li>
+          <li>Upload the image file (JPEG, PNG).</li>
+        </ol>
+      </div>
+    </div>
+  );
+
+  const renderCropView = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-200">Crop the Receipt</h3>
+        <button onClick={() => setView('upload')} className="text-gray-400 hover:text-white">
+          <SafeIcon icon={FiRefreshCw} />
+        </button>
+      </div>
+       {image && (
+        <ReactCrop
+          crop={crop}
+          onChange={(_, percentCrop) => setCrop(percentCrop)}
+          onComplete={(c) => setCompletedCrop(c)}
+          aspect={null}
+          className="max-h-[50vh] w-auto overflow-y-auto"
+        >
+          <img ref={imgRef} src={image} onLoad={onImageLoad} alt="Receipt" className="mx-auto" style={{ maxHeight: '60vh' }}/>
+        </ReactCrop>
+      )}
+      <div className="prose prose-invert prose-sm text-gray-400 max-w-none">
+        <p>Adjust the box to cover all the items you want to scan.</p>
+      </div>
+      {isLoading ? (
+        <div className="text-center">
+          <p className="text-gray-300">{scanStatus}</p>
+          <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+            <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${scanProgress}%` }}></div>
+          </div>
+        </div>
+      ) : (
+        <button onClick={handleScan} disabled={!completedCrop} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500">
+          <SafeIcon icon={FiCrop} />
+          Scan Cropped Area
+        </button>
+      )}
+    </div>
+  );
+
+  const renderEditView = () => (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold text-gray-200">Review Scanned Items</h3>
+        <button onClick={() => setView('crop')} className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300">
+            <SafeIcon icon={FiArrowLeft} /> Back to Crop
+        </button>
+      </div>
+      <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-3">
+        {parsedItems.map((item, index) => (
+          <div key={index} className="grid grid-cols-1 md:grid-cols-[1fr_80px_80px_40px] gap-2 items-center bg-gray-800 p-2 rounded-lg">
+            <input
+              type="text"
+              value={item.name}
+              onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+              className="bg-gray-700 text-white rounded p-2 focus:ring-2 focus:ring-blue-500 border-none w-full"
+              placeholder="Item Name"
+            />
+            <input
+              type="number"
+              value={item.quantity}
+              onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+              className="bg-gray-700 text-white rounded p-2 focus:ring-2 focus:ring-blue-500 border-none w-full"
+              placeholder="Qty"
+            />
+            <input
+              type="number"
+              step="0.01"
+              value={item.price}
+              onChange={(e) => handleItemChange(index, 'price', e.target.value)}
+              className="bg-gray-700 text-white rounded p-2 focus:ring-2 focus:ring-blue-500 border-none w-full"
+              placeholder="Price"
+            />
+            <button onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-400 p-2 rounded-full flex justify-center items-center">
+              <SafeIcon icon={FiTrash2} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button onClick={handleSaveItems} disabled={isLoading || parsedItems.length === 0} className="w-full flex justify-center items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500">
+        <SafeIcon icon={FiSave} />
+        Save to Inventory
+      </button>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-start p-4 pt-8 md:pt-12">
-      <div className="bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl max-h-[calc(100vh-5rem)] flex flex-col text-white">
-        <div className="flex-shrink-0 flex justify-between items-center p-4 border-b border-gray-700">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-100">Receipt Scanner</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
-            <SafeIcon icon={FiX} className="text-2xl" />
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4">
+      <div className="bg-gray-900 text-white rounded-xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center border-b border-gray-700 pb-3 mb-4">
+          <h2 className="text-xl font-bold text-gray-100">Receipt Scanner</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <SafeIcon icon={FiX} className="h-6 w-6" />
           </button>
         </div>
-
-        <div className="flex-grow min-h-0 overflow-y-auto">
-          {!image ? (
-            <div className="flex flex-col justify-center items-center p-6 text-center h-full">
-              <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 sm:p-12">
-                <SafeIcon icon={FiUpload} className="text-4xl sm:text-5xl text-gray-500 mb-4" />
-                <h3 className="text-lg sm:text-xl font-semibold mb-2">Upload a receipt image</h3>
-                <p className="text-gray-400 mb-6 text-sm sm:text-base">Your receipt will be saved automatically for your records.</p>
-                <input type="file" accept="image/*" onChange={onSelectFile} className="hidden" id="receipt-upload" />
-                <label htmlFor="receipt-upload" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg cursor-pointer transition-all duration-300 transform hover:scale-105">
-                  Select Image
-                </label>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col md:flex-row gap-4 p-4">
-              <div className="w-full md:w-1/2 flex flex-col bg-gray-900 p-2 sm:p-4 rounded-lg">
-                <div className="flex-grow flex items-center justify-center overflow-hidden">
-                  <ReactCrop crop={crop} onChange={(_, percentCrop) => setCrop(percentCrop)} onComplete={(c) => setCompletedCrop(c)} aspect={undefined}>
-                    <img ref={imgRef} src={image} alt="Receipt" className="max-w-full max-h-[40vh] object-contain" />
-                  </ReactCrop>
-                </div>
-                <div className="text-center mt-2">
-                  <p className="text-xs sm:text-sm text-gray-400 truncate">{imageName}</p>
-                </div>
-              </div>
-              <div className="w-full md:w-1/2 flex flex-col min-h-0">
-                {isScanning && (
-                  <div className="flex-grow flex flex-col justify-center items-center bg-gray-900 p-4 rounded-lg">
-                    <p className="text-lg mb-4">Scanning...</p>
-                    <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4 animate-spin border-t-indigo-500"></div>
-                    <p className="text-gray-400 text-sm">Enhancing image and extracting text...</p>
-                  </div>
-                )}
-                {!isScanning && parsedItems.length === 0 && (
-                  <div className="h-full flex flex-col">
-                    <div className="flex-grow flex flex-col justify-center items-center bg-gray-900 p-4 rounded-lg text-center">
-                      <SafeIcon icon={FiCrop} className="text-4xl sm:text-5xl text-gray-500 mb-4" />
-                      <h3 className="text-lg sm:text-xl font-semibold mb-2">Crop to Scan Items</h3>
-                      <p className="text-gray-400 mb-4 sm:mb-6 px-2 sm:px-4 text-sm sm:text-base">
-                        <span className="font-bold text-indigo-300">For best accuracy,</span> draw a box tightly around only the item lines. Exclude headers and totals.
-                      </p>
-                      <button onClick={handleScan} disabled={!completedCrop || isScanning} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed transition-all duration-300 flex items-center justify-center">
-                        Scan Cropped Area
-                      </button>
-                      {error && <p className="text-red-400 mt-4 text-sm">{error}</p>}
-                    </div>
-                  </div>
-                )}
-                {!isScanning && parsedItems.length > 0 && (
-                  <div className="flex-grow flex flex-col bg-gray-900 p-4 rounded-lg min-h-0">
-                    <h3 className="text-lg sm:text-xl font-semibold mb-3 text-gray-100">Scanned Items</h3>
-                    <div className="flex-grow overflow-y-auto pr-2">
-                      <table className="w-full text-xs sm:text-sm text-left text-gray-300">
-                        <thead className="text-xs text-gray-400 uppercase bg-gray-700 sticky top-0">
-                          <tr>
-                            <th scope="col" className="px-2 py-2">Item Name</th>
-                            <th scope="col" className="px-2 py-2 text-right">Qty</th>
-                            <th scope="col" className="px-2 py-2 text-right">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parsedItems.map((item, index) => (
-                            <tr key={index} className="border-b border-gray-700 hover:bg-gray-800">
-                              <td className="px-2 py-2 font-medium">{item.name}</td>
-                              <td className="px-2 py-2 text-right">{item.quantity}</td>
-                              <td className="px-2 py-2 text-right">${item.price.toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-4 flex flex-col sm:flex-row gap-4">
-                      <button onClick={handleRetry} className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <SafeIcon icon={FiRefreshCw} /> Retry Scan
-                      </button>
-                      <button onClick={handleAddItems} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
-                        <SafeIcon icon={FiCheck} /> Add Items
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+        <div className="flex-grow overflow-y-auto pr-2">
+          {error && <div className="bg-red-800 text-white p-3 mb-4 rounded-lg">{error}</div>}
+          {view === 'upload' && renderUploadView()}
+          {view === 'crop' && renderCropView()}
+          {view === 'edit' && renderEditView()}
         </div>
       </div>
     </div>
