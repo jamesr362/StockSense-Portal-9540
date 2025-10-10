@@ -72,48 +72,64 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setError('Please select an area to scan.');
       return;
     }
+    if (completedCrop.width === 0 || completedCrop.height === 0) {
+      setError('Invalid crop area. Please select a larger area to scan.');
+      return;
+    }
+
     setIsScanning(true);
     setError('');
-    setScannedText('');
     setParsedItems([]);
+
     try {
       const image = imgRef.current;
       const canvas = document.createElement('canvas');
       const scaleX = image.naturalWidth / image.width;
       const scaleY = image.naturalHeight / image.height;
+      
       const cropX = completedCrop.x * scaleX;
       const cropY = completedCrop.y * scaleY;
       const cropWidth = completedCrop.width * scaleX;
       const cropHeight = completedCrop.height * scaleY;
+
+      if (cropWidth < 1 || cropHeight < 1) {
+        setError('Crop area is too small. Please select a larger area.');
+        setIsScanning(false);
+        return;
+      }
+
       canvas.width = cropWidth;
       canvas.height = cropHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-      const imageBuffer = canvas.toDataURL('image/png');
+      const croppedImageDataUrl = canvas.toDataURL('image/png');
       
       // Advanced image preprocessing for better OCR accuracy
-      const imgJs = await ImageJS.load(imageBuffer);
+      const imgJs = await ImageJS.load(croppedImageDataUrl);
       const preprocessedImage = imgJs
-        .grey() // Convert to grayscale
-        .contrast(1.5) // Increase contrast
-        .toDataURL();
+        .grey()  // Convert to grayscale for better processing
+        .mask(); // Binarize the image (convert to pure black and white)
+      
+      const preprocessedImageDataUrl = preprocessedImage.toDataURL();
 
       const worker = await createWorker('eng');
-      const { data: { text } } = await worker.recognize(preprocessedImage);
+      const { data: { text } } = await worker.recognize(preprocessedImageDataUrl);
       await worker.terminate();
+
       setScannedText(text);
       const items = parseReceipt(text);
       setParsedItems(items);
       if (items.length === 0) {
-        setError('Could not parse any items. For best results, crop tightly around the list of items and ensure the image is clear.');
+        setError('Could not parse any items. For best results, crop tightly around the list of items and ensure the image is clear and level.');
       }
     } catch (err) {
-      console.error(err);
-      setError('An error occurred during scanning. Please try again with a clearer image.');
+      console.error('OCR Scanning Error:', err);
+      setError('An unexpected error occurred during scanning. The image might be in an unsupported format. Please try again with a different image.');
     } finally {
       setIsScanning(false);
     }
   }, [completedCrop]);
+
 
   const handleAddItems = () => {
     onItemsScanned(parsedItems);
