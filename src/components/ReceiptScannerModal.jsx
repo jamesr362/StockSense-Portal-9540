@@ -2,12 +2,9 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createWorker } from 'tesseract.js';
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { FiUpload, FiX, FiCrop, FiCheck, FiRefreshCw, FiTrash2, FiSave, FiArrowLeft } from 'react-icons/fi';
-import { Image as ImageJS } from 'image-js';
+import { FiUpload, FiX, FiCrop, FiRefreshCw, FiTrash2, FiSave, FiArrowLeft } from 'react-icons/fi';
 import { parseReceipt } from '../utils/receipt-parser';
 import SafeIcon from '../common/SafeIcon';
-import supabase from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
 
 const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [image, setImage] = useState(null);
@@ -15,7 +12,6 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [completedCrop, setCompletedCrop] = useState(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState('');
-  const [scannedText, setScannedText] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [view, setView] = useState('upload'); // 'upload', 'crop', 'edit'
@@ -24,7 +20,6 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
   const imgRef = useRef(null);
   const workerRef = useRef(null);
-  const { user } = useAuth();
 
   useEffect(() => {
     if (!isOpen) {
@@ -33,7 +28,6 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setCompletedCrop(null);
       setScanProgress(0);
       setScanStatus('');
-      setScannedText('');
       setError('');
       setIsLoading(false);
       setView('upload');
@@ -43,24 +37,31 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
   useEffect(() => {
     const setupWorker = async () => {
-      setScanStatus('Initializing scanner...');
-      setIsWorkerReady(false);
-      const worker = await createWorker({
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            const progress = 20 + Math.floor(m.progress * 60);
-            setScanProgress(progress > 90 ? 90 : progress);
-          }
-        },
-      });
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
-      await worker.setParameters({
-        tessedit_pageseg_mode: '6', // Assume a single uniform block of text.
-      });
-      workerRef.current = worker;
-      setIsWorkerReady(true);
-      setScanStatus('');
+      try {
+        setScanStatus('Initializing scanner...');
+        setIsWorkerReady(false);
+        const worker = await createWorker({
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const progress = 20 + Math.floor(m.progress * 60);
+              setScanProgress(progress > 90 ? 90 : progress);
+            }
+          },
+        });
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6', // Assume a single uniform block of text.
+        });
+        workerRef.current = worker;
+        setIsWorkerReady(true);
+        setScanStatus('');
+      } catch (err) {
+        console.error("Failed to initialize Tesseract worker", err);
+        setError("Failed to initialize the scanner. Please check your internet connection and try again.");
+        setIsWorkerReady(false);
+        setScanStatus('Initialization failed');
+      }
     };
 
     if (isOpen) {
@@ -96,15 +97,39 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     setCrop(initialCrop);
   };
 
-  const getCroppedImg = async (sourceImage, crop) => {
-    const image = await ImageJS.load(sourceImage);
-    const cropped = image.crop({
-      x: Math.round(crop.x),
-      y: Math.round(crop.y),
-      width: Math.round(crop.width),
-      height: Math.round(crop.height),
-    });
-    return cropped;
+  const getCroppedImgDataUrl = (imageElement, crop) => {
+    const canvas = document.createElement('canvas');
+    const scaleX = imageElement.naturalWidth / imageElement.width;
+    const scaleY = imageElement.naturalHeight / imageElement.height;
+    
+    const pixelCrop = {
+      x: crop.x * scaleX,
+      y: crop.y * scaleY,
+      width: crop.width * scaleX,
+      height: crop.height * scaleY,
+    };
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Could not get canvas context');
+    }
+
+    ctx.drawImage(
+      imageElement,
+      pixelCrop.x,
+      pixelCrop.y,
+      pixelCrop.width,
+      pixelCrop.height,
+      0,
+      0,
+      pixelCrop.width,
+      pixelCrop.height
+    );
+
+    return canvas.toDataURL('image/png');
   };
 
   const handleScan = async () => {
@@ -112,7 +137,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setError('Please select an area to scan.');
       return;
     }
-    if (completedCrop.width === 0 || completedCrop.height === 0) {
+    if (completedCrop.width < 1 || completedCrop.height < 1) {
       setError('Invalid crop selection. Please select a valid area.');
       return;
     }
@@ -125,29 +150,12 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     setScanStatus('Initializing...');
     setScanProgress(0);
     setError('');
-    setScannedText('');
 
     try {
-      const imageElement = imgRef.current;
-      const scaleX = imageElement.naturalWidth / imageElement.width;
-      const scaleY = imageElement.naturalHeight / imageElement.height;
-
-      const pixelCrop = {
-        x: completedCrop.x * scaleX,
-        y: completedCrop.y * scaleY,
-        width: completedCrop.width * scaleX,
-        height: completedCrop.height * scaleY,
-      };
-
-      const croppedImage = await getCroppedImg(image, pixelCrop);
-      setScanStatus('Preprocessing image...');
+      setScanStatus('Processing image...');
       setScanProgress(20);
-
-      let processedImage = croppedImage.grey();
-      const mask = processedImage.mask({ algorithm: 'li' });
-      processedImage = mask;
-
-      const imageForTesseract = processedImage.toDataURL();
+      const imageForTesseract = getCroppedImgDataUrl(imgRef.current, completedCrop);
+      
       setScanStatus('Recognizing text...');
       const { data: { text } } = await workerRef.current.recognize(imageForTesseract);
 
@@ -165,8 +173,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setScanStatus('Scan complete!');
       
     } catch (err) {
-      setError(err.message || 'An error occurred during scanning.');
-      console.error(err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(`Scan failed: ${errorMessage}`);
+      console.error("Scanning Error Details:", err);
       setView('crop');
     } finally {
       setIsLoading(false);
@@ -195,9 +204,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     setIsLoading(true);
     setError('');
     try {
-        const { data: uploadedImage, error: uploadError } = await onItemsScanned(parsedItems, image);
-        if (uploadError) throw uploadError;
-
+        await onItemsScanned(parsedItems, image);
         onClose();
     } catch (err) {
         setError('Failed to save items. Please try again.');
@@ -206,13 +213,13 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
         setIsLoading(false);
     }
   };
-
+  
   if (!isOpen) return null;
 
   const renderUploadView = () => (
     <div>
       <h3 className="text-lg font-semibold text-gray-200 mb-4">Upload a Receipt</h3>
-      <div className="border-2 border-dashed border-gray-600 p-6 text-center rounded-lg">
+      <div className="relative border-2 border-dashed border-gray-600 p-6 text-center rounded-lg hover:border-blue-500 transition-colors">
         <SafeIcon icon={FiUpload} className="mx-auto h-12 w-12 text-gray-500" />
         <p className="mt-2 text-sm text-gray-400">Drag & drop or click to upload</p>
         <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
@@ -232,7 +239,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-gray-200">Crop the Receipt</h3>
-        <button onClick={() => setView('upload')} className="text-gray-400 hover:text-white">
+        <button onClick={() => { setImage(null); setView('upload'); }} className="text-gray-400 hover:text-white">
           <SafeIcon icon={FiRefreshCw} />
         </button>
       </div>
@@ -260,7 +267,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       )}
       <button onClick={handleScan} disabled={!completedCrop || isLoading || !isWorkerReady} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed">
         <SafeIcon icon={FiCrop} />
-        {isWorkerReady ? 'Scan Cropped Area' : 'Scanner Initializing...'}
+        {isLoading ? 'Scanning...' : (isWorkerReady ? 'Scan Cropped Area' : 'Scanner Initializing...')}
       </button>
     </div>
   );
