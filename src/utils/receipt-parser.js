@@ -1,82 +1,51 @@
-export const parseReceipt = (text) => {
-  const lines = text.split('\n');
+export function parseReceipt(text) {
   const items = [];
+  const lines = text.split('\n').filter(line => line.trim().length > 3);
 
-  // More flexible regex to find a price. This is the anchor.
-  // It looks for digits, then a dot or comma, then exactly two digits.
-  const priceRegex = /(\d+[.,]\d{2})\b/g;
+  // Regex to capture item name, optional quantity, and price (allows comma or dot).
+  const itemRegex = /(.+?)\s+(?:(\d+)\s*[x@]\s*)?(\d+[\.,]\d{2})$/;
 
   const exclusionKeywords = [
-    'subtotal', 'total', 'tax', 'cash', 'credit', 'debit', 'change',
-    'balance', 'tip', 'gratuity', 'discount', 'savings', 'coupon',
-    'customer', 'copy', 'merchant', 'duplicate', 'phone', 'date',
-    'invoice', 'order', 'gst', 'hst', 'pst', 'vat', 'amount', 'auth',
-    'visa', 'mastercard', 'amex', 'approved', 'account', 'card', 'number'
+    'total', 'subtotal', 'tax', 'vat', 'gst', 'hst', 'pst',
+    'cash', 'change', 'credit', 'card', 'visa', 'mastercard', 'amex',
+    'discount', 'invoice', 'receipt', 'phone', 'date', 'time',
+    'customer', 'copy', '%', 'balance', 'due', 'tip', 'gratuity', 'amount',
+    'auth', 'code', 'pin', 'verified', 'tran', 'sale'
   ];
+  
+  const exclusionRegex = new RegExp(`\\b(${exclusionKeywords.join('|')})\\b`, 'i');
 
-  lines.forEach(line => {
-    const cleanedLine = line.trim().toLowerCase();
-
-    // Basic filtering
-    if (cleanedLine.length < 3) return;
-    if (exclusionKeywords.some(keyword => cleanedLine.includes(keyword))) return;
+  for (const line of lines) {
+    const trimmedLine = line.trim();
     
-    // Find all price-like patterns in the line
-    const priceMatches = [...line.matchAll(priceRegex)];
-
-    if (priceMatches.length > 0) {
-      // Assume the last price on the line is the item price
-      const lastMatch = priceMatches[priceMatches.length - 1];
-      const priceString = lastMatch[0].replace(',', '.');
-      const price = parseFloat(priceString);
-
-      if (isNaN(price) || price === 0) return;
-
-      // The part before the price is the item description
-      let description = line.substring(0, lastMatch.index).trim();
+    if (exclusionRegex.test(trimmedLine)) {
+      continue;
+    }
+    
+    // Normalize price format
+    const cleanLine = trimmedLine.replace(/,/g, '.');
+    const match = cleanLine.match(itemRegex);
+    
+    if (match) {
+      let name = match[1].trim();
       
-      // Remove noise from the description
-      description = description.replace(/[^\w\s-]/g, ' ').trim();
+      // Clean up item name from OCR artifacts and non-alphanumeric characters (keeps letters, numbers, spaces).
+      // The \p{L} class and u flag allow for Unicode letters from various languages.
+      name = name.replace(/[^\p{L}\p{N}\s]/gu, '').trim();
 
-      if (description.length < 2) return;
+      const quantity = match[2] ? parseInt(match[2], 10) : 1;
+      const price = parseFloat(match[3].replace(',', '.'));
 
-      let quantity = 1;
-      let name = description;
-      
-      // Try to find quantity, e.g., "2 @ 5.00" or just "2" at the start
-      const qtyMatch = description.match(/^(\d+)\s(.+)/);
-      if (qtyMatch && !isNaN(parseInt(qtyMatch[1], 10))) {
-        // Check if the number is quantity or part of the name
-        // Simple heuristic: if number is small, it's likely a quantity.
-        const potentialQty = parseInt(qtyMatch[1], 10);
-        if (potentialQty > 0 && potentialQty < 100) { // Assume qty is less than 100
-             quantity = potentialQty;
-             name = qtyMatch[2].trim();
-        }
-      }
-
-      // Another check for quantity like 2x, 2 x etc.
-      const qtyXMatch = name.match(/(\d+)\s?[xX]\s/);
-      if (qtyXMatch && quantity === 1) {
-        quantity = parseInt(qtyXMatch[1], 10);
-        name = name.replace(/(\d+)\s?[xX]\s/, '').trim();
-      }
-
-      // Final cleanup of the name
-      name = name.replace(/\s+/g, ' ').trim();
-      
-      // Another check to avoid parsing lines that are just numbers or dates
-      if (/^\d[\d\s./-]*$/.test(name)) return;
-
-      if (name.length > 1) {
-        items.push({
-          name: name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
-          quantity,
-          price,
-        });
+      // Final validation to ensure the parsed line is a legitimate item.
+      // - Must have a name
+      // - Price must be a valid number > 0
+      // - Name should be longer than a single character
+      // - Name should not look like a long number (e.g., phone number, ID)
+      if (name && !isNaN(price) && price > 0 && name.length > 1 && !/^\d{4,}$/.test(name)) {
+        items.push({ name, quantity, price });
       }
     }
-  });
+  }
 
   return items;
-};
+}

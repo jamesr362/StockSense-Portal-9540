@@ -20,13 +20,14 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [view, setView] = useState('upload'); // 'upload', 'crop', 'edit'
   const [parsedItems, setParsedItems] = useState([]);
+  const [isWorkerReady, setIsWorkerReady] = useState(false);
 
   const imgRef = useRef(null);
+  const workerRef = useRef(null);
   const { user } = useAuth();
 
   useEffect(() => {
     if (!isOpen) {
-      // Reset state when modal is closed
       setImage(null);
       setCrop(undefined);
       setCompletedCrop(null);
@@ -38,6 +39,39 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setView('upload');
       setParsedItems([]);
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const setupWorker = async () => {
+      setScanStatus('Initializing scanner...');
+      setIsWorkerReady(false);
+      const worker = await createWorker({
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const progress = 20 + Math.floor(m.progress * 60);
+            setScanProgress(progress > 90 ? 90 : progress);
+          }
+        },
+      });
+      await worker.loadLanguage('eng');
+      await worker.initialize('eng');
+      await worker.setParameters({
+        tessedit_pageseg_mode: '6', // Assume a single uniform block of text.
+      });
+      workerRef.current = worker;
+      setIsWorkerReady(true);
+      setScanStatus('');
+    };
+
+    if (isOpen) {
+      setupWorker();
+    }
+
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+      setIsWorkerReady(false);
+    };
   }, [isOpen]);
 
   const handleFileChange = (e) => {
@@ -82,6 +116,10 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setError('Invalid crop selection. Please select a valid area.');
       return;
     }
+    if (!workerRef.current || !isWorkerReady) {
+      setError('Scanner is not ready yet. Please wait a moment.');
+      return;
+    }
 
     setIsLoading(true);
     setScanStatus('Initializing...');
@@ -102,37 +140,23 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       };
 
       const croppedImage = await getCroppedImg(image, pixelCrop);
-
       setScanStatus('Preprocessing image...');
       setScanProgress(20);
 
-      // Advanced Binarization
       let processedImage = croppedImage.grey();
       const mask = processedImage.mask({ algorithm: 'li' });
       processedImage = mask;
 
       const imageForTesseract = processedImage.toDataURL();
-
       setScanStatus('Recognizing text...');
-      const worker = await createWorker({
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            setScanProgress(20 + Math.floor(m.progress * 60));
-          }
-        },
-      });
-
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
-      const { data: { text } } = await worker.recognize(imageForTesseract);
-      await worker.terminate();
+      const { data: { text } } = await workerRef.current.recognize(imageForTesseract);
 
       setScanStatus('Parsing items...');
-      setScanProgress(90);
+      setScanProgress(95);
 
       const items = parseReceipt(text);
       if (items.length === 0) {
-        throw new Error("Could not parse any items. Please try adjusting the crop or use a clearer image.");
+        throw new Error("Could not parse any items. Please adjust the crop or use a clearer image.");
       }
       
       setParsedItems(items);
@@ -143,7 +167,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     } catch (err) {
       setError(err.message || 'An error occurred during scanning.');
       console.error(err);
-      setView('crop'); // Go back to cropping view on error
+      setView('crop');
     } finally {
       setIsLoading(false);
     }
@@ -226,19 +250,18 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       <div className="prose prose-invert prose-sm text-gray-400 max-w-none">
         <p>Adjust the box to cover all the items you want to scan.</p>
       </div>
-      {isLoading ? (
+      {(isLoading || scanStatus) && (
         <div className="text-center">
           <p className="text-gray-300">{scanStatus}</p>
-          <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
+          {isLoading && <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
             <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${scanProgress}%` }}></div>
-          </div>
+          </div>}
         </div>
-      ) : (
-        <button onClick={handleScan} disabled={!completedCrop} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500">
-          <SafeIcon icon={FiCrop} />
-          Scan Cropped Area
-        </button>
       )}
+      <button onClick={handleScan} disabled={!completedCrop || isLoading || !isWorkerReady} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed">
+        <SafeIcon icon={FiCrop} />
+        {isWorkerReady ? 'Scan Cropped Area' : 'Scanner Initializing...'}
+      </button>
     </div>
   );
 
