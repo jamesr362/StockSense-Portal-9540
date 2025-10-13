@@ -2,15 +2,21 @@ export function parseReceipt(text) {
   const items = [];
   const lines = text.split('\n').filter(line => line.trim().length > 3);
 
-  // Regex to capture item name, optional quantity, and price (allows comma or dot).
-  const itemRegex = /(.+?)\s+(?:(\d+)\s*[x@]\s*)?(\d+[\.,]\d{2})$/;
+  // Enhanced regex to capture item name, optional quantity (with @ or x), and price
+  // Supports prices with comma or dot as decimal separator
+  const itemRegex = /(.+?)\s+(?:(\d+(?:\.\d+)?)\s*[x@]\s*)?(\d+[\.,]\d{2})$/;
+  
+  // Alternative regex for lines with quantity at the beginning
+  const quantityFirstRegex = /^(\d+(?:\.\d+)?)\s*[x@]\s*(.+?)\s+(\d+[\.,]\d{2})$/;
 
   const exclusionKeywords = [
     'total', 'subtotal', 'tax', 'vat', 'gst', 'hst', 'pst',
     'cash', 'change', 'credit', 'card', 'visa', 'mastercard', 'amex',
     'discount', 'invoice', 'receipt', 'phone', 'date', 'time',
     'customer', 'copy', '%', 'balance', 'due', 'tip', 'gratuity', 'amount',
-    'auth', 'code', 'pin', 'verified', 'tran', 'sale'
+    'auth', 'code', 'pin', 'verified', 'tran', 'sale', 'cashier', 'store',
+    'thank', 'you', 'welcome', 'please', 'visit', 'www', 'http', 'https',
+    'order', 'no', 'table', 'server', 'payment'
   ];
   
   const exclusionRegex = new RegExp(`\\b(${exclusionKeywords.join('|')})\\b`, 'i');
@@ -18,31 +24,62 @@ export function parseReceipt(text) {
   for (const line of lines) {
     const trimmedLine = line.trim();
     
-    if (exclusionRegex.test(trimmedLine)) {
+    // Skip lines containing exclusion keywords
+    if (exclusionRegex.test(trimmedLine.toLowerCase())) {
       continue;
     }
     
-    // Normalize price format
+    // Skip very short lines that likely aren't items
+    if (trimmedLine.length < 5) {
+      continue;
+    }
+    
+    // Normalize price format (replace comma with dot for decimal)
     const cleanLine = trimmedLine.replace(/,/g, '.');
-    const match = cleanLine.match(itemRegex);
+    
+    // Try standard format first (item name, then quantity, then price)
+    let match = cleanLine.match(itemRegex);
+    
+    // If no match, try quantity-first format
+    if (!match) {
+      match = cleanLine.match(quantityFirstRegex);
+      if (match) {
+        // Rearrange capture groups to match standard format
+        match = [match[0], match[2], match[1], match[3]];
+      }
+    }
     
     if (match) {
       let name = match[1].trim();
       
-      // Clean up item name from OCR artifacts and non-alphanumeric characters (keeps letters, numbers, spaces).
-      // The \p{L} class and u flag allow for Unicode letters from various languages.
-      name = name.replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+      // Clean up item name from OCR artifacts and non-alphanumeric characters
+      // Keep letters, numbers, spaces, and some basic punctuation
+      name = name.replace(/[^\p{L}\p{N}\s\-&\.]/gu, '').trim();
 
-      const quantity = match[2] ? parseInt(match[2], 10) : 1;
+      const quantity = match[2] ? parseFloat(match[2]) : 1;
       const price = parseFloat(match[3].replace(',', '.'));
 
-      // Final validation to ensure the parsed line is a legitimate item.
-      // - Must have a name
-      // - Price must be a valid number > 0
-      // - Name should be longer than a single character
-      // - Name should not look like a long number (e.g., phone number, ID)
-      if (name && !isNaN(price) && price > 0 && name.length > 1 && !/^\d{4,}$/.test(name)) {
-        items.push({ name, quantity, price });
+      // Additional validation to ensure this is a legitimate item
+      if (
+        name && 
+        !isNaN(price) && 
+        price > 0 && 
+        name.length > 1 && 
+        !/^\d{4,}$/.test(name) &&  // Avoid lines that are just numbers
+        price < 10000  // Reasonable price cap to filter out misreads
+      ) {
+        // Check if this item is likely to be a subtotal/total by examining its position
+        const isLikelyTotal = lines.indexOf(line) > lines.length * 0.7 && 
+                            price > 20 && 
+                            (name.length < 5 || /total|sum|amount/i.test(name));
+        
+        if (!isLikelyTotal) {
+          items.push({ 
+            name, 
+            quantity: Math.max(1, Math.round(quantity * 100) / 100), // Ensure reasonable quantity
+            price 
+          });
+        }
       }
     }
   }

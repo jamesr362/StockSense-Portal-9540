@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createWorker } from 'tesseract.js';
-import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { FiUpload, FiX, FiCrop, FiCheck, FiRefreshCw, FiTrash2, FiSave, FiArrowLeft, FiCamera } from 'react-icons/fi';
+import { FiUpload, FiX, FiRefreshCw, FiTrash2, FiSave, FiCamera, FiRepeat, FiCrop } from 'react-icons/fi';
 import { Image as ImageJS } from 'image-js';
 import { parseReceipt } from '../utils/receipt-parser';
 import SafeIcon from '../common/SafeIcon';
@@ -11,35 +10,37 @@ import { useAuth } from '../context/AuthContext';
 
 const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [image, setImage] = useState(null);
-  const [crop, setCrop] = useState();
-  const [completedCrop, setCompletedCrop] = useState(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStatus, setScanStatus] = useState('');
-  const [scannedText, setScannedText] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [view, setView] = useState('upload'); // 'upload', 'crop', 'confirm', 'edit'
+  const [view, setView] = useState('upload'); // 'upload', 'confirm', 'select_area', 'scan_progress', 'edit'
   const [parsedItems, setParsedItems] = useState([]);
   const [isWorkerReady, setIsWorkerReady] = useState(false);
-  const [croppedImageSrc, setCroppedImageSrc] = useState(null);
-
-  const imgRef = useRef(null);
+  
+  // Area selection state
+  const [selectionArea, setSelectionArea] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
+  const selectionRef = useRef(null);
+  const containerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  
   const workerRef = useRef(null);
   const { user } = useAuth();
 
   useEffect(() => {
     if (!isOpen) {
       setImage(null);
-      setCrop(undefined);
-      setCompletedCrop(null);
       setScanProgress(0);
       setScanStatus('');
-      setScannedText('');
       setError('');
       setIsLoading(false);
       setView('upload');
       setParsedItems([]);
-      setCroppedImageSrc(null);
+      setSelectionArea({ x: 0, y: 0, width: 0, height: 0 });
     }
   }, [isOpen]);
 
@@ -47,22 +48,28 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     const setupWorker = async () => {
       setScanStatus('Initializing scanner...');
       setIsWorkerReady(false);
-      const worker = await createWorker({
-        logger: m => {
-          if (m.status === 'recognizing text') {
-            const progress = 20 + Math.floor(m.progress * 60);
-            setScanProgress(progress > 90 ? 90 : progress);
-          }
-        },
-      });
-      await worker.loadLanguage('eng');
-      await worker.initialize('eng');
-      await worker.setParameters({
-        tessedit_pageseg_mode: '6', // Assume a single uniform block of text.
-      });
-      workerRef.current = worker;
-      setIsWorkerReady(true);
-      setScanStatus('');
+      try {
+        const worker = await createWorker({
+          logger: m => {
+            if (m.status === 'recognizing text') {
+              const progress = 20 + Math.floor(m.progress * 60);
+              setScanProgress(progress > 90 ? 90 : progress);
+            }
+          },
+        });
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+        await worker.setParameters({
+          tessedit_pageseg_mode: '6', // Assume a single uniform block of text.
+        });
+        workerRef.current = worker;
+        setIsWorkerReady(true);
+        setScanStatus('');
+      } catch (error) {
+        console.error('Error initializing OCR worker:', error);
+        setError('Failed to initialize scanner. Please try again later.');
+        setIsWorkerReady(false);
+      }
     };
 
     if (isOpen) {
@@ -70,76 +77,121 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     }
 
     return () => {
-      workerRef.current?.terminate();
-      workerRef.current = null;
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       setIsWorkerReady(false);
     };
   }, [isOpen]);
 
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const reader = new FileReader();
-      reader.addEventListener('load', () => {
-        setImage(reader.result?.toString() || '');
-        setView('crop');
-        setError('');
-      });
-      reader.readAsDataURL(e.target.files[0]);
+  // Draw the image and selection rectangle on the canvas
+  useEffect(() => {
+    if (view === 'select_area' && canvasRef.current && image) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (imageRef.current) {
+        const img = imageRef.current;
+        
+        // Clear canvas and draw image
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Draw selection rectangle
+        ctx.strokeStyle = '#2563eb'; // Blue
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+          selectionArea.x, 
+          selectionArea.y, 
+          selectionArea.width, 
+          selectionArea.height
+        );
+        
+        // Semi-transparent overlay outside selection
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        
+        // Top
+        ctx.fillRect(0, 0, canvas.width, selectionArea.y);
+        // Bottom
+        ctx.fillRect(
+          0, 
+          selectionArea.y + selectionArea.height, 
+          canvas.width, 
+          canvas.height - (selectionArea.y + selectionArea.height)
+        );
+        // Left
+        ctx.fillRect(
+          0, 
+          selectionArea.y, 
+          selectionArea.x, 
+          selectionArea.height
+        );
+        // Right
+        ctx.fillRect(
+          selectionArea.x + selectionArea.width, 
+          selectionArea.y, 
+          canvas.width - (selectionArea.x + selectionArea.width), 
+          selectionArea.height
+        );
+      }
     }
-  };
+  }, [selectionArea, view, image]);
 
-  const onImageLoad = (e) => {
-    const { width, height } = e.currentTarget;
-    const initialCrop = centerCrop(
-      makeAspectCrop({ unit: '%', width: 90 }, 16 / 9, width, height),
-      width,
-      height
-    );
-    setCrop(initialCrop);
-  };
-
-  const getCroppedImg = async (sourceImage, crop) => {
-    const image = await ImageJS.load(sourceImage);
-    const cropped = image.crop({
-      x: Math.round(crop.x),
-      y: Math.round(crop.y),
-      width: Math.round(crop.width),
-      height: Math.round(crop.height),
-    });
-    return cropped;
-  };
-
-  const handleConfirmCrop = async () => {
-    if (!completedCrop || !imgRef.current) {
-      setError('Please select an area to scan.');
-      return;
+  // Load image into canvas when view changes to select_area
+  useEffect(() => {
+    if (view === 'select_area' && image) {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          // Set canvas dimensions to match the container size while maintaining aspect ratio
+          const container = containerRef.current;
+          if (container) {
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+            const imgAspectRatio = img.width / img.height;
+            
+            let canvasWidth, canvasHeight;
+            
+            if (containerWidth / containerHeight > imgAspectRatio) {
+              // Container is wider than image aspect ratio
+              canvasHeight = Math.min(containerHeight, img.height);
+              canvasWidth = canvasHeight * imgAspectRatio;
+            } else {
+              // Container is taller than image aspect ratio
+              canvasWidth = Math.min(containerWidth, img.width);
+              canvasHeight = canvasWidth / imgAspectRatio;
+            }
+            
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            // Draw the image
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            // Store the image reference
+            imageRef.current = img;
+            
+            // Initialize selection area to full image
+            setSelectionArea({
+              x: 0,
+              y: 0,
+              width: canvas.width,
+              height: canvas.height
+            });
+          }
+        }
+      };
+      img.src = image;
     }
-    if (completedCrop.width === 0 || completedCrop.height === 0) {
-      setError('Invalid crop selection. Please select a valid area.');
-      return;
-    }
-    
-    setError('');
-
-    const imageElement = imgRef.current;
-    const scaleX = imageElement.naturalWidth / imageElement.width;
-    const scaleY = imageElement.naturalHeight / imageElement.height;
-
-    const pixelCrop = {
-      x: completedCrop.x * scaleX,
-      y: completedCrop.y * scaleY,
-      width: completedCrop.width * scaleX,
-      height: completedCrop.height * scaleY,
-    };
-
-    const croppedImage = await getCroppedImg(image, pixelCrop);
-    setCroppedImageSrc(croppedImage.toDataURL());
-    setView('confirm');
-  };
+  }, [view, image]);
 
   const handleScan = async () => {
-    if (!croppedImageSrc) {
-      setError('No cropped image to scan.');
+    if (!image) {
+      setError('No image to scan.');
       return;
     }
     if (!workerRef.current || !isWorkerReady) {
@@ -156,7 +208,37 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     try {
       setScanStatus('Preprocessing image...');
       setScanProgress(20);
-      const imageToProcess = await ImageJS.load(croppedImageSrc);
+      
+      // Create a new canvas to extract the selected area
+      const extractCanvas = document.createElement('canvas');
+      const ctx = extractCanvas.getContext('2d');
+      
+      // Calculate the actual coordinates in the original image
+      const img = imageRef.current;
+      const scaleX = img.naturalWidth / canvasRef.current.width;
+      const scaleY = img.naturalHeight / canvasRef.current.height;
+      
+      const actualX = selectionArea.x * scaleX;
+      const actualY = selectionArea.y * scaleY;
+      const actualWidth = selectionArea.width * scaleX;
+      const actualHeight = selectionArea.height * scaleY;
+      
+      // Set extract canvas size to the selection area
+      extractCanvas.width = actualWidth;
+      extractCanvas.height = actualHeight;
+      
+      // Draw only the selected portion
+      ctx.drawImage(
+        img, 
+        actualX, actualY, actualWidth, actualHeight, 
+        0, 0, actualWidth, actualHeight
+      );
+      
+      // Get the cropped image data URL
+      const croppedImage = extractCanvas.toDataURL('image/jpeg');
+      
+      // Process the selected area
+      const imageToProcess = await ImageJS.load(croppedImage);
       let processedImage = imageToProcess.grey();
       const mask = processedImage.mask({ algorithm: 'li' });
       processedImage = mask;
@@ -170,7 +252,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
       const items = parseReceipt(text);
       if (items.length === 0) {
-        throw new Error("Could not parse any items. Please try again.");
+        throw new Error("Could not parse any items. Please try again with a clearer image or select a different area.");
       }
       
       setParsedItems(items);
@@ -180,10 +262,48 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       
     } catch (err) {
       setError(err.message || 'An error occurred during scanning.');
-      console.error(err);
-      setView('confirm');
+      console.error('OCR Error:', err);
+      setView('select_area');
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      
+      // Validate file type
+      if (!file.type.match('image.*')) {
+        setError('Please select an image file (JPEG, PNG, etc.)');
+        return;
+      }
+      
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setError('Image is too large. Please select an image smaller than 10MB.');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imageDataUrl = reader.result;
+          setImage(imageDataUrl);
+          setView('confirm');
+          setError(''); // Clear any previous errors
+        } catch (error) {
+          console.error('Error loading image:', error);
+          setError('Failed to load the selected image. Please try a different file.');
+        }
+      };
+      
+      reader.onerror = () => {
+        console.error('FileReader error:', reader.error);
+        setError('Failed to read the selected file. Please try again.');
+      };
+      
+      reader.readAsDataURL(file);
     }
   };
 
@@ -218,74 +338,186 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
         setIsLoading(false);
     }
   };
+  
+  // Area selection handlers
+  const handleMouseDown = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    setIsSelecting(true);
+    setStartPoint({ x, y });
+    setSelectionArea({ x, y, width: 0, height: 0 });
+  };
+  
+  const handleMouseMove = (e) => {
+    if (!isSelecting) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate selection dimensions
+    const width = Math.abs(x - startPoint.x);
+    const height = Math.abs(y - startPoint.y);
+    
+    // Calculate top-left corner of selection
+    const selX = Math.min(startPoint.x, x);
+    const selY = Math.min(startPoint.y, y);
+    
+    setSelectionArea({ 
+      x: selX, 
+      y: selY, 
+      width, 
+      height 
+    });
+  };
+  
+  const handleMouseUp = () => {
+    setIsSelecting(false);
+    
+    // If selection is too small, reset to full image
+    if (selectionArea.width < 20 || selectionArea.height < 20) {
+      if (canvasRef.current) {
+        setSelectionArea({
+          x: 0,
+          y: 0,
+          width: canvasRef.current.width,
+          height: canvasRef.current.height
+        });
+      }
+    }
+  };
+  
+  // Handle touch events for mobile support
+  const handleTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    handleMouseDown({
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  };
+  
+  const handleTouchMove = (e) => {
+    if (e.touches.length !== 1 || !isSelecting) return;
+    const touch = e.touches[0];
+    handleMouseMove({
+      clientX: touch.clientX,
+      clientY: touch.clientY
+    });
+  };
+  
+  const handleTouchEnd = () => {
+    handleMouseUp();
+  };
+  
+  // Trigger file input click
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
   if (!isOpen) return null;
 
   const renderUploadView = () => (
     <div>
       <h3 className="text-lg font-semibold text-gray-200 mb-4">Upload a Receipt</h3>
-      <div className="border-2 border-dashed border-gray-600 p-6 text-center rounded-lg relative">
+      <div 
+        className="border-2 border-dashed border-gray-600 p-6 text-center rounded-lg cursor-pointer hover:bg-gray-800/50 transition-colors"
+        onClick={triggerFileInput}
+      >
         <SafeIcon icon={FiUpload} className="mx-auto h-12 w-12 text-gray-500" />
-        <p className="mt-2 text-sm text-gray-400">Drag & drop or click to upload</p>
-        <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+        <p className="mt-2 text-sm text-gray-400">
+          {isWorkerReady 
+            ? 'Click to select an image of your receipt' 
+            : 'Initializing scanner, please wait...'
+          }
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Supported formats: JPG, PNG, WEBP (max 10MB)
+        </p>
+        <input 
+          ref={fileInputRef}
+          type="file" 
+          accept="image/*" 
+          onChange={handleFileChange} 
+          className="hidden" 
+          disabled={!isWorkerReady || isLoading} 
+        />
       </div>
-      <div className="mt-6 prose prose-invert prose-sm text-gray-400 max-w-none">
-        <h4>Instructions:</h4>
-        <ol>
-          <li>Take a clear, well-lit photo of your receipt.</li>
-          <li>Ensure the text is horizontal and not blurry.</li>
-          <li>Upload the image file (JPEG, PNG).</li>
+      <div className="mt-6 text-gray-400 text-sm">
+        <h4 className="font-medium mb-2">For best results:</h4>
+        <ol className="list-decimal list-inside space-y-1">
+          <li>Take a clear, well-lit photo of your receipt</li>
+          <li>Ensure the text is horizontal and not blurry</li>
+          <li>You'll be able to select the items area for better scanning accuracy</li>
         </ol>
       </div>
     </div>
   );
 
-  const renderCropView = () => (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-gray-200">Crop the Receipt</h3>
-        <button onClick={() => { setImage(null); setView('upload'); }} className="text-gray-400 hover:text-white">
-          <SafeIcon icon={FiRefreshCw} />
+  const renderConfirmView = () => (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-200 mb-4">Confirm Image</h3>
+      <div className="flex justify-center items-center mb-4 border border-gray-700 rounded-lg overflow-hidden bg-gray-800">
+        <img src={image} alt="Receipt preview" className="max-w-full max-h-64 object-contain" />
+      </div>
+      <div className="flex gap-4 mt-4">
+        <button onClick={() => { setView('upload'); setImage(null); }} className="w-full flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
+          <SafeIcon icon={FiRepeat} />
+          Change
+        </button>
+        <button onClick={() => setView('select_area')} disabled={isLoading || !isWorkerReady} className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+          <SafeIcon icon={FiCrop} />
+          Select Area
         </button>
       </div>
-       {image && (
-        <ReactCrop
-          crop={crop}
-          onChange={(_, percentCrop) => setCrop(percentCrop)}
-          onComplete={(c) => setCompletedCrop(c)}
-          aspect={null}
-          className="max-h-[50vh] w-auto overflow-y-auto"
-        >
-          <img ref={imgRef} src={image} onLoad={onImageLoad} alt="Receipt" className="mx-auto" style={{ maxHeight: '60vh' }}/>
-        </ReactCrop>
-      )}
-      <div className="prose prose-invert prose-sm text-gray-400 max-w-none">
-        <p>Adjust the box to cover all the items you want to scan.</p>
-      </div>
-      <button onClick={handleConfirmCrop} disabled={!completedCrop} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:cursor-not-allowed">
-        <SafeIcon icon={FiCrop} />
-        Confirm Crop
-      </button>
     </div>
   );
-  
-  const renderConfirmView = () => (
-    <div className="space-y-4 text-center">
-        <h3 className="text-lg font-semibold text-gray-200">Confirm Scan Area</h3>
-        {croppedImageSrc && (
-            <img src={croppedImageSrc} alt="Cropped Receipt" className="mx-auto border border-gray-600 rounded-lg" style={{ maxHeight: '50vh' }}/>
-        )}
-        <p className="text-sm text-gray-400">Press 'Scan' to extract items from this area.</p>
-        <div className="flex gap-4">
-            <button onClick={() => setView('crop')} className="w-full flex justify-center items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-                <SafeIcon icon={FiArrowLeft} />
-                Back
-            </button>
-            <button onClick={handleScan} disabled={isLoading || !isWorkerReady} className="w-full flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500">
-                <SafeIcon icon={FiCamera} />
-                {isWorkerReady ? 'Scan' : 'Initializing...'}
-            </button>
-        </div>
+
+  const renderSelectAreaView = () => (
+    <div>
+      <h3 className="text-lg font-semibold text-gray-200 mb-4">Select Items Area</h3>
+      <p className="text-sm text-gray-400 mb-3">Drag to select the area containing items and prices for better scanning accuracy.</p>
+      <div 
+        ref={containerRef}
+        className="flex justify-center items-center mb-4 border border-gray-700 rounded-lg overflow-hidden bg-gray-800 relative"
+        style={{ height: '350px' }}
+      >
+        <canvas
+          ref={canvasRef}
+          className="max-w-full max-h-full"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        />
+      </div>
+      <div className="flex gap-4 mt-4">
+        <button onClick={() => { setView('confirm'); }} className="w-full flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
+          <SafeIcon icon={FiRepeat} />
+          Back
+        </button>
+        <button 
+          onClick={handleScan} 
+          disabled={isLoading || !isWorkerReady || selectionArea.width < 10 || selectionArea.height < 10} 
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500 disabled:cursor-not-allowed"
+        >
+          <SafeIcon icon={FiCamera} />
+          {isLoading ? 'Scanning...' : 'Scan Selected Area'}
+        </button>
+      </div>
     </div>
   );
 
@@ -295,7 +527,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
         <div className="w-full bg-gray-600 rounded-full h-2.5 mt-2">
             <div className="bg-blue-500 h-2.5 rounded-full" style={{ width: `${scanProgress}%` }}></div>
         </div>
-        <p className="text-sm text-gray-400">Please wait while we analyze the receipt...</p>
+        <p className="text-sm text-gray-400">Please wait while we analyze the selected area...</p>
       </div>
   );
 
@@ -304,8 +536,8 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold text-gray-200">Review Scanned Items</h3>
-        <button onClick={() => setView('confirm')} className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300">
-            <SafeIcon icon={FiArrowLeft} /> Back to Confirm
+        <button onClick={() => { setView('upload'); setError(''); }} className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300">
+            <SafeIcon icon={FiRefreshCw} /> Scan New Receipt
         </button>
       </div>
       <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-3">
@@ -348,16 +580,10 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
   const renderContent = () => {
     if (error) {
-        let backView = 'upload';
-        if (view === 'crop') backView = 'upload';
-        if (view === 'confirm') backView = 'crop';
-        if (view === 'edit') backView = 'confirm';
-        if (view === 'scan_progress') backView = 'confirm';
-
         return (
             <div className="text-center">
                 <div className="bg-red-800 text-white p-3 mb-4 rounded-lg">{error}</div>
-                <button onClick={() => { setError(''); setView(backView); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
+                <button onClick={() => { setError(''); setView(view === 'scan_progress' ? 'select_area' : 'upload'); }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
                     Try Again
                 </button>
             </div>
@@ -366,8 +592,8 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
 
     switch(view) {
         case 'upload': return renderUploadView();
-        case 'crop': return renderCropView();
         case 'confirm': return renderConfirmView();
+        case 'select_area': return renderSelectAreaView();
         case 'scan_progress': return renderScanProgressView();
         case 'edit': return renderEditView();
         default: return renderUploadView();
