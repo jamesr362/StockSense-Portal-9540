@@ -1,195 +1,127 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FiPlus, FiFileText, FiCalendar, FiChevronDown, FiChevronUp, FiArchive } from 'react-icons/fi';
-import ReceiptScannerModal from '../components/ReceiptScannerModal';
-import SafeIcon from '../common/SafeIcon';
-import supabase from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from 'react';
+    import { motion } from 'framer-motion';
+    import { RiAddLine, RiUploadCloud2Line, RiFileList2Line } from 'react-icons/ri';
+    import ReceiptScannerModal from '../components/ReceiptScannerModal';
+    import { useAuth } from '../context/AuthContext';
+    import { addInventoryItem } from '../services/db';
 
-const ReceiptScanner = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [receipts, setReceipts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [expandedReceiptId, setExpandedReceiptId] = useState(null);
-  const [receiptItems, setReceiptItems] = useState({});
+    const ReceiptScannerPage = () => {
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [scannedItems, setScannedItems] = useState([]);
+      const { user } = useAuth();
+      const [feedbackMessage, setFeedbackMessage] = useState('');
 
-  const { user } = useAuth();
-
-  const fetchReceipts = useCallback(async () => {
-    if (!user) return;
-
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('receipts')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching receipts:', error);
-    } else {
-      setReceipts(data);
-    }
-    setLoading(false);
-  }, [user]);
-
-  useEffect(() => {
-    fetchReceipts();
-  }, [fetchReceipts]);
-
-  const handleItemsScanned = async (items, imageFile) => {
-    if (!user) {
-      setError('You must be logged in to save receipts.');
-      return;
-    }
-  
-    try {
-      const fileName = `receipt_${Date.now()}.jpeg`;
-      const { data: fileData, error: fileError } = await supabase.storage
-        .from('receipts')
-        .upload(`${user.id}/${fileName}`, imageFile.split(',')[1], {
-            contentType: 'image/jpeg',
-            upsert: false,
-        });
-
-      if (fileError) throw fileError;
-  
-      const { data: receiptData, error: receiptError } = await supabase
-        .from('receipts')
-        .insert({
-          user_id: user.id,
-          storage_path: fileData.path,
-          file_name: fileName,
-        })
-        .select('id')
-        .single();
-  
-      if (receiptError) throw receiptError;
-  
-      const receiptId = receiptData.id;
-  
-      const itemsToInsert = items.map(item => ({
-        receipt_id: receiptId,
-        user_id: user.id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-      }));
-  
-      const { error: itemsError } = await supabase
-        .from('receipt_items')
-        .insert(itemsToInsert);
-  
-      if (itemsError) throw itemsError;
-  
-      await fetchReceipts();
-      setIsModalOpen(false);
-  
-    } catch (err) {
-      console.error('Error saving receipt and items:', err);
-      setError('Failed to save your receipt. Please try again.');
-    }
-  };
-
-  const toggleReceiptDetails = async (receiptId) => {
-    if (expandedReceiptId === receiptId) {
-      setExpandedReceiptId(null);
-    } else {
-      setExpandedReceiptId(receiptId);
-      if (!receiptItems[receiptId]) {
-        const { data, error } = await supabase
-          .from('receipt_items')
-          .select('*')
-          .eq('receipt_id', receiptId)
-          .eq('user_id', user.id);
-        
-        if (error) {
-          console.error('Error fetching receipt items:', error);
-          // Do not show error to user, just log it
-        } else {
-          setReceiptItems(prev => ({ ...prev, [receiptId]: data }));
+      const handleItemsScanned = async (items) => {
+        if (!user || !user.email) {
+            setFeedbackMessage('You must be logged in to add items.');
+            return;
         }
-      }
-    }
-  };
 
-  const ReceiptCard = ({ receipt }) => (
-    <div className="bg-gray-800 rounded-lg shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg">
-      <div className="p-4 cursor-pointer" onClick={() => toggleReceiptDetails(receipt.id)}>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <SafeIcon icon={FiFileText} className="text-blue-400 text-2xl" />
+        setFeedbackMessage('Saving items to your inventory...');
+        let successCount = 0;
+        for (const item of items) {
+          try {
+            await addInventoryItem(user.email, {
+              ...item,
+              status: 'In Stock',
+              dateAdded: new Date().toISOString(),
+            });
+            successCount++;
+          } catch (error) {
+            console.error('Failed to add item:', error);
+          }
+        }
+        
+        setScannedItems(prev => [...items, ...prev]);
+        setFeedbackMessage(`${successCount} of ${items.length} items added to inventory successfully!`);
+        
+        setTimeout(() => setFeedbackMessage(''), 5000);
+      };
+
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="p-4 sm:p-6"
+        >
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
             <div>
-              <p className="font-semibold text-white">{receipt.file_name || 'Receipt'}</p>
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <SafeIcon icon={FiCalendar} />
-                <span>{new Date(receipt.created_at).toLocaleDateString()}</span>
-              </div>
+              <h1 className="text-3xl font-bold text-white">Receipt Scanner</h1>
+              <p className="mt-1 text-gray-400">
+                Automatically add items to your inventory by scanning a receipt.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="mt-4 sm:mt-0 flex items-center justify-center px-5 py-3 bg-primary-600 text-white rounded-lg shadow-md hover:bg-primary-700 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            >
+              <RiAddLine className="mr-2 h-5 w-5" />
+              Scan New Receipt
+            </button>
+          </div>
+
+          {feedbackMessage && (
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 bg-green-900/50 border border-green-700 rounded-lg text-green-300 text-sm"
+            >
+                {feedbackMessage}
+            </motion.div>
+          )}
+
+          <div className="bg-gray-800 rounded-xl shadow-lg">
+            <div className="p-6 border-b border-gray-700">
+              <h2 className="text-xl font-semibold text-white flex items-center">
+                <RiFileList2Line className="mr-3 text-primary-400" />
+                Recently Scanned Items
+              </h2>
+            </div>
+            <div className="p-6">
+              {scannedItems.length > 0 ? (
+                <ul className="space-y-4">
+                  {scannedItems.map((item, index) => (
+                    <motion.li
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="flex justify-between items-center bg-gray-700/50 p-4 rounded-lg"
+                    >
+                      <div>
+                        <p className="font-semibold text-white">{item.name}</p>
+                        <p className="text-sm text-gray-400">
+                          Quantity: {item.quantity}
+                        </p>
+                      </div>
+                      <p className="font-semibold text-primary-400">
+                        £{Number(item.unitPrice).toFixed(2)}
+                      </p>
+                    </motion.li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-center py-12 px-4">
+                  <RiUploadCloud2Line className="mx-auto h-16 w-16 text-gray-500" />
+                  <h3 className="mt-4 text-lg font-semibold text-white">
+                    No receipts scanned yet
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Click 'Scan New Receipt' to get started.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
-          <SafeIcon icon={expandedReceiptId === receipt.id ? FiChevronUp : FiChevronDown} className="text-gray-400 text-xl" />
-        </div>
-      </div>
 
-      {expandedReceiptId === receipt.id && (
-        <div className="p-4 bg-gray-800/50 border-t border-gray-700">
-          <h4 className="text-md font-semibold text-gray-200 mb-2">Scanned Items</h4>
-          {receiptItems[receipt.id] ? (
-            <ul className="space-y-2">
-              {receiptItems[receipt.id].map(item => (
-                <li key={item.id} className="flex justify-between items-center text-sm p-2 rounded-md bg-gray-700/50">
-                  <span className="text-gray-300">{item.name}</span>
-                  <span className="text-gray-400">{item.quantity} x ${parseFloat(item.price).toFixed(2)}</span>
-                  <span className="font-semibold text-white">${(item.quantity * parseFloat(item.price)).toFixed(2)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center text-gray-400">Loading items...</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+          <ReceiptScannerModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            onItemsScanned={handleItemsScanned}
+          />
+        </motion.div>
+      );
+    };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-100">Receipt History</h1>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200"
-          >
-            <SafeIcon icon={FiPlus} />
-            <span>Scan New Receipt</span>
-          </button>
-        </div>
-
-        {error && <div className="bg-red-800 text-white p-3 mb-4 rounded-lg">{error}</div>}
-
-        <div className="space-y-4">
-          {loading ? (
-            <p className="text-center text-gray-400">Loading receipts...</p>
-          ) : receipts.length > 0 ? (
-            receipts.map(receipt => <ReceiptCard key={receipt.id} receipt={receipt} />)
-          ) : (
-            <div className="text-center py-16 px-6 bg-gray-800 rounded-lg">
-              <SafeIcon icon={FiArchive} className="mx-auto h-12 w-12 text-gray-500" />
-              <h3 className="mt-4 text-lg font-medium text-white">No receipts found</h3>
-              <p className="mt-1 text-sm text-gray-400">Get started by scanning your first receipt.</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <ReceiptScannerModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onItemsScanned={handleItemsScanned}
-      />
-    </div>
-  );
-};
-
-export default ReceiptScanner;
+    export default ReceiptScannerPage;
