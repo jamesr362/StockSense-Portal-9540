@@ -14,16 +14,31 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
     rollupOptions: {
-      external: [],
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          supabase: ['@supabase/supabase-js']
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+          icons: ['react-icons'],
+          supabase: ['@supabase/supabase-js'],
+          stripe: ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          ocr: ['tesseract.js'],
+          charts: ['chart.js', 'react-chartjs-2'],
+          utils: ['date-fns', 'papaparse', 'xlsx']
         }
       }
     }
   },
   optimizeDeps: {
-    include: ['@supabase/supabase-js']
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      '@supabase/supabase-js',
+      'tesseract.js'
+    ]
+  },
+  server: {
+    port: 3000,
+    host: true
   }
 });
