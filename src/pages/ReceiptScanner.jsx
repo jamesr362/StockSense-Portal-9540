@@ -14,37 +14,78 @@ const ReceiptScannerPage = () => {
   const { user } = useAuth();
 
   const handleItemsScanned = async (items) => {
+    console.log('=== handleItemsScanned called ===');
+    console.log('User:', user);
+    console.log('Items received:', items);
+
     if (!user || !user.email) {
-      setFeedbackMessage('You must be logged in to add items.');
+      setFeedbackMessage('❌ You must be logged in to add items.');
+      return;
+    }
+
+    if (!items || items.length === 0) {
+      setFeedbackMessage('❌ No items to save.');
       return;
     }
 
     setIsProcessing(true);
-    setFeedbackMessage('Saving items to your inventory...');
+    setFeedbackMessage('💾 Saving items to your inventory...');
     
     let successCount = 0;
     const failedItems = [];
 
     for (const item of items) {
       try {
-        await addInventoryItem(user.email, {
-          name: item.name,
-          quantity: item.quantity || 1,
-          unitPrice: item.price || 0,
-          status: 'In Stock',
-          dateAdded: new Date().toISOString(),
-          category: 'Scanned Items',
-          description: `Scanned from receipt on ${new Date().toLocaleDateString()}`
-        });
+        console.log('Adding item:', item);
+        
+        // Validate item data
+        if (!item.name || !item.name.trim()) {
+          console.log('Skipping item with empty name:', item);
+          failedItems.push('Empty item name');
+          continue;
+        }
+
+        if (!item.quantity || item.quantity <= 0) {
+          console.log('Setting default quantity for item:', item.name);
+          item.quantity = 1;
+        }
+
+        if (!item.unitPrice || item.unitPrice <= 0) {
+          console.log('Skipping item with invalid price:', item);
+          failedItems.push(item.name + ' (invalid price)');
+          continue;
+        }
+
+        // Prepare item data for database
+        const itemData = {
+          name: item.name.trim(),
+          quantity: parseInt(item.quantity) || 1,
+          unitPrice: parseFloat(item.unitPrice) || 0,
+          category: item.category || 'Scanned Items',
+          description: item.description || `Scanned from receipt on ${new Date().toLocaleDateString()}`,
+          status: item.status || 'In Stock',
+          dateAdded: item.dateAdded || new Date().toISOString().split('T')[0]
+        };
+
+        console.log('Calling addInventoryItem with:', itemData, user.email);
+        
+        // Call the database function with correct parameter order
+        await addInventoryItem(itemData, user.email);
         successCount++;
+        
+        console.log('Successfully added item:', item.name);
       } catch (error) {
         console.error('Failed to add item:', item.name, error);
-        failedItems.push(item.name);
+        failedItems.push(item.name + ' (' + error.message + ')');
       }
     }
     
-    // Update the scanned items list
-    setScannedItems(prev => [...items, ...prev]);
+    // Update the scanned items list for display
+    const validItems = items.filter(item => 
+      item.name && item.name.trim() && 
+      item.unitPrice && item.unitPrice > 0
+    );
+    setScannedItems(prev => [...validItems, ...prev]);
     
     // Show feedback
     if (failedItems.length === 0) {
@@ -52,13 +93,13 @@ const ReceiptScannerPage = () => {
     } else if (successCount > 0) {
       setFeedbackMessage(`⚠️ Added ${successCount} items. Failed to add: ${failedItems.join(', ')}`);
     } else {
-      setFeedbackMessage(`❌ Failed to add items. Please try again.`);
+      setFeedbackMessage(`❌ Failed to add items. Errors: ${failedItems.join(', ')}`);
     }
     
     setIsProcessing(false);
     
-    // Clear message after 5 seconds
-    setTimeout(() => setFeedbackMessage(''), 5000);
+    // Clear message after 8 seconds
+    setTimeout(() => setFeedbackMessage(''), 8000);
   };
 
   return (
@@ -77,7 +118,7 @@ const ReceiptScannerPage = () => {
           </h1>
           <p className="mt-2 text-gray-400 max-w-2xl">
             Quickly add items to your inventory by scanning receipt images. 
-            Our OCR technology extracts item names, quantities, and prices automatically.
+            Our enhanced OCR technology extracts item names, quantities, and prices automatically with right-side price detection.
           </p>
         </div>
         <button
@@ -114,10 +155,10 @@ const ReceiptScannerPage = () => {
         <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
           <div className="flex items-center mb-4">
             <SafeIcon icon={FiZap} className="h-8 w-8 text-yellow-400 mr-3" />
-            <h3 className="text-lg font-semibold text-white">Fast OCR</h3>
+            <h3 className="text-lg font-semibold text-white">Enhanced OCR</h3>
           </div>
           <p className="text-gray-400 text-sm">
-            Advanced optical character recognition extracts text from receipt images quickly and accurately.
+            Advanced optical character recognition with right-side price detection ensures accurate extraction of items and prices.
           </p>
         </div>
 
@@ -127,17 +168,17 @@ const ReceiptScannerPage = () => {
             <h3 className="text-lg font-semibold text-white">Smart Parsing</h3>
           </div>
           <p className="text-gray-400 text-sm">
-            Intelligent algorithms identify item names, quantities, and prices from receipt text automatically.
+            Intelligent algorithms identify item names, quantities, and prices from receipt text, filtering out irrelevant numbers.
           </p>
         </div>
 
         <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
           <div className="flex items-center mb-4">
             <SafeIcon icon={FiCheckCircle} className="h-8 w-8 text-green-400 mr-3" />
-            <h3 className="text-lg font-semibold text-white">Easy Review</h3>
+            <h3 className="text-lg font-semibold text-white">Area Selection</h3>
           </div>
           <p className="text-gray-400 text-sm">
-            Review and edit extracted items before adding them to your inventory with full control.
+            Select specific areas of your receipt for focused scanning, improving accuracy and reducing false positives.
           </p>
         </div>
       </div>
@@ -172,11 +213,13 @@ const ReceiptScannerPage = () => {
                       <span>Qty: {item.quantity}</span>
                       <span className="mx-2">•</span>
                       <span>Added to inventory</span>
+                      <span className="mx-2">•</span>
+                      <span>{item.category || 'Scanned Items'}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-blue-400">
-                      £{Number(item.price).toFixed(2)}
+                      £{Number(item.unitPrice || item.price || 0).toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-500">
                       {item.quantity > 1 ? 'per item' : 'total'}
@@ -198,7 +241,7 @@ const ReceiptScannerPage = () => {
               </h3>
               <p className="text-gray-400 mb-6 max-w-md mx-auto">
                 Start by clicking 'Scan New Receipt' to upload an image of your receipt. 
-                We'll automatically extract the items and add them to your inventory.
+                We'll automatically extract the items and add them to your inventory with enhanced accuracy.
               </p>
               <button
                 onClick={() => setIsModalOpen(true)}
