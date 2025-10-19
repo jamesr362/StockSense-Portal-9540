@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiZap, FiUploadCloud, FiFileText, FiCheckCircle } from 'react-icons/fi';
+import { FiZap, FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage } from 'react-icons/fi';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import { useAuth } from '../context/AuthContext';
 import { addInventoryItem } from '../services/db';
+import receiptStorage from '../services/receiptStorage';
 import SafeIcon from '../common/SafeIcon';
 
 const ReceiptScannerPage = () => {
@@ -11,7 +12,31 @@ const ReceiptScannerPage = () => {
   const [scannedItems, setScannedItems] = useState([]);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [activeTab, setActiveTab] = useState('scanner');
+  const [receiptHistory, setReceiptHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState(null);
   const { user } = useAuth();
+
+  // Load receipt history on component mount and tab change
+  useEffect(() => {
+    if (activeTab === 'history' && user) {
+      loadReceiptHistory();
+    }
+  }, [activeTab, user]);
+
+  const loadReceiptHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const receipts = await receiptStorage.getUserReceipts(user.email);
+      setReceiptHistory(receipts);
+    } catch (error) {
+      console.error('Error loading receipt history:', error);
+      setFeedbackMessage('❌ Failed to load receipt history');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const handleItemsScanned = async (items) => {
     console.log('=== handleItemsScanned called ===');
@@ -102,6 +127,62 @@ const ReceiptScannerPage = () => {
     setTimeout(() => setFeedbackMessage(''), 8000);
   };
 
+  const handleReceiptSaved = (receiptRecord) => {
+    console.log('Receipt saved:', receiptRecord);
+    // Refresh history if we're on that tab
+    if (activeTab === 'history') {
+      loadReceiptHistory();
+    }
+    setFeedbackMessage(`✅ Receipt saved to history with ${receiptRecord.total_items} items!`);
+  };
+
+  const viewReceiptImage = async (receipt) => {
+    try {
+      const imageUrl = await receiptStorage.getReceiptUrl(receipt.storage_path);
+      if (imageUrl) {
+        setSelectedReceipt({ ...receipt, imageUrl });
+      } else {
+        setFeedbackMessage('❌ Failed to load receipt image');
+      }
+    } catch (error) {
+      console.error('Error loading receipt image:', error);
+      setFeedbackMessage('❌ Failed to load receipt image');
+    }
+  };
+
+  const deleteReceipt = async (receiptId) => {
+    if (!confirm('Are you sure you want to delete this receipt? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await receiptStorage.deleteReceiptRecord(receiptId);
+      setFeedbackMessage('✅ Receipt deleted successfully');
+      loadReceiptHistory(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting receipt:', error);
+      setFeedbackMessage('❌ Failed to delete receipt');
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -150,116 +231,305 @@ const ReceiptScannerPage = () => {
         </motion.div>
       )}
 
-      {/* Features Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center mb-4">
-            <SafeIcon icon={FiZap} className="h-8 w-8 text-yellow-400 mr-3" />
-            <h3 className="text-lg font-semibold text-white">Enhanced OCR</h3>
-          </div>
-          <p className="text-gray-400 text-sm">
-            Advanced optical character recognition with right-side price detection ensures accurate extraction of items and prices.
-          </p>
-        </div>
-
-        <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center mb-4">
-            <SafeIcon icon={FiFileText} className="h-8 w-8 text-blue-400 mr-3" />
-            <h3 className="text-lg font-semibold text-white">Smart Parsing</h3>
-          </div>
-          <p className="text-gray-400 text-sm">
-            Intelligent algorithms identify item names, quantities, and prices from receipt text, filtering out irrelevant numbers.
-          </p>
-        </div>
-
-        <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
-          <div className="flex items-center mb-4">
-            <SafeIcon icon={FiCheckCircle} className="h-8 w-8 text-green-400 mr-3" />
-            <h3 className="text-lg font-semibold text-white">Area Selection</h3>
-          </div>
-          <p className="text-gray-400 text-sm">
-            Select specific areas of your receipt for focused scanning, improving accuracy and reducing false positives.
-          </p>
-        </div>
+      {/* Tabs */}
+      <div className="flex space-x-1 mb-6 bg-gray-800 p-1 rounded-lg">
+        <button
+          onClick={() => setActiveTab('scanner')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'scanner'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          }`}
+        >
+          <SafeIcon icon={FiZap} className="inline mr-2 h-4 w-4" />
+          Scanner
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'history'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+          }`}
+        >
+          <SafeIcon icon={FiImage} className="inline mr-2 h-4 w-4" />
+          Receipt History
+        </button>
       </div>
 
-      {/* Recently Scanned Items */}
-      <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700">
-        <div className="p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white flex items-center">
-            <SafeIcon icon={FiFileText} className="mr-3 text-blue-400" />
-            Recently Scanned Items
-            {scannedItems.length > 0 && (
-              <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
-                {scannedItems.length}
-              </span>
-            )}
-          </h2>
-        </div>
-        <div className="p-6">
-          {scannedItems.length > 0 ? (
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {scannedItems.slice(0, 20).map((item, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="flex justify-between items-center bg-gray-700/50 p-4 rounded-lg border border-gray-600"
-                >
-                  <div className="flex-1">
-                    <p className="font-medium text-white">{item.name}</p>
-                    <div className="flex items-center text-sm text-gray-400 mt-1">
-                      <span>Qty: {item.quantity}</span>
-                      <span className="mx-2">•</span>
-                      <span>Added to inventory</span>
-                      <span className="mx-2">•</span>
-                      <span>{item.category || 'Scanned Items'}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-blue-400">
-                      £{Number(item.unitPrice || item.price || 0).toFixed(2)}
+      {/* Tab Content */}
+      {activeTab === 'scanner' ? (
+        <>
+          {/* Features Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+              <div className="flex items-center mb-4">
+                <SafeIcon icon={FiZap} className="h-8 w-8 text-yellow-400 mr-3" />
+                <h3 className="text-lg font-semibold text-white">Enhanced OCR</h3>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Advanced optical character recognition with right-side price detection ensures accurate extraction of items and prices.
+              </p>
+            </div>
+
+            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+              <div className="flex items-center mb-4">
+                <SafeIcon icon={FiFileText} className="h-8 w-8 text-blue-400 mr-3" />
+                <h3 className="text-lg font-semibold text-white">Smart Parsing</h3>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Intelligent algorithms identify item names, quantities, and prices from receipt text, filtering out irrelevant numbers.
+              </p>
+            </div>
+
+            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+              <div className="flex items-center mb-4">
+                <SafeIcon icon={FiCheckCircle} className="h-8 w-8 text-green-400 mr-3" />
+                <h3 className="text-lg font-semibold text-white">Receipt Storage</h3>
+              </div>
+              <p className="text-gray-400 text-sm">
+                All receipt images are securely stored in your history with extracted items data for future reference.
+              </p>
+            </div>
+          </div>
+
+          {/* Recently Scanned Items */}
+          <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+            <div className="p-6 border-b border-gray-700">
+              <h2 className="text-xl font-semibold text-white flex items-center">
+                <SafeIcon icon={FiFileText} className="mr-3 text-blue-400" />
+                Recently Scanned Items
+                {scannedItems.length > 0 && (
+                  <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                    {scannedItems.length}
+                  </span>
+                )}
+              </h2>
+            </div>
+            <div className="p-6">
+              {scannedItems.length > 0 ? (
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {scannedItems.slice(0, 20).map((item, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="flex justify-between items-center bg-gray-700/50 p-4 rounded-lg border border-gray-600"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium text-white">{item.name}</p>
+                        <div className="flex items-center text-sm text-gray-400 mt-1">
+                          <span>Qty: {item.quantity}</span>
+                          <span className="mx-2">•</span>
+                          <span>Added to inventory</span>
+                          <span className="mx-2">•</span>
+                          <span>{item.category || 'Scanned Items'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-blue-400">
+                          £{Number(item.unitPrice || item.price || 0).toFixed(2)}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {item.quantity > 1 ? 'per item' : 'total'}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {scannedItems.length > 20 && (
+                    <p className="text-center text-gray-400 text-sm py-4">
+                      ... and {scannedItems.length - 20} more items
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {item.quantity > 1 ? 'per item' : 'total'}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-              {scannedItems.length > 20 && (
-                <p className="text-center text-gray-400 text-sm py-4">
-                  ... and {scannedItems.length - 20} more items
-                </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12 px-4">
+                  <SafeIcon icon={FiUploadCloud} className="mx-auto h-16 w-16 text-gray-500 mb-4" />
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    No receipts scanned yet
+                  </h3>
+                  <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                    Start by clicking 'Scan New Receipt' to upload an image of your receipt. 
+                    We'll automatically extract the items and add them to your inventory with enhanced accuracy.
+                  </p>
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <SafeIcon icon={FiZap} className="mr-2 h-4 w-4" />
+                    Get Started
+                  </button>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="text-center py-12 px-4">
-              <SafeIcon icon={FiUploadCloud} className="mx-auto h-16 w-16 text-gray-500 mb-4" />
-              <h3 className="text-lg font-medium text-white mb-2">
-                No receipts scanned yet
-              </h3>
-              <p className="text-gray-400 mb-6 max-w-md mx-auto">
-                Start by clicking 'Scan New Receipt' to upload an image of your receipt. 
-                We'll automatically extract the items and add them to your inventory with enhanced accuracy.
-              </p>
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          </div>
+        </>
+      ) : (
+        /* Receipt History Tab */
+        <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+          <div className="p-6 border-b border-gray-700">
+            <h2 className="text-xl font-semibold text-white flex items-center">
+              <SafeIcon icon={FiImage} className="mr-3 text-blue-400" />
+              Receipt History
+              {receiptHistory.length > 0 && (
+                <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+                  {receiptHistory.length}
+                </span>
+              )}
+            </h2>
+            <p className="text-gray-400 text-sm mt-2">
+              View and manage your uploaded receipt images with extracted item data.
+            </p>
+          </div>
+          <div className="p-6">
+            {isLoadingHistory ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-400">Loading receipt history...</p>
+              </div>
+            ) : receiptHistory.length > 0 ? (
+              <div className="space-y-4">
+                {receiptHistory.map((receipt, index) => (
+                  <motion.div
+                    key={receipt.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="bg-gray-700/50 p-4 rounded-lg border border-gray-600"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center mb-2">
+                          <SafeIcon icon={FiImage} className="h-5 w-5 text-blue-400 mr-2" />
+                          <h3 className="font-medium text-white">
+                            {receipt.file_name || `Receipt ${receipt.id}`}
+                          </h3>
+                          <span className={`ml-3 px-2 py-1 text-xs rounded-full ${
+                            receipt.scan_status === 'completed' 
+                              ? 'bg-green-900/50 text-green-300'
+                              : receipt.scan_status === 'failed'
+                              ? 'bg-red-900/50 text-red-300'
+                              : 'bg-yellow-900/50 text-yellow-300'
+                          }`}>
+                            {receipt.scan_status}
+                          </span>
+                        </div>
+                        <div className="flex items-center text-sm text-gray-400 space-x-4">
+                          <div className="flex items-center">
+                            <SafeIcon icon={FiCalendar} className="h-4 w-4 mr-1" />
+                            {formatDate(receipt.created_at)}
+                          </div>
+                          <div className="flex items-center">
+                            <SafeIcon icon={FiPackage} className="h-4 w-4 mr-1" />
+                            {receipt.total_items} items
+                          </div>
+                          {receipt.file_size && (
+                            <span>{formatFileSize(receipt.file_size)}</span>
+                          )}
+                        </div>
+                        {receipt.scanned_items && receipt.scanned_items.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {receipt.scanned_items.slice(0, 3).map((item, idx) => (
+                              <span key={idx} className="inline-block bg-gray-600 text-gray-200 text-xs px-2 py-1 rounded">
+                                {item.name} (£{item.price})
+                              </span>
+                            ))}
+                            {receipt.scanned_items.length > 3 && (
+                              <span className="text-gray-400 text-xs">
+                                +{receipt.scanned_items.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          onClick={() => viewReceiptImage(receipt)}
+                          className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                          title="View Receipt Image"
+                        >
+                          <SafeIcon icon={FiEye} className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteReceipt(receipt.id)}
+                          className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                          title="Delete Receipt"
+                        >
+                          <SafeIcon icon={FiTrash2} className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 px-4">
+                <SafeIcon icon={FiImage} className="mx-auto h-16 w-16 text-gray-500 mb-4" />
+                <h3 className="text-lg font-medium text-white mb-2">
+                  No receipt history yet
+                </h3>
+                <p className="text-gray-400 mb-6 max-w-md mx-auto">
+                  Upload your first receipt to start building your receipt history. 
+                  All images will be securely stored for future reference.
+                </p>
+                <button
+                  onClick={() => {
+                    setActiveTab('scanner');
+                    setIsModalOpen(true);
+                  }}
+                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <SafeIcon icon={FiUploadCloud} className="mr-2 h-4 w-4" />
+                  Scan First Receipt
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Receipt Image Modal */}
+      {selectedReceipt && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4">
+          <div className="bg-gray-900 text-white rounded-xl shadow-2xl max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b border-gray-700 p-6">
+              <h2 className="text-xl font-bold">
+                {selectedReceipt.file_name || `Receipt ${selectedReceipt.id}`}
+              </h2>
+              <button 
+                onClick={() => setSelectedReceipt(null)}
+                className="text-gray-400 hover:text-white"
               >
-                <SafeIcon icon={FiZap} className="mr-2 h-4 w-4" />
-                Get Started
+                <SafeIcon icon={FiX} className="h-6 w-6" />
               </button>
             </div>
-          )}
+            <div className="flex-1 overflow-auto p-6">
+              <div className="text-center">
+                <img 
+                  src={selectedReceipt.imageUrl} 
+                  alt="Receipt" 
+                  className="max-w-full max-h-96 mx-auto rounded-lg border border-gray-600"
+                />
+                <div className="mt-4 text-sm text-gray-400">
+                  <p>Uploaded: {formatDate(selectedReceipt.created_at)}</p>
+                  <p>Items extracted: {selectedReceipt.total_items}</p>
+                  {selectedReceipt.file_size && (
+                    <p>File size: {formatFileSize(selectedReceipt.file_size)}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Receipt Scanner Modal */}
       <ReceiptScannerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onItemsScanned={handleItemsScanned}
+        onReceiptSaved={handleReceiptSaved}
       />
     </motion.div>
   );

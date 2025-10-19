@@ -1,9 +1,12 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { FiUpload, FiX, FiZap, FiSave, FiTrash2, FiPlus, FiCrop, FiRotateCw } from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
+import receiptStorage from '../services/receiptStorage';
+import { useAuth } from '../context/AuthContext';
 
-const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
+const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }) => {
   const [image, setImage] = useState(null);
+  const [imageFile, setImageFile] = useState(null);
   const [items, setItems] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -16,12 +19,15 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   const [selectionStart, setSelectionStart] = useState(null);
   const [selectionEnd, setSelectionEnd] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [ocrText, setOcrText] = useState('');
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
+  const { user } = useAuth();
 
   const resetModal = () => {
     setImage(null);
+    setImageFile(null);
     setItems([]);
     setIsScanning(false);
     setProgress(0);
@@ -34,6 +40,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     setSelectionStart(null);
     setSelectionEnd(null);
     setIsSaving(false);
+    setOcrText('');
   };
 
   const handleClose = () => {
@@ -54,6 +61,8 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       setError('Image too large. Please select an image under 10MB');
       return;
     }
+
+    setImageFile(file);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -169,6 +178,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
         preserve_interword_spaces: '1'
       });
 
+      setOcrText(text);
       setProgress(90);
       setStatus('Extracting items...');
 
@@ -415,6 +425,12 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
   };
 
   const saveItems = async () => {
+    // Check if user is authenticated
+    if (!user || !user.email) {
+      setError('You must be logged in to save items');
+      return;
+    }
+
     const validItems = items.filter(item => 
       item.name.trim().length > 0 && 
       item.price > 0 && 
@@ -430,13 +446,59 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
     setError('');
 
     try {
+      let receiptRecord = null;
+
+      // ALWAYS save receipt image and record if we have an image file
+      if (imageFile) {
+        console.log('=== SAVING RECEIPT TO HISTORY ===');
+        setStatus('Uploading receipt image...');
+        
+        console.log('Starting receipt upload process...');
+        console.log('User:', user.email);
+        console.log('File:', imageFile.name, imageFile.size, 'bytes');
+        
+        try {
+          // Upload image to storage
+          const uploadResult = await receiptStorage.uploadReceipt(imageFile, user.email);
+          console.log('Upload result:', uploadResult);
+          
+          // Save receipt record to database
+          const receiptData = {
+            storagePath: uploadResult.path,
+            fileName: uploadResult.fileName,
+            fileSize: uploadResult.fileSize,
+            mimeType: uploadResult.mimeType,
+            scannedItems: validItems,
+            scanStatus: 'completed',
+            ocrText: ocrText
+          };
+
+          console.log('Saving receipt record...');
+          receiptRecord = await receiptStorage.saveReceiptRecord(receiptData, user.email);
+          console.log('✅ Receipt record saved successfully:', receiptRecord?.id);
+          
+          // Notify parent component about receipt save
+          if (onReceiptSaved && receiptRecord) {
+            console.log('Notifying parent of receipt save...');
+            onReceiptSaved(receiptRecord);
+          }
+        } catch (uploadError) {
+          console.error('Receipt upload/save failed:', uploadError);
+          setError(`Receipt upload failed: ${uploadError.message}. Items will still be saved.`);
+        }
+      } else {
+        console.log('No image file to save to history');
+      }
+
+      setStatus('Saving items to inventory...');
+
       // Transform items to match the expected format for the database
       const transformedItems = validItems.map(item => ({
         name: item.name.trim(),
         quantity: item.quantity,
-        unitPrice: item.price, // Use unitPrice instead of price
+        unitPrice: item.price,
         category: 'Scanned Items',
-        description: `Scanned from receipt on ${new Date().toLocaleDateString()}`,
+        description: `Scanned from receipt${receiptRecord ? ` (Receipt #${receiptRecord.id})` : ''} on ${new Date().toLocaleDateString()}`,
         status: 'In Stock',
         dateAdded: new Date().toISOString().split('T')[0]
       }));
@@ -446,13 +508,16 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
       // Call the parent component's handler with the transformed items
       await onItemsScanned(transformedItems);
       
+      console.log('✅ All operations completed successfully');
+      
       // Close the modal after successful save
       handleClose();
     } catch (err) {
       console.error('Error saving items:', err);
-      setError('Failed to save items. Please try again.');
+      setError(`Failed to save items: ${err.message}`);
     } finally {
       setIsSaving(false);
+      setStatus('');
     }
   };
 
@@ -503,8 +568,26 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                   <li>• You can select specific areas after upload</li>
                   <li>• Crop out irrelevant parts for better accuracy</li>
                   <li>• Ensure prices are visible on the right side</li>
+                  <li>• <strong className="text-green-400">Receipt images will be saved to your history automatically</strong></li>
                 </ul>
               </div>
+
+              {/* Authentication Status */}
+              {user ? (
+                <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                  <p className="text-green-200 text-sm">
+                    ✅ Logged in as: <strong>{user.email}</strong>
+                    <br />
+                    <span className="text-green-300">Receipt images will be saved to your history</span>
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
+                  <p className="text-red-200 text-sm">
+                    ❌ You must be logged in to save receipts and items
+                  </p>
+                </div>
+              )}
             </div>
           ) : showCropper ? (
             /* Area Selection */
@@ -644,7 +727,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
               </div>
 
               {/* Progress */}
-              {isScanning && (
+              {(isScanning || isSaving) && (
                 <div className="text-center space-y-3">
                   <p className="text-gray-300">{status}</p>
                   <div className="w-full bg-gray-600 rounded-full h-3">
@@ -653,7 +736,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <p className="text-sm text-gray-400">{progress}% complete</p>
+                  {progress > 0 && <p className="text-sm text-gray-400">{progress}% complete</p>}
                 </div>
               )}
 
@@ -720,18 +803,27 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned }) => {
                     </button>
                     <button
                       onClick={saveItems}
-                      disabled={isSaving}
+                      disabled={isSaving || !user}
                       className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <SafeIcon icon={FiSave} />
-                      {isSaving ? 'Saving...' : `Save ${items.length} Items`}
+                      {isSaving ? 'Saving...' : `Save ${items.length} Items & Receipt`}
                     </button>
                   </div>
+
+                  {/* Receipt History Notice */}
+                  {imageFile && user && (
+                    <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                      <p className="text-green-200 text-sm">
+                        📸 <strong>Receipt will be saved to your history</strong> along with the extracted items for future reference.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Try Again */}
-              {!isScanning && (
+              {!isScanning && !isSaving && (
                 <div className="text-center">
                   <button
                     onClick={() => setImage(null)}
