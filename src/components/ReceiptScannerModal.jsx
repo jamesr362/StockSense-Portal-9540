@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { FiUpload, FiX, FiZap, FiSave, FiTrash2, FiPlus, FiCrop, FiRotateCw } from 'react-icons/fi';
+import { FiUpload, FiX, FiSave, FiTrash2, FiPlus, FiCrop, FiRotateCw, FiCamera, FiMove, FiMaximize2 } from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import receiptStorage from '../services/receiptStorage';
 import { useAuth } from '../context/AuthContext';
@@ -20,10 +20,30 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
   const [selectionEnd, setSelectionEnd] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [ocrText, setOcrText] = useState('');
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [showMobileInstructions, setShowMobileInstructions] = useState(false);
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
   const { user } = useAuth();
+
+  // Detect mobile device
+  React.useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || 
+                      ('ontouchstart' in window) || 
+                      (window.innerWidth <= 768);
+      setIsMobileDevice(isMobile);
+      if (isMobile && showCropper) {
+        setShowMobileInstructions(true);
+      }
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [showCropper]);
 
   const resetModal = () => {
     setImage(null);
@@ -41,6 +61,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setSelectionEnd(null);
     setIsSaving(false);
     setOcrText('');
+    setShowMobileInstructions(false);
   };
 
   const handleClose = () => {
@@ -73,31 +94,63 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     reader.readAsDataURL(file);
   };
 
-  // Handle mouse events for area selection
-  const handleMouseDown = useCallback((e) => {
+  // Get coordinates from mouse or touch event
+  const getEventCoordinates = useCallback((e) => {
+    const rect = imageRef.current.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if (e.touches && e.touches.length > 0) {
+      // Touch event
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+      // Touch end event
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else {
+      // Mouse event
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+    
+    return { x, y };
+  }, []);
+
+  // Handle start of selection (mouse down or touch start)
+  const handleSelectionStart = useCallback((e) => {
     if (!showCropper) return;
     
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    e.preventDefault(); // Prevent scrolling on mobile
     
+    const coords = getEventCoordinates(e);
     setIsSelecting(true);
-    setSelectionStart({ x, y });
-    setSelectionEnd({ x, y });
-  }, [showCropper]);
+    setSelectionStart(coords);
+    setSelectionEnd(coords);
+    
+    // Hide mobile instructions once user starts selecting
+    if (isMobileDevice && showMobileInstructions) {
+      setShowMobileInstructions(false);
+    }
+  }, [showCropper, getEventCoordinates, isMobileDevice, showMobileInstructions]);
 
-  const handleMouseMove = useCallback((e) => {
+  // Handle selection movement (mouse move or touch move)
+  const handleSelectionMove = useCallback((e) => {
     if (!isSelecting || !selectionStart) return;
     
-    const rect = imageRef.current.getBoundingClientRect();
-    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
+    e.preventDefault(); // Prevent scrolling on mobile
     
-    setSelectionEnd({ x, y });
-  }, [isSelecting, selectionStart]);
+    const coords = getEventCoordinates(e);
+    setSelectionEnd(coords);
+  }, [isSelecting, selectionStart, getEventCoordinates]);
 
-  const handleMouseUp = useCallback(() => {
+  // Handle end of selection (mouse up or touch end)
+  const handleSelectionEnd = useCallback((e) => {
     if (!isSelecting) return;
+    
+    e.preventDefault();
     
     setIsSelecting(false);
     if (selectionStart && selectionEnd) {
@@ -108,11 +161,13 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
         height: Math.abs(selectionEnd.y - selectionStart.y)
       };
       
-      if (cropArea.width > 5 && cropArea.height > 5) {
+      // Minimum selection size (larger for mobile)
+      const minSize = isMobileDevice ? 10 : 5;
+      if (cropArea.width > minSize && cropArea.height > minSize) {
         setCropArea(cropArea);
       }
     }
-  }, [isSelecting, selectionStart, selectionEnd]);
+  }, [isSelecting, selectionStart, selectionEnd, isMobileDevice]);
 
   const cropImage = useCallback(() => {
     if (!image || !cropArea || !imageRef.current) return;
@@ -150,6 +205,23 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setSelectionEnd(null);
     setCroppedImage(null);
     setShowCropper(true);
+    if (isMobileDevice) {
+      setShowMobileInstructions(true);
+    }
+  };
+
+  // Quick select presets for mobile users
+  const quickSelectPresets = [
+    { name: 'Top Half', x: 5, y: 5, width: 90, height: 45 },
+    { name: 'Bottom Half', x: 5, y: 50, width: 90, height: 45 },
+    { name: 'Middle Section', x: 10, y: 25, width: 80, height: 50 },
+    { name: 'Full Receipt', x: 2, y: 2, width: 96, height: 96 }
+  ];
+
+  const applyQuickSelect = (preset) => {
+    setCropArea(preset);
+    setSelectionStart(null);
+    setSelectionEnd(null);
   };
 
   const scanReceipt = async () => {
@@ -565,31 +637,33 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4">
-      <div className="bg-gray-900 text-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-2 sm:p-4">
+      <div className="bg-gray-900 text-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center border-b border-gray-700 p-6">
-          <h2 className="text-xl font-bold flex items-center">
-            <SafeIcon icon={FiZap} className="mr-3 text-blue-400" />
+        <div className="flex justify-between items-center border-b border-gray-700 p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold flex items-center">
+            <SafeIcon icon={FiCamera} className="mr-2 sm:mr-3 text-blue-400" />
             Receipt Scanner
-            {croppedImage && <span className="ml-2 text-sm text-green-400">(Area Selected)</span>}
+            {croppedImage && <span className="ml-2 text-xs sm:text-sm text-green-400">(Area Selected)</span>}
           </h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-white">
-            <SafeIcon icon={FiX} className="h-6 w-6" />
+          <button onClick={handleClose} className="text-gray-400 hover:text-white p-2">
+            <SafeIcon icon={FiX} className="h-5 w-5 sm:h-6 sm:w-6" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!image ? (
             /* Upload Section */
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-gray-600 p-12 text-center rounded-lg cursor-pointer hover:bg-gray-800/50 transition-colors"
+                className="w-full border-2 border-dashed border-gray-600 p-8 sm:p-12 text-center rounded-lg cursor-pointer hover:bg-gray-800/50 transition-colors"
               >
-                <SafeIcon icon={FiUpload} className="mx-auto h-16 w-16 text-gray-500 mb-4" />
-                <p className="text-lg text-gray-300 mb-2">Click to upload receipt image</p>
+                <SafeIcon icon={FiUpload} className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-gray-500 mb-4" />
+                <p className="text-base sm:text-lg text-gray-300 mb-2">
+                  {isMobileDevice ? 'Tap to upload receipt image' : 'Click to upload receipt image'}
+                </p>
                 <p className="text-sm text-gray-500">Supports JPG, PNG, WebP (max 10MB)</p>
               </div>
               
@@ -601,12 +675,14 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                 className="hidden"
               />
 
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h4 className="font-medium text-gray-200 mb-3">📸 Tips for best results:</h4>
-                <ul className="text-sm text-gray-400 space-y-1">
+              <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
+                <h4 className="font-medium text-gray-200 mb-3 text-sm sm:text-base">
+                  📸 Tips for best results:
+                </h4>
+                <ul className="text-xs sm:text-sm text-gray-400 space-y-1">
                   <li>• Use good lighting and keep receipt flat</li>
                   <li>• Make sure text is clear and readable</li>
-                  <li>• You can select specific areas after upload</li>
+                  <li>• {isMobileDevice ? 'You can select areas with your finger' : 'You can select specific areas after upload'}</li>
                   <li>• Crop out irrelevant parts for better accuracy</li>
                   <li>• Ensure prices are visible on the right side</li>
                   <li>• <strong className="text-green-400">Receipt images will be saved to your history automatically</strong></li>
@@ -616,7 +692,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
               {/* Authentication Status */}
               {user ? (
                 <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
-                  <p className="text-green-200 text-sm">
+                  <p className="text-green-200 text-xs sm:text-sm">
                     ✅ Logged in as: <strong>{user.email}</strong>
                     <br />
                     <span className="text-green-300">Receipt images will be saved to your history</span>
@@ -624,38 +700,92 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                 </div>
               ) : (
                 <div className="bg-red-900/30 border border-red-700 rounded-lg p-3">
-                  <p className="text-red-200 text-sm">
+                  <p className="text-red-200 text-xs sm:text-sm">
                     ❌ You must be logged in to save receipts and items
                   </p>
                 </div>
               )}
             </div>
           ) : showCropper ? (
-            /* Area Selection */
-            <div className="space-y-6">
+            /* Area Selection - Mobile Optimized */
+            <div className="space-y-4 sm:space-y-6">
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-white mb-2">Select Receipt Area</h3>
-                <p className="text-gray-400 mb-4">
-                  Click and drag to select the area containing items and prices. 
-                  Focus on the items list with prices on the right side.
+                <h3 className="text-base sm:text-lg font-semibold text-white mb-2">
+                  Select Receipt Area
+                </h3>
+                <p className="text-gray-400 mb-4 text-sm sm:text-base">
+                  {isMobileDevice 
+                    ? 'Touch and drag to select the area with items and prices'
+                    : 'Click and drag to select the area containing items and prices'
+                  }
                 </p>
               </div>
 
+              {/* Mobile Instructions */}
+              {isMobileDevice && showMobileInstructions && (
+                <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 mb-4">
+                  <div className="flex items-start">
+                    <SafeIcon icon={FiMove} className="h-5 w-5 text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-blue-200 font-medium mb-1 text-sm">📱 Touch Selection Guide:</h4>
+                      <ul className="text-xs text-blue-100 space-y-1">
+                        <li>• Touch and drag your finger to select an area</li>
+                        <li>• Start from top-left, drag to bottom-right</li>
+                        <li>• Focus on the items list with prices</li>
+                        <li>• Use quick presets below if selection is difficult</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Selection Presets for Mobile */}
+              {isMobileDevice && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Quick Select:</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickSelectPresets.map((preset, index) => (
+                      <button
+                        key={index}
+                        onClick={() => applyQuickSelect(preset)}
+                        className="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg transition-colors"
+                      >
+                        <SafeIcon icon={FiMaximize2} className="h-3 w-3 mr-1 inline" />
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex justify-center">
-                <div className="relative inline-block">
+                <div className="relative inline-block max-w-full">
                   <img 
                     ref={imageRef}
                     src={image} 
                     alt="Receipt" 
-                    className="max-w-full max-h-96 rounded-lg border border-gray-600 cursor-crosshair"
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
+                    className={`max-w-full rounded-lg border border-gray-600 ${
+                      isMobileDevice 
+                        ? 'max-h-[60vh] touch-none cursor-crosshair' 
+                        : 'max-h-96 cursor-crosshair'
+                    }`}
+                    // Mouse events
+                    onMouseDown={handleSelectionStart}
+                    onMouseMove={handleSelectionMove}
+                    onMouseUp={handleSelectionEnd}
+                    onMouseLeave={handleSelectionEnd}
+                    // Touch events for mobile
+                    onTouchStart={handleSelectionStart}
+                    onTouchMove={handleSelectionMove}
+                    onTouchEnd={handleSelectionEnd}
                     draggable={false}
+                    style={{ 
+                      touchAction: 'none', // Prevent scrolling during selection
+                      userSelect: 'none'   // Prevent text selection
+                    }}
                   />
                   
-                  {/* Selection overlay */}
+                  {/* Current selection overlay */}
                   {(selectionStart && selectionEnd) && (
                     <div
                       className="absolute border-2 border-blue-400 bg-blue-400 bg-opacity-20 pointer-events-none"
@@ -668,7 +798,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                     />
                   )}
                   
-                  {/* Crop area overlay */}
+                  {/* Confirmed crop area overlay */}
                   {cropArea && (
                     <div
                       className="absolute border-2 border-green-400 bg-green-400 bg-opacity-20 pointer-events-none"
@@ -678,15 +808,21 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                         width: `${cropArea.width}%`,
                         height: `${cropArea.height}%`,
                       }}
-                    />
+                    >
+                      {/* Corner indicators for better visibility */}
+                      <div className="absolute -top-1 -left-1 w-3 h-3 bg-green-400 rounded-full"></div>
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full"></div>
+                      <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-green-400 rounded-full"></div>
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full"></div>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4">
                 <button
                   onClick={() => setShowCropper(false)}
-                  className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+                  className="flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"
                 >
                   Skip Selection
                 </button>
@@ -694,14 +830,14 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                   <>
                     <button
                       onClick={cropImage}
-                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
+                      className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
                     >
                       <SafeIcon icon={FiCrop} className="h-4 w-4" />
                       Use Selected Area
                     </button>
                     <button
                       onClick={resetCrop}
-                      className="flex items-center gap-2 bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg"
+                      className="flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg text-sm"
                     >
                       <SafeIcon icon={FiRotateCw} className="h-4 w-4" />
                       Reset Selection
@@ -710,47 +846,48 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                 )}
               </div>
 
-              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
-                <h4 className="text-blue-200 font-medium mb-2">💡 Selection Tips:</h4>
-                <ul className="text-sm text-blue-100 space-y-1">
+              <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 sm:p-4">
+                <h4 className="text-blue-200 font-medium mb-2 text-sm">💡 Selection Tips:</h4>
+                <ul className="text-xs sm:text-sm text-blue-100 space-y-1">
                   <li>• Focus on the items list area with names and prices</li>
                   <li>• Make sure prices are clearly visible on the right side</li>
                   <li>• Exclude headers, footers, and store information</li>
                   <li>• Include quantity information if visible</li>
                   <li>• Avoid areas with only item codes or dates</li>
+                  {isMobileDevice && <li>• <strong>Use a steady finger motion for best results</strong></li>}
                 </ul>
               </div>
             </div>
           ) : (
-            /* Scan Results Section */
-            <div className="space-y-6">
+            /* Scan Results Section - Mobile Optimized */
+            <div className="space-y-4 sm:space-y-6">
               {/* Image Preview */}
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
                 {croppedImage && (
                   <div className="text-center">
-                    <p className="text-sm text-gray-400 mb-2">Selected Area</p>
+                    <p className="text-xs sm:text-sm text-gray-400 mb-2">Selected Area</p>
                     <img 
                       src={croppedImage} 
                       alt="Cropped Receipt" 
-                      className="max-h-48 rounded-lg border border-green-600"
+                      className="max-h-32 sm:max-h-48 rounded-lg border border-green-600 mx-auto"
                     />
                   </div>
                 )}
                 <div className="text-center">
-                  <p className="text-sm text-gray-400 mb-2">Original Image</p>
+                  <p className="text-xs sm:text-sm text-gray-400 mb-2">Original Image</p>
                   <img 
                     src={image} 
                     alt="Receipt" 
-                    className="max-h-48 rounded-lg border border-gray-600 opacity-70"
+                    className="max-h-32 sm:max-h-48 rounded-lg border border-gray-600 opacity-70 mx-auto"
                   />
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-center gap-4">
+              <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4">
                 <button
                   onClick={() => setShowCropper(true)}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+                  className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
                 >
                   <SafeIcon icon={FiCrop} className="h-4 w-4" />
                   {croppedImage ? 'Reselect Area' : 'Select Area'}
@@ -759,9 +896,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                 {!isScanning && items.length === 0 && (
                   <button
                     onClick={scanReceipt}
-                    className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg"
+                    className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 sm:px-6 rounded-lg text-sm"
                   >
-                    <SafeIcon icon={FiZap} />
+                    <SafeIcon icon={FiCamera} className="h-4 w-4" />
                     {croppedImage ? 'Scan Selected Area' : 'Scan Full Image'}
                   </button>
                 )}
@@ -771,9 +908,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                   <button
                     onClick={saveItems}
                     disabled={!user}
-                    className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 sm:px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
-                    <SafeIcon icon={FiSave} />
+                    <SafeIcon icon={FiSave} className="h-4 w-4" />
                     Save Receipt to History
                   </button>
                 )}
@@ -782,74 +919,76 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
               {/* Progress */}
               {(isScanning || isSaving) && (
                 <div className="text-center space-y-3">
-                  <p className="text-gray-300">{status}</p>
-                  <div className="w-full bg-gray-600 rounded-full h-3">
+                  <p className="text-gray-300 text-sm sm:text-base">{status}</p>
+                  <div className="w-full bg-gray-600 rounded-full h-2 sm:h-3">
                     <div 
-                      className="bg-blue-500 h-3 rounded-full transition-all duration-300"
+                      className="bg-blue-500 h-2 sm:h-3 rounded-full transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  {progress > 0 && <p className="text-sm text-gray-400">{progress}% complete</p>}
+                  {progress > 0 && <p className="text-xs sm:text-sm text-gray-400">{progress}% complete</p>}
                 </div>
               )}
 
-              {/* Items List */}
+              {/* Items List - Mobile Optimized */}
               {items.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">Found {items.length} items</h3>
+                    <h3 className="text-base sm:text-lg font-semibold">Found {items.length} items</h3>
                     <button
                       onClick={addItem}
-                      className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm"
+                      className="flex items-center gap-1 sm:gap-2 bg-gray-700 hover:bg-gray-600 text-white px-2 sm:px-3 py-2 rounded-lg text-xs sm:text-sm"
                     >
-                      <SafeIcon icon={FiPlus} className="h-4 w-4" />
+                      <SafeIcon icon={FiPlus} className="h-3 w-3 sm:h-4 sm:w-4" />
                       Add Item
                     </button>
                   </div>
 
-                  <div className="space-y-3 max-h-80 overflow-y-auto">
+                  <div className="space-y-3 max-h-60 sm:max-h-80 overflow-y-auto">
                     {items.map((item, index) => (
-                      <div key={index} className="bg-gray-800 p-4 rounded-lg">
-                        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-3 items-center">
+                      <div key={index} className="bg-gray-800 p-3 sm:p-4 rounded-lg">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-center">
                           <input
                             type="text"
                             value={item.name}
                             onChange={(e) => updateItem(index, 'name', e.target.value)}
                             placeholder="Item name"
-                            className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none"
+                            className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none text-sm"
                           />
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(index, 'quantity', e.target.value)}
-                            placeholder="Qty"
-                            className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none"
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.price}
-                            onChange={(e) => updateItem(index, 'price', e.target.value)}
-                            placeholder="Price"
-                            className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none"
-                          />
+                          <div className="grid grid-cols-2 gap-2 sm:contents">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                              placeholder="Qty"
+                              className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none text-sm"
+                            />
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.price}
+                              onChange={(e) => updateItem(index, 'price', e.target.value)}
+                              placeholder="Price"
+                              className="bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 border-none text-sm"
+                            />
+                          </div>
                           <button
                             onClick={() => removeItem(index)}
-                            className="text-red-400 hover:text-red-300 p-2"
+                            className="text-red-400 hover:text-red-300 p-2 self-center justify-self-center sm:justify-self-auto"
                           >
-                            <SafeIcon icon={FiTrash2} className="h-5 w-5" />
+                            <SafeIcon icon={FiTrash2} className="h-4 w-4 sm:h-5 sm:w-5" />
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <button
                       onClick={() => setItems([])}
-                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg"
+                      className="bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-4 rounded-lg text-sm"
                       disabled={isSaving}
                     >
                       Clear All
@@ -857,9 +996,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                     <button
                       onClick={saveItems}
                       disabled={isSaving || !user}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                     >
-                      <SafeIcon icon={FiSave} />
+                      <SafeIcon icon={FiSave} className="h-4 w-4" />
                       {isSaving ? 'Saving...' : `Save ${items.length} Items & Receipt`}
                     </button>
                   </div>
@@ -867,7 +1006,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                   {/* Receipt History Notice */}
                   {imageFile && user && (
                     <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
-                      <p className="text-green-200 text-sm">
+                      <p className="text-green-200 text-xs sm:text-sm">
                         📸 <strong>Receipt will be saved to your history</strong> along with the extracted items for future reference.
                       </p>
                     </div>
@@ -880,7 +1019,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                 <div className="text-center">
                   <button
                     onClick={() => setImage(null)}
-                    className="text-blue-400 hover:text-blue-300 text-sm"
+                    className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm"
                   >
                     Try different image
                   </button>
@@ -891,15 +1030,15 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-900/50 border border-red-700 text-red-200 p-4 rounded-lg mt-4">
-              {error}
+            <div className="bg-red-900/50 border border-red-700 text-red-200 p-3 sm:p-4 rounded-lg mt-4">
+              <p className="text-xs sm:text-sm">{error}</p>
             </div>
           )}
 
           {/* Status Message */}
           {status && !error && !isScanning && !isSaving && (
-            <div className="bg-green-900/50 border border-green-700 text-green-200 p-4 rounded-lg mt-4">
-              {status}
+            <div className="bg-green-900/50 border border-green-700 text-green-200 p-3 sm:p-4 rounded-lg mt-4">
+              <p className="text-xs sm:text-sm">{status}</p>
             </div>
           )}
         </div>

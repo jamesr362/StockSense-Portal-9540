@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiZap, FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage, FiX, FiDownload, FiArchive } from 'react-icons/fi';
+import { FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage, FiX, FiDownload, FiArchive, FiCamera } from 'react-icons/fi';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import { useAuth } from '../context/AuthContext';
 import { addInventoryItem } from '../services/db';
@@ -407,7 +407,7 @@ const ReceiptScannerPage = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center">
-            <SafeIcon icon={FiZap} className="mr-2 sm:mr-3 text-yellow-400" />
+            <SafeIcon icon={FiCamera} className="mr-2 sm:mr-3 text-blue-400" />
             Receipt Scanner
           </h1>
           <p className="mt-2 text-gray-400 max-w-2xl text-sm sm:text-base">
@@ -454,7 +454,7 @@ const ReceiptScannerPage = () => {
               : 'text-gray-400 hover:text-white hover:bg-gray-700'
           }`}
         >
-          <SafeIcon icon={FiZap} className="inline mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+          <SafeIcon icon={FiCamera} className="inline mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
           <span className="hidden sm:inline">Scanner</span>
           <span className="sm:hidden">Scan</span>
         </button>
@@ -479,7 +479,7 @@ const ReceiptScannerPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8">
             <div className="bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-700">
               <div className="flex items-center mb-4">
-                <SafeIcon icon={FiZap} className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-400 mr-3" />
+                <SafeIcon icon={FiCamera} className="h-6 w-6 sm:h-8 sm:w-8 text-blue-400 mr-3" />
                 <h3 className="text-base sm:text-lg font-semibold text-white">Enhanced OCR</h3>
               </div>
               <p className="text-gray-400 text-xs sm:text-sm">
@@ -572,7 +572,7 @@ const ReceiptScannerPage = () => {
                     onClick={() => setIsModalOpen(true)}
                     className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                   >
-                    <SafeIcon icon={FiZap} className="mr-2 h-4 w-4" />
+                    <SafeIcon icon={FiCamera} className="mr-2 h-4 w-4" />
                     Get Started
                   </button>
                 </div>

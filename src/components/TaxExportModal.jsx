@@ -5,6 +5,10 @@ import * as XLSX from 'xlsx';
 import {getInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 
+const formatCurrency=(value)=> {
+  return `£${(value || 0).toFixed(2)}`;
+};
+
 export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
   const [isLoading,setIsLoading]=useState(false);
   const [inventoryData,setInventoryData]=useState([]);
@@ -158,10 +162,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         'Category': category,
         'Total Items': data.items,
         'Total Quantity': data.quantity,
-        'Total Purchase Cost': data.totalCost,
-        'VAT Refund Available': data.vatRefund,
-        'Net Cost (Ex-VAT)': data.netCost,
-        'Average VAT per Item': data.items > 0 ? data.vatRefund / data.items : 0
+        'Total Purchase Cost': data.totalCost.toFixed(2), // Pass as string with 2 decimals
+        'VAT Refund Available': data.vatRefund.toFixed(2), // Pass as string with 2 decimals
+        'Net Cost (Ex-VAT)': data.netCost.toFixed(2), // Pass as string with 2 decimals
+        'Average VAT per Item': (data.items > 0 ? data.vatRefund / data.items : 0).toFixed(2) // Pass as string with 2 decimals
       }));
       
       reportData=categoryData;
@@ -182,10 +186,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           'Item Name': item.name,
           'Category': item.category || 'Uncategorized',
           'Quantity': item.quantity,
-          'Unit Price (Inc VAT)': item.unitPrice,
-          'Total Purchase Cost': itemCost,
-          'VAT Refund Available': itemVatRefund,
-          'Net Cost (Ex-VAT)': itemNetCost,
+          'Unit Price (Inc VAT)': item.unitPrice.toFixed(2),
+          'Total Purchase Cost': itemCost.toFixed(2),
+          'VAT Refund Available': itemVatRefund.toFixed(2),
+          'Net Cost (Ex-VAT)': itemNetCost.toFixed(2),
           'Status': item.status,
           'Date Added': item.dateAdded,
           'Description': item.description || '',
@@ -329,10 +333,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         'Item Name': item.name,
         'Category': item.category || 'Uncategorized',
         'Quantity': item.quantity,
-        'Unit Price (Inc VAT)': item.unitPrice,
-        'Total Purchase Cost': itemCost,
-        'VAT Refund Available': itemVatRefund,
-        'Net Cost (Ex-VAT)': itemNetCost,
+        'Unit Price (Inc VAT)': item.unitPrice.toFixed(2), // Pass as string with 2 decimals
+        'Total Purchase Cost': itemCost.toFixed(2), // Pass as string with 2 decimals
+        'VAT Refund Available': itemVatRefund.toFixed(2), // Pass as string with 2 decimals
+        'Net Cost (Ex-VAT)': itemNetCost.toFixed(2), // Pass as string with 2 decimals
         'Status': item.status,
         'Date Added': item.dateAdded,
         'Description': item.description || '',
@@ -440,9 +444,9 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         ${exportSettings.vatRegistered ? `
         <div class="refund-highlight">
           <h3>💰 VAT You Can Claim Back from HMRC</h3>
-          <p style="font-size: 24px; margin: 10px 0;"><strong>£${(vatSummary?.vatRefundAmount || 0).toFixed(2)}</strong></p>
+          <p style="font-size: 24px; margin: 10px 0;"><strong>${formatCurrency(vatSummary?.vatRefundAmount || 0)}</strong></p>
           <p>This is the VAT amount you paid on purchases that can be claimed back through your quarterly VAT return.</p>
-          <p><strong>Quarterly Potential:</strong> £${(vatSummary?.quarterlyRefund || 0).toFixed(2)} per quarter</p>
+          <p><strong>Quarterly Potential:</strong> ${formatCurrency(vatSummary?.quarterlyRefund || 0)} per quarter</p>
         </div>
         ` : `
         <div class="vat-notice">
@@ -458,15 +462,15 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           </div>
           <div class="summary-card">
             <h3>Total Purchase Cost</h3>
-            <p>£${(vatSummary?.totalPurchaseCost || 0).toFixed(2)}</p>
+            <p>${formatCurrency(vatSummary?.totalPurchaseCost || 0)}</p>
           </div>
           <div class="summary-card">
             <h3>VAT Refund Available</h3>
-            <p>£${(vatSummary?.vatRefundAmount || 0).toFixed(2)}</p>
+            <p>${formatCurrency(vatSummary?.vatRefundAmount || 0)}</p>
           </div>
           <div class="summary-card">
             <h3>Net Cost (Ex-VAT)</h3>
-            <p>£${(vatSummary?.netCostValue || 0).toFixed(2)}</p>
+            <p>${formatCurrency(vatSummary?.netCostValue || 0)}</p>
           </div>
         </div>
 
@@ -499,9 +503,9 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                 <td>${item.name}</td>
                 <td>${item.category || 'Uncategorized'}</td>
                 <td class="number">${item.quantity}</td>
-                <td class="number">£${itemCost.toFixed(2)}</td>
-                <td class="number" style="color: #10b981; font-weight: bold;">£${itemVatRefund.toFixed(2)}</td>
-                <td class="number">£${itemNetCost.toFixed(2)}</td>
+                <td class="number">${formatCurrency(itemCost)}</td>
+                <td class="number" style="color: #10b981; font-weight: bold;">${formatCurrency(itemVatRefund)}</td>
+                <td class="number">${formatCurrency(itemNetCost)}</td>
                 <td>${item.status}</td>
               </tr>
               `;
@@ -578,7 +582,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       // Success message and close modal
       setTimeout(()=> {
         const message = exportSettings.vatRegistered 
-          ? `VAT refund report exported successfully as ${fileName}!\n\nVAT you can claim back: £${vatSummary.vatRefundAmount.toFixed(2)}\n\nThis file shows VAT extracted from your VAT-inclusive purchase prices and is ready for your accountant.`
+          ? `VAT refund report exported successfully as ${fileName}!\n\nVAT you can claim back: ${formatCurrency(vatSummary.vatRefundAmount)}\n\nThis file shows VAT extracted from your VAT-inclusive purchase prices and is ready for your accountant.`
           : `VAT report exported successfully as ${fileName}!\n\nNote: VAT registration required to claim refunds.\n\nThis file shows potential VAT refunds if you register for VAT.`;
         
         alert(message);
@@ -840,10 +844,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                         <h5 className="text-green-400 font-medium">VAT You Can Claim Back</h5>
                       </div>
                       <div className="text-2xl font-bold text-green-400 mb-1">
-                        £{vatSummary.vatRefundAmount.toFixed(2)}
+                        {formatCurrency(vatSummary.vatRefundAmount)}
                       </div>
                       <div className="text-sm text-green-300 mb-2">
-                        Quarterly: £{vatSummary.quarterlyRefund.toFixed(2)} • Annual: £{vatSummary.annualRefund.toFixed(2)}
+                        Quarterly: {formatCurrency(vatSummary.quarterlyRefund)} • Annual: {formatCurrency(vatSummary.annualRefund)}
                       </div>
                       <div className="text-xs text-green-300">
                         Calculated from VAT-inclusive purchase prices using: VAT = (Price × {exportSettings.vatRate}%) ÷ {100 + exportSettings.vatRate}%
@@ -865,15 +869,15 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">Purchase Cost</div>
-                      <div className="text-white font-bold text-lg">£{vatSummary.totalPurchaseCost.toFixed(2)}</div>
+                      <div className="text-white font-bold text-lg">{formatCurrency(vatSummary.totalPurchaseCost)}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">VAT Refund</div>
-                      <div className="text-green-400 font-bold text-lg">£{vatSummary.vatRefundAmount.toFixed(2)}</div>
+                      <div className="text-green-400 font-bold text-lg">{formatCurrency(vatSummary.vatRefundAmount)}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">Net Cost</div>
-                      <div className="text-white font-bold text-lg">£{vatSummary.netCostValue.toFixed(2)}</div>
+                      <div className="text-white font-bold text-lg">{formatCurrency(vatSummary.netCostValue)}</div>
                     </div>
                   </div>
                 </div>

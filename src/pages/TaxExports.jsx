@@ -118,12 +118,7 @@ localStorage.removeItem(`taxExportHistory_${user.email}`);
 };
 
 const formatCurrency=(value)=> {
-return new Intl.NumberFormat('en-GB',{
-style: 'currency',
-currency: 'GBP',
-minimumFractionDigits: 2,
-maximumFractionDigits: 2
-}).format(value || 0);
+return `£${(value || 0).toFixed(2)}`;
 };
 
 const formatDate=(dateString)=> {
@@ -466,10 +461,10 @@ Most inventory purchases include VAT in the price you paid. This calculator extr
 <div className="bg-blue-800/30 rounded-lg p-3">
 <h6 className="text-blue-300 font-medium text-sm mb-1">How it works:</h6>
 <ul className="text-blue-300 text-xs space-y-1">
-<li>• <strong>Your Purchase Price:</strong> £120 (VAT-inclusive)</li>
-<li>• <strong>VAT Amount You Paid:</strong> £20 (that's 20% ÷ 120% × £120)</li>
-<li>• <strong>Net Cost:</strong> £100 (the actual item cost)</li>
-<li>• <strong>VAT Refund Available:</strong> £20 (claimable from HMRC)</li>
+<li>• <strong>Your Purchase Price:</strong> {formatCurrency(120)} (VAT-inclusive)</li>
+<li>• <strong>VAT Amount You Paid:</strong> {formatCurrency(20)} (that's 20% ÷ 120% × £120)</li>
+<li>• <strong>Net Cost:</strong> {formatCurrency(100)} (the actual item cost excluding VAT)</li>
+<li>• <strong>VAT Refund Available:</strong> {formatCurrency(20)} (claimable from HMRC)</li>
 </ul>
 </div>
 </div>
