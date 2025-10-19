@@ -185,170 +185,88 @@ class ReceiptStorageService {
         throw new Error('Missing file name for receipt');
       }
 
-      const receiptRecord = {
+      console.log('📝 Saving receipt with data:', {
         user_email: user.email,
         storage_path: receiptData.storagePath,
         file_name: receiptData.fileName,
-        file_size: receiptData.fileSize || null,
-        mime_type: receiptData.mimeType || null,
-        scanned_items: receiptData.scannedItems || [],
         total_items: receiptData.scannedItems?.length || 0,
-        scan_status: receiptData.scanStatus || 'completed',
-        ocr_text: receiptData.ocrText || null
-      };
-
-      console.log('📝 Inserting receipt record:', {
-        user_email: receiptRecord.user_email,
-        storage_path: receiptRecord.storage_path,
-        file_name: receiptRecord.file_name,
-        total_items: receiptRecord.total_items,
-        scan_status: receiptRecord.scan_status
+        scan_status: receiptData.scanStatus || 'completed'
       });
 
-      // 🔥 NUCLEAR FIX: Try multiple insertion strategies to bypass RLS issues
-      
-      // Strategy 1: Try direct insert with RLS bypass using raw SQL
-      console.log('🔄 Attempting Strategy 1: Raw SQL insert...');
+      // 🔐 PRIMARY STRATEGY: Use secure RPC function (SECURITY DEFINER bypasses RLS safely)
+      console.log('🔄 Using secure RPC function for receipt save...');
       try {
-        const { data: sqlData, error: sqlError } = await supabase.rpc('insert_receipt_bypass_rls', {
-          p_user_email: receiptRecord.user_email,
-          p_storage_path: receiptRecord.storage_path,
-          p_file_name: receiptRecord.file_name,
-          p_file_size: receiptRecord.file_size,
-          p_mime_type: receiptRecord.mime_type,
-          p_scanned_items: receiptRecord.scanned_items,
-          p_total_items: receiptRecord.total_items,
-          p_scan_status: receiptRecord.scan_status,
-          p_ocr_text: receiptRecord.ocr_text
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('insert_receipt_secure', {
+          p_user_email: user.email,
+          p_storage_path: receiptData.storagePath,
+          p_file_name: receiptData.fileName,
+          p_file_size: receiptData.fileSize || null,
+          p_mime_type: receiptData.mimeType || null,
+          p_scanned_items: receiptData.scannedItems || [],
+          p_total_items: receiptData.scannedItems?.length || 0,
+          p_scan_status: receiptData.scanStatus || 'completed',
+          p_ocr_text: receiptData.ocrText || null
         });
 
-        if (!sqlError && sqlData) {
-          console.log('✅ Strategy 1 SUCCESS: Receipt saved via RPC function:', sqlData);
-          return sqlData;
-        } else {
-          console.log('❌ Strategy 1 failed:', sqlError?.message);
-        }
-      } catch (error) {
-        console.log('❌ Strategy 1 exception:', error.message);
-      }
-
-      // Strategy 2: Try with minimal data first
-      console.log('🔄 Attempting Strategy 2: Minimal data insert...');
-      try {
-        const minimalRecord = {
-          user_email: user.email,
-          storage_path: receiptData.storagePath,
-          file_name: receiptData.fileName,
-          created_at: new Date().toISOString()
-        };
-
-        const { data: minData, error: minError } = await supabase
-          .from('receipts')
-          .insert(minimalRecord)
-          .select()
-          .single();
-
-        if (!minError && minData) {
-          console.log('✅ Strategy 2 SUCCESS: Minimal record created:', minData.id);
+        if (!rpcError && rpcResult) {
+          console.log('✅ PRIMARY SUCCESS: Receipt saved via secure RPC function:', rpcResult);
           
-          // Now try to update with additional data
-          if (receiptData.scannedItems || receiptData.fileSize) {
-            const updateData = {};
-            if (receiptData.scannedItems) {
-              updateData.scanned_items = receiptData.scannedItems;
-              updateData.total_items = receiptData.scannedItems.length;
-            }
-            if (receiptData.fileSize) updateData.file_size = receiptData.fileSize;
-            if (receiptData.mimeType) updateData.mime_type = receiptData.mimeType;
-            if (receiptData.scanStatus) updateData.scan_status = receiptData.scanStatus;
-            if (receiptData.ocrText) updateData.ocr_text = receiptData.ocrText;
+          // Return the receipt record for consistency
+          const { data: savedReceipt, error: fetchError } = await supabase
+            .from('receipts')
+            .select('*')
+            .eq('id', rpcResult)
+            .single();
 
-            const { data: updateResult, error: updateError } = await supabase
-              .from('receipts')
-              .update(updateData)
-              .eq('id', minData.id)
-              .select()
-              .single();
-
-            if (!updateError) {
-              console.log('✅ Strategy 2 ENHANCED: Record updated with full data');
-              return updateResult;
-            }
+          if (!fetchError && savedReceipt) {
+            return savedReceipt;
           }
-
-          return minData;
+          
+          // If we can't fetch the full record, return minimal data
+          return { id: rpcResult, user_email: user.email };
         } else {
-          console.log('❌ Strategy 2 failed:', minError?.message);
+          console.log('❌ RPC function failed:', rpcError?.message);
         }
       } catch (error) {
-        console.log('❌ Strategy 2 exception:', error.message);
+        console.log('❌ RPC function exception:', error.message);
       }
 
-      // Strategy 3: Try using service_role key if available
-      console.log('🔄 Attempting Strategy 3: Service role bypass...');
+      // 🔐 FALLBACK STRATEGY: Direct insert with proper RLS context
+      console.log('🔄 Attempting direct insert with RLS...');
       try {
-        // Create a temporary supabase client with service role (if we had the key)
-        // For now, try with upsert instead of insert
-        const { data: upsertData, error: upsertError } = await supabase
-          .from('receipts')
-          .upsert(receiptRecord, { 
-            onConflict: 'user_email,storage_path',
-            ignoreDuplicates: false 
-          })
-          .select()
-          .single();
-
-        if (!upsertError && upsertData) {
-          console.log('✅ Strategy 3 SUCCESS: Record upserted:', upsertData.id);
-          return upsertData;
-        } else {
-          console.log('❌ Strategy 3 failed:', upsertError?.message);
-        }
-      } catch (error) {
-        console.log('❌ Strategy 3 exception:', error.message);
-      }
-
-      // Strategy 4: Last resort - try with different table approach
-      console.log('🔄 Attempting Strategy 4: Alternative table structure...');
-      try {
-        // Try inserting without JSONB fields that might cause issues
-        const simpleRecord = {
+        const receiptRecord = {
           user_email: user.email,
           storage_path: receiptData.storagePath,
           file_name: receiptData.fileName,
           file_size: receiptData.fileSize || null,
           mime_type: receiptData.mimeType || null,
+          scanned_items: receiptData.scannedItems || [],
           total_items: receiptData.scannedItems?.length || 0,
           scan_status: receiptData.scanStatus || 'completed',
-          ocr_text: receiptData.ocrText || null,
-          // Convert JSONB to text temporarily
-          scanned_items: receiptData.scannedItems ? JSON.stringify(receiptData.scannedItems) : null
+          ocr_text: receiptData.ocrText || null
         };
 
-        const { data: simpleData, error: simpleError } = await supabase
+        const { data: directResult, error: directError } = await supabase
           .from('receipts')
-          .insert(simpleRecord)
+          .insert(receiptRecord)
           .select()
           .single();
 
-        if (!simpleError && simpleData) {
-          console.log('✅ Strategy 4 SUCCESS: Simple record created:', simpleData.id);
-          return simpleData;
+        if (!directError && directResult) {
+          console.log('✅ FALLBACK SUCCESS: Receipt saved via direct insert:', directResult.id);
+          return directResult;
         } else {
-          console.log('❌ Strategy 4 failed:', simpleError?.message);
+          console.log('❌ Direct insert failed:', directError?.message);
         }
       } catch (error) {
-        console.log('❌ Strategy 4 exception:', error.message);
+        console.log('❌ Direct insert exception:', error.message);
       }
 
-      // All strategies failed
-      console.error('💥 ALL STRATEGIES FAILED - RLS policies are blocking all inserts');
-      console.error('🔧 SOLUTION: The database migration files need to be manually executed in Supabase');
-      console.error('📋 Go to Supabase Dashboard > SQL Editor and run the migration files:');
-      console.error('   1. src/supabase/migrations/1760833000000-fresh_receipts_setup.sql');
-      console.error('   2. src/supabase/migrations/1760834000000-nuclear_rls_fix.sql');
+      // If both strategies failed, provide helpful error
+      console.error('💥 ALL STRATEGIES FAILED');
+      console.error('🔧 SOLUTION: Run the SECURE_RLS_FIX.sql script in Supabase Dashboard');
       
-      throw new Error(`Database insert failed: RLS policies blocking all insert strategies. Please run the migration files manually in Supabase Dashboard.`);
+      throw new Error(`Receipt save failed: RLS policies need configuration. Please run the SECURE_RLS_FIX.sql script in your Supabase Dashboard.`);
 
     } catch (error) {
       console.error('❌ Error saving receipt record:', error);
@@ -365,6 +283,35 @@ class ReceiptStorageService {
       // Ensure user is authenticated
       const user = this.getCurrentUser();
 
+      // Try secure update function first
+      try {
+        const { data: updateResult, error: updateError } = await supabase.rpc('update_receipt_secure', {
+          p_receipt_id: receiptId,
+          p_user_email: user.email,
+          p_scanned_items: updates.scanned_items || null,
+          p_total_items: updates.total_items || null,
+          p_scan_status: updates.scan_status || null,
+          p_ocr_text: updates.ocr_text || null
+        });
+
+        if (!updateError && updateResult) {
+          console.log('✅ Receipt updated via secure function:', receiptId);
+          
+          // Fetch and return updated record
+          const { data, error } = await supabase
+            .from('receipts')
+            .select('*')
+            .eq('id', receiptId)
+            .eq('user_email', user.email)
+            .single();
+
+          return data;
+        }
+      } catch (error) {
+        console.log('Secure update function failed, trying direct update:', error.message);
+      }
+
+      // Fallback to direct update
       const updateData = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -488,7 +435,7 @@ class ReceiptStorageService {
         return { success: false, error: 'No authenticated user' };
       }
 
-      // Test basic query with correct syntax
+      // Test basic query
       const { data, error } = await supabase
         .from('receipts')
         .select('id')
