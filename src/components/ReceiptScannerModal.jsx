@@ -425,11 +425,16 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
   };
 
   const saveItems = async () => {
+    console.log('=== 🚀 SAVE ITEMS CALLED ===');
+    
     // Check if user is authenticated
     if (!user || !user.email) {
       setError('You must be logged in to save items');
+      console.error('❌ No authenticated user');
       return;
     }
+
+    console.log('👤 Authenticated user:', user.email);
 
     const validItems = items.filter(item => 
       item.name.trim().length > 0 && 
@@ -437,8 +442,8 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
       item.quantity > 0
     );
 
-    if (validItems.length === 0) {
-      setError('Please add at least one valid item');
+    if (validItems.length === 0 && !imageFile) {
+      setError('Please add at least one valid item or upload a receipt image');
       return;
     }
 
@@ -450,19 +455,29 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
 
       // ALWAYS save receipt image and record if we have an image file
       if (imageFile) {
-        console.log('=== SAVING RECEIPT TO HISTORY ===');
-        setStatus('Uploading receipt image...');
-        
-        console.log('Starting receipt upload process...');
-        console.log('User:', user.email);
-        console.log('File:', imageFile.name, imageFile.size, 'bytes');
+        console.log('=== 📸 RECEIPT SAVING PROCESS ===');
+        console.log('🔄 Starting receipt save process...');
+        console.log('📁 File:', imageFile.name, imageFile.size, 'bytes');
         
         try {
-          // Upload image to storage
-          const uploadResult = await receiptStorage.uploadReceipt(imageFile, user.email);
-          console.log('Upload result:', uploadResult);
+          // Test database connection first
+          setStatus('Testing database connection...');
+          const connectionTest = await receiptStorage.testConnection();
+          console.log('🔗 Connection test result:', connectionTest);
           
-          // Save receipt record to database
+          if (!connectionTest.success) {
+            throw new Error(`Database connection failed: ${connectionTest.error}`);
+          }
+
+          // Step 1: Upload image to storage
+          setStatus('Uploading receipt image...');
+          console.log('🔄 Step 1: Uploading to storage...');
+          const uploadResult = await receiptStorage.uploadReceipt(imageFile);
+          console.log('✅ Upload result:', uploadResult);
+          
+          // Step 2: Save receipt record to database
+          setStatus('Saving receipt to database...');
+          console.log('🔄 Step 2: Saving to database...');
           const receiptData = {
             storagePath: uploadResult.path,
             fileName: uploadResult.fileName,
@@ -473,51 +488,77 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
             ocrText: ocrText
           };
 
-          console.log('Saving receipt record...');
-          receiptRecord = await receiptStorage.saveReceiptRecord(receiptData, user.email);
-          console.log('✅ Receipt record saved successfully:', receiptRecord?.id);
+          console.log('💾 Receipt data to save:', {
+            storagePath: receiptData.storagePath,
+            fileName: receiptData.fileName,
+            fileSize: receiptData.fileSize,
+            itemCount: receiptData.scannedItems.length,
+            scanStatus: receiptData.scanStatus
+          });
           
-          // Notify parent component about receipt save
+          receiptRecord = await receiptStorage.saveReceiptRecord(receiptData);
+          console.log('🎉 Receipt record saved successfully:', receiptRecord?.id);
+          
+          // Step 3: Notify parent component about receipt save
           if (onReceiptSaved && receiptRecord) {
-            console.log('Notifying parent of receipt save...');
+            console.log('🔔 Notifying parent of receipt save...');
             onReceiptSaved(receiptRecord);
           }
+
+          console.log('=== ✅ RECEIPT SAVE COMPLETE ===');
         } catch (uploadError) {
-          console.error('Receipt upload/save failed:', uploadError);
-          setError(`Receipt upload failed: ${uploadError.message}. Items will still be saved.`);
+          console.error('❌ Receipt save failed:', uploadError);
+          setError(`Receipt save failed: ${uploadError.message}. Items will still be saved to inventory.`);
+          // Don't return here - continue with item saving if there are items
         }
-      } else {
-        console.log('No image file to save to history');
       }
 
-      setStatus('Saving items to inventory...');
+      // Save items to inventory if we have any
+      if (validItems.length > 0) {
+        setStatus('Saving items to inventory...');
+        console.log('📦 Saving items to inventory:', validItems.length);
 
-      // Transform items to match the expected format for the database
-      const transformedItems = validItems.map(item => ({
-        name: item.name.trim(),
-        quantity: item.quantity,
-        unitPrice: item.price,
-        category: 'Scanned Items',
-        description: `Scanned from receipt${receiptRecord ? ` (Receipt #${receiptRecord.id})` : ''} on ${new Date().toLocaleDateString()}`,
-        status: 'In Stock',
-        dateAdded: new Date().toISOString().split('T')[0]
-      }));
+        // Transform items to match the expected format for the database
+        const transformedItems = validItems.map(item => ({
+          name: item.name.trim(),
+          quantity: item.quantity,
+          unitPrice: item.price,
+          category: 'Scanned Items',
+          description: `Scanned from receipt${receiptRecord ? ` (Receipt #${receiptRecord.id})` : ''} on ${new Date().toLocaleDateString()}`,
+          status: 'In Stock',
+          dateAdded: new Date().toISOString().split('T')[0]
+        }));
 
-      console.log('Saving transformed items:', transformedItems);
+        console.log('📦 Transformed items for inventory:', transformedItems);
 
-      // Call the parent component's handler with the transformed items
-      await onItemsScanned(transformedItems);
+        // Call the parent component's handler with the transformed items
+        await onItemsScanned(transformedItems);
+        
+        console.log('🎉 Items saved to inventory successfully');
+      }
+
+      console.log('🎉 All save operations completed successfully');
       
-      console.log('✅ All operations completed successfully');
+      // Show success message
+      if (receiptRecord && validItems.length > 0) {
+        setStatus(`✅ Receipt and ${validItems.length} items saved successfully!`);
+      } else if (receiptRecord) {
+        setStatus('✅ Receipt saved to history successfully!');
+      } else if (validItems.length > 0) {
+        setStatus(`✅ ${validItems.length} items saved to inventory!`);
+      }
       
       // Close the modal after successful save
-      handleClose();
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
+      
     } catch (err) {
-      console.error('Error saving items:', err);
-      setError(`Failed to save items: ${err.message}`);
+      console.error('❌ Error in save process:', err);
+      setError(`Save failed: ${err.message}`);
     } finally {
       setIsSaving(false);
-      setStatus('');
+      setTimeout(() => setStatus(''), 3000);
     }
   };
 
@@ -724,6 +765,18 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                     {croppedImage ? 'Scan Selected Area' : 'Scan Full Image'}
                   </button>
                 )}
+
+                {/* Save Receipt Button - Always available when image is uploaded */}
+                {imageFile && !isSaving && (
+                  <button
+                    onClick={saveItems}
+                    disabled={!user}
+                    className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <SafeIcon icon={FiSave} />
+                    Save Receipt to History
+                  </button>
+                )}
               </div>
 
               {/* Progress */}
@@ -840,6 +893,13 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
           {error && (
             <div className="bg-red-900/50 border border-red-700 text-red-200 p-4 rounded-lg mt-4">
               {error}
+            </div>
+          )}
+
+          {/* Status Message */}
+          {status && !error && !isScanning && !isSaving && (
+            <div className="bg-green-900/50 border border-green-700 text-green-200 p-4 rounded-lg mt-4">
+              {status}
             </div>
           )}
         </div>
