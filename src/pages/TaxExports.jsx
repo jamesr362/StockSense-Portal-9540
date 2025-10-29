@@ -194,7 +194,7 @@ VAT refund calculation is available exclusively with the Professional plan. Calc
 </div>
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
 <div>
-<h5 className="text-white font-medium mb-2">💰 VAT Refund Features:</h5>
+<h5 className="text-white font-medium mb-2">VAT Refund Features:</h5>
 <ul className="text-gray-300 text-sm space-y-1">
 <li>• Calculate VAT refunds from VAT-inclusive prices</li>
 <li>• Professional VAT refund reports</li>
@@ -205,7 +205,7 @@ VAT refund calculation is available exclusively with the Professional plan. Calc
 </ul>
 </div>
 <div>
-<h5 className="text-white font-medium mb-2">💼 Additional Features:</h5>
+<h5 className="text-white font-medium mb-2">Additional Features:</h5>
 <ul className="text-gray-300 text-sm space-y-1">
 <li>• Unlimited inventory items</li>
 <li>• Unlimited receipt scans</li>
@@ -522,7 +522,7 @@ Use this report with your quarterly VAT return to claim back the VAT.
 <div className="px-4 py-5 sm:p-6">
 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 <div>
-<h4 className="text-white font-medium mb-3">💰 VAT Calculations</h4>
+<h4 className="text-white font-medium mb-3">VAT Calculations</h4>
 <ul className="text-gray-300 text-sm space-y-2">
 <li>• VAT amounts extracted from VAT-inclusive prices</li>
 <li>• VAT refund amounts by category</li>
@@ -533,7 +533,7 @@ Use this report with your quarterly VAT return to claim back the VAT.
 </ul>
 </div>
 <div>
-<h4 className="text-white font-medium mb-3">📋 Business Documentation</h4>
+<h4 className="text-white font-medium mb-3">Business Documentation</h4>
 <ul className="text-gray-300 text-sm space-y-2">
 <li>• Business name and VAT details</li>
 <li>• Report date and period covered</li>

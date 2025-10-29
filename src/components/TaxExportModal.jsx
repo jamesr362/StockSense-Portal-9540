@@ -217,20 +217,20 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['VAT REFUND SUMMARY',''],
       ['Total Items:',vatSummary.totalItems],
       ['Total Quantity:',vatSummary.totalQuantity],
-      ['Total Purchase Cost (Inc VAT):',`£${vatSummary.totalPurchaseCost.toFixed(2)}`],
+      ['Total Purchase Cost (Inc VAT):',vatSummary.totalPurchaseCost.toFixed(2)],
       ['VAT Rate:',`${exportSettings.vatRate}%`],
-      ['VAT Refund Available:',`£${vatSummary.vatRefundAmount.toFixed(2)}`],
-      ['Net Cost (Ex-VAT):',`£${vatSummary.netCostValue.toFixed(2)}`],
-      ['Average VAT per Item:',`£${vatSummary.averageVatPerItem.toFixed(2)}`],
+      ['VAT Refund Available:',vatSummary.vatRefundAmount.toFixed(2)],
+      ['Net Cost (Ex-VAT):',vatSummary.netCostValue.toFixed(2)],
+      ['Average VAT per Item:',vatSummary.averageVatPerItem.toFixed(2)],
       ['',''],
       ['QUARTERLY VAT RETURNS',''],
-      ['Quarterly Refund Potential:',`£${vatSummary.quarterlyRefund.toFixed(2)}`],
-      ['Annual Refund Potential:',`£${vatSummary.annualRefund.toFixed(2)}`],
+      ['Quarterly Refund Potential:',vatSummary.quarterlyRefund.toFixed(2)],
+      ['Annual Refund Potential:',vatSummary.annualRefund.toFixed(2)],
       ['',''],
       ['IMPORTANT NOTES',''],
       ['Calculation Method:','VAT extracted from VAT-inclusive purchase prices'],
       ['Formula Used:','VAT = (Purchase Price × 20%) ÷ 120%'],
-      ['Example:','£120 purchase = £20 VAT refund + £100 net cost'],
+      ['Example:','120.00 purchase = 20.00 VAT refund + 100.00 net cost'],
       ['',''],
       ['CATEGORY BREAKDOWN','']
     ];
@@ -240,8 +240,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       vatSummaryData.push([
         category,
         `${data.items} items`,
-        `Cost: £${data.totalCost.toFixed(2)}`,
-        `VAT Refund: £${data.vatRefund.toFixed(2)}`
+        `Cost: ${data.totalCost.toFixed(2)}`,
+        `VAT Refund: ${data.vatRefund.toFixed(2)}`
       ]);
     });
 
@@ -262,9 +262,9 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['Price Type:','VAT-Inclusive Purchase Prices'],
       ['VAT Rate Used:',`${exportSettings.vatRate}% (UK Standard Rate)`],
       ['Calculation Formula:','VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)'],
-      ['Example Calculation:','£120 purchase price = (£120 × 20) ÷ 120 = £20 VAT refund'],
+      ['Example Calculation:','120.00 purchase price = (120.00 × 20) ÷ 120 = 20.00 VAT refund'],
       ['Net Cost Formula:','Net Cost = Purchase Price - VAT Amount'],
-      ['Example Net Cost:','£120 - £20 = £100 net cost (ex-VAT)'],
+      ['Example Net Cost:','120.00 - 20.00 = 100.00 net cost (ex-VAT)'],
       ['',''],
       ['WHY VAT-INCLUSIVE PRICING?',''],
       ['Most Common:','Most business purchases show VAT-inclusive prices'],
@@ -283,7 +283,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       ['8. Cash Flow:','VAT refunds improve business cash flow'],
       ['',''],
       ['VAT REGISTRATION GUIDANCE',''],
-      ['Mandatory Registration:','Annual turnover exceeds £85,000 (2024)'],
+      ['Mandatory Registration:','Annual turnover exceeds 85,000 (2024)'],
       ['Voluntary Registration:','Register below threshold to reclaim VAT'],
       ['Benefits:','Reclaim VAT on business purchases and expenses'],
       ['Quarterly Returns:','Submit online by 1 month and 7 days after quarter end'],
@@ -354,7 +354,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       `VAT Rate: ${exportSettings.vatRate}%`,
       `VAT Registered: ${exportSettings.vatRegistered ? 'Yes' : 'No'}`,
       `Calculation: VAT extracted from VAT-inclusive purchase prices`,
-      `Total VAT Refund Available: £${vatSummary?.vatRefundAmount?.toFixed(2) || '0.00'}`,
+      `Total VAT Refund Available: ${vatSummary?.vatRefundAmount?.toFixed(2) || '0.00'}`,
       '',
       // Column headers
       headers.join(','),
@@ -434,16 +434,16 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         </div>
 
         <div class="calculation-info">
-          <h3>🧮 VAT Calculation Method</h3>
+          <h3>VAT Calculation Method</h3>
           <p><strong>Price Type:</strong> VAT-Inclusive Purchase Prices (most common)</p>
           <p><strong>Formula:</strong> VAT Amount = (Purchase Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
-          <p><strong>Example:</strong> £120 purchase price = (£120 × 20) ÷ 120 = £20 VAT refund</p>
-          <p><strong>Net Cost:</strong> £120 - £20 = £100 (actual item cost excluding VAT)</p>
+          <p><strong>Example:</strong> 120.00 purchase price = (120.00 × 20) ÷ 120 = 20.00 VAT refund</p>
+          <p><strong>Net Cost:</strong> 120.00 - 20.00 = 100.00 (actual item cost excluding VAT)</p>
         </div>
 
         ${exportSettings.vatRegistered ? `
         <div class="refund-highlight">
-          <h3>💰 VAT You Can Claim Back from HMRC</h3>
+          <h3>VAT You Can Claim Back from HMRC</h3>
           <p style="font-size: 24px; margin: 10px 0;"><strong>${formatCurrency(vatSummary?.vatRefundAmount || 0)}</strong></p>
           <p>This is the VAT amount you paid on purchases that can be claimed back through your quarterly VAT return.</p>
           <p><strong>Quarterly Potential:</strong> ${formatCurrency(vatSummary?.quarterlyRefund || 0)} per quarter</p>
@@ -892,7 +892,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                     <ul className="text-blue-300 text-sm space-y-1">
                       <li>• Calculates VAT from VAT-inclusive purchase prices (most common)</li>
                       <li>• Formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)</li>
-                      <li>• Example: £120 purchase = £20 VAT refund + £100 net cost</li>
+                      <li>• Example: 120.00 purchase = 20.00 VAT refund + 100.00 net cost</li>
                       <li>• VAT refunds only available to VAT-registered businesses</li>
                       <li>• Submit quarterly VAT returns to HMRC to claim refunds</li>
                       <li>• Keep all purchase invoices showing VAT separately</li>
