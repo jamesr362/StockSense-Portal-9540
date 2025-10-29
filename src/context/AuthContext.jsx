@@ -38,6 +38,18 @@ export function AuthProvider({children}) {
         console.log('Valid local session found:', session.user);
         setUser(session.user);
         setLoading(false);
+        
+        // ENHANCED: Dispatch login event for subscription sync
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('userLoggedIn', {
+            detail: { 
+              userEmail: session.user.email,
+              source: 'session_restore',
+              timestamp: Date.now()
+            }
+          }));
+        }, 1000);
+        
         return;
       }
 
@@ -63,6 +75,18 @@ export function AuthProvider({children}) {
               createSession(userObj);
               setUser(userObj);
               setLoading(false);
+              
+              // ENHANCED: Dispatch login event for subscription sync
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('userLoggedIn', {
+                  detail: { 
+                    userEmail: userObj.email,
+                    source: 'supabase_session',
+                    timestamp: Date.now()
+                  }
+                }));
+              }, 1000);
+              
               return;
             }
           }
@@ -84,6 +108,17 @@ export function AuthProvider({children}) {
           // Create new session for legacy users
           createSession(userWithoutPassword);
           setUser(userWithoutPassword);
+          
+          // ENHANCED: Dispatch login event for subscription sync
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('userLoggedIn', {
+              detail: { 
+                userEmail: userWithoutPassword.email,
+                source: 'legacy_restore',
+                timestamp: Date.now()
+              }
+            }));
+          }, 1000);
           
           // Clean up legacy storage
           localStorage.removeItem('userEmail');
@@ -113,6 +148,50 @@ export function AuthProvider({children}) {
       role: userData.role
     });
 
+    // ENHANCED: Clear subscription caches and dispatch login event
+    const clearSubscriptionCaches = (userEmail) => {
+      const cacheKeys = [
+        `featureCache_${userEmail}`,
+        `subscriptionCache_${userEmail}`,
+        `planLimits_${userEmail}`,
+        `subscription_${userEmail}`,
+        `userPlan_${userEmail}`,
+        `planAccess_${userEmail}`
+      ];
+      
+      cacheKeys.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        } catch (error) {
+          console.warn('Error clearing cache key:', key);
+        }
+      });
+    };
+
+    // Clear caches and dispatch events
+    clearSubscriptionCaches(userData.email);
+    
+    // Dispatch login event for subscription sync
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('userLoggedIn', {
+        detail: { 
+          userEmail: userData.email,
+          source: 'fresh_login',
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Also dispatch subscription refresh events
+      window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+        detail: { 
+          userEmail: userData.email,
+          force: true,
+          immediate: true
+        }
+      }));
+    }, 500);
+
     // Return a promise that resolves when the state is updated
     return new Promise((resolve) => {
       // Use setTimeout to ensure the state update has been processed
@@ -129,6 +208,31 @@ export function AuthProvider({children}) {
         userEmail: user.email,
         role: user.role
       });
+      
+      // ENHANCED: Clear all subscription caches on logout
+      const clearAllCaches = (userEmail) => {
+        const cacheKeys = [
+          `featureCache_${userEmail}`,
+          `subscriptionCache_${userEmail}`,
+          `planLimits_${userEmail}`,
+          `subscription_${userEmail}`,
+          `userPlan_${userEmail}`,
+          `planAccess_${userEmail}`,
+          'lastSubscriptionCheck',
+          'subscriptionRefreshTime'
+        ];
+        
+        cacheKeys.forEach(key => {
+          try {
+            localStorage.removeItem(key);
+            sessionStorage.removeItem(key);
+          } catch (error) {
+            console.warn('Error clearing cache key:', key);
+          }
+        });
+      };
+      
+      clearAllCaches(user.email);
     }
 
     // Sign out from Supabase if available

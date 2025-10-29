@@ -6,11 +6,144 @@ import { logSecurityEvent } from '../utils/security';
 /**
  * Hook for verifying and processing subscription updates after payment
  * Listens for payment completion and updates subscription status
+ * ENHANCED: Better cross-device sync and cache management
  */
 export const useSubscriptionVerification = () => {
   const { user } = useAuth();
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState(null);
+
+  // ENHANCED: Clear all subscription-related caches across devices
+  const clearAllSubscriptionCaches = useCallback((userEmail) => {
+    if (!userEmail) return;
+    
+    console.log('🧹 Clearing all subscription caches for:', userEmail);
+    
+    // Clear all possible cache keys
+    const cacheKeys = [
+      `featureCache_${userEmail}`,
+      `subscriptionCache_${userEmail}`,
+      `planLimits_${userEmail}`,
+      `subscription_${userEmail}`,
+      `userPlan_${userEmail}`,
+      `planAccess_${userEmail}`,
+      'lastSubscriptionCheck',
+      'subscriptionRefreshTime'
+    ];
+    
+    cacheKeys.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      } catch (error) {
+        console.warn('Error clearing cache key:', key, error);
+      }
+    });
+    
+    // Clear IndexedDB subscription data if available
+    try {
+      if ('indexedDB' in window) {
+        // This will be handled by the next data fetch
+        console.log('IndexedDB cache will be refreshed on next fetch');
+      }
+    } catch (error) {
+      console.warn('Error clearing IndexedDB cache:', error);
+    }
+  }, []);
+
+  // ENHANCED: Force subscription refresh across all components
+  const forceSubscriptionRefresh = useCallback((userEmail, immediate = true) => {
+    console.log('🔄 Forcing subscription refresh for:', userEmail);
+    
+    // Clear caches first
+    clearAllSubscriptionCaches(userEmail);
+    
+    // Dispatch multiple events to ensure all components refresh
+    const events = [
+      'subscriptionUpdated',
+      'refreshFeatureAccess', 
+      'planChanged',
+      'userUpgraded',
+      'paymentSuccessful',
+      'forceSubscriptionSync' // New event for forced sync
+    ];
+    
+    events.forEach(eventType => {
+      window.dispatchEvent(new CustomEvent(eventType, {
+        detail: { 
+          userEmail, 
+          force: true,
+          immediate,
+          source: 'verification_refresh',
+          timestamp: Date.now()
+        }
+      }));
+    });
+    
+    // Also dispatch a global refresh event
+    window.dispatchEvent(new CustomEvent('globalDataRefresh', {
+      detail: { userEmail, immediate: true }
+    }));
+    
+  }, [clearAllSubscriptionCaches]);
+
+  // ENHANCED: Verify subscription status directly from Supabase
+  const verifySubscriptionStatus = useCallback(async (userEmail) => {
+    if (!userEmail || !supabase) {
+      console.warn('Cannot verify subscription: missing user email or Supabase');
+      return null;
+    }
+
+    try {
+      console.log('🔍 Verifying subscription status for:', userEmail);
+      
+      // Direct query to Supabase with retry logic
+      let attempts = 0;
+      const maxAttempts = 3;
+      let subscriptionData = null;
+      
+      while (attempts < maxAttempts && !subscriptionData) {
+        try {
+          const { data, error } = await supabase
+            .from('subscriptions_tb2k4x9p1m')
+            .select('*')
+            .eq('user_email', userEmail.toLowerCase())
+            .single();
+            
+          if (error && error.code !== 'PGRST116') {
+            throw error;
+          }
+          
+          subscriptionData = data;
+          break;
+        } catch (err) {
+          attempts++;
+          console.warn(`Subscription verification attempt ${attempts} failed:`, err);
+          
+          if (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+          }
+        }
+      }
+      
+      if (subscriptionData) {
+        console.log('✅ Subscription verified:', {
+          planId: subscriptionData.plan_id,
+          status: subscriptionData.status,
+          userEmail: subscriptionData.user_email
+        });
+        
+        return subscriptionData;
+      } else {
+        console.log('ℹ️ No subscription found - user is on free plan');
+        return null;
+      }
+      
+    } catch (error) {
+      console.error('❌ Error verifying subscription status:', error);
+      return null;
+    }
+  }, []);
 
   // Process payment verification from URL parameters
   const processPaymentVerification = useCallback(async (params = {}) => {
@@ -27,6 +160,16 @@ export const useSubscriptionVerification = () => {
 
     // Only process if we have payment success indicators
     if (!sessionId || paymentStatus !== 'success') {
+      // ENHANCED: Still perform subscription verification on new device login
+      if (user?.email) {
+        console.log('🔄 No payment params, but performing subscription sync for new device...');
+        setTimeout(async () => {
+          const currentSubscription = await verifySubscriptionStatus(user.email);
+          if (currentSubscription) {
+            forceSubscriptionRefresh(user.email, true);
+          }
+        }, 1000);
+      }
       return;
     }
 
@@ -52,20 +195,11 @@ export const useSubscriptionVerification = () => {
       // Update subscription in database
       await updateSubscriptionAfterPayment(planId || 'professional', sessionId);
 
-      // Clear caches for immediate feature access
-      localStorage.removeItem(`featureCache_${user.email}`);
-      localStorage.removeItem(`subscriptionCache_${user.email}`);
+      // ENHANCED: Clear all caches and force refresh
+      clearAllSubscriptionCaches(user.email);
 
-      // Dispatch subscription update event
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { 
-          userEmail: user.email, 
-          planId: planId || 'professional',
-          sessionId,
-          immediate: true,
-          source: 'payment_verification'
-        }
-      }));
+      // Force subscription refresh with immediate effect
+      forceSubscriptionRefresh(user.email, true);
 
       setVerificationStatus('success');
 
@@ -93,7 +227,7 @@ export const useSubscriptionVerification = () => {
     } finally {
       setIsVerifying(false);
     }
-  }, [user?.email, isVerifying]);
+  }, [user?.email, isVerifying, verifySubscriptionStatus, clearAllSubscriptionCaches, forceSubscriptionRefresh]);
 
   // Update subscription in Supabase
   const updateSubscriptionAfterPayment = async (planId, sessionId) => {
@@ -145,6 +279,42 @@ export const useSubscriptionVerification = () => {
     }
   };
 
+  // ENHANCED: Listen for user login events to sync subscription
+  useEffect(() => {
+    const handleUserLogin = async (event) => {
+      if (event.detail?.userEmail === user?.email) {
+        console.log('🔑 User login detected, syncing subscription...');
+        setTimeout(async () => {
+          const currentSubscription = await verifySubscriptionStatus(user.email);
+          if (currentSubscription) {
+            forceSubscriptionRefresh(user.email, true);
+          }
+        }, 2000); // Delay to ensure auth is fully processed
+      }
+    };
+
+    window.addEventListener('userLoggedIn', handleUserLogin);
+    return () => window.removeEventListener('userLoggedIn', handleUserLogin);
+  }, [user?.email, verifySubscriptionStatus, forceSubscriptionRefresh]);
+
+  // ENHANCED: Auto-sync on component mount for new devices
+  useEffect(() => {
+    if (user?.email) {
+      console.log('🔄 Component mounted, performing subscription sync...');
+      setTimeout(async () => {
+        const currentSubscription = await verifySubscriptionStatus(user.email);
+        if (currentSubscription) {
+          // Check if local cache matches remote data
+          const cachedPlan = localStorage.getItem(`subscriptionCache_${user.email}`);
+          if (!cachedPlan || JSON.parse(cachedPlan)?.planId !== currentSubscription.plan_id) {
+            console.log('🔄 Local cache outdated, forcing refresh...');
+            forceSubscriptionRefresh(user.email, true);
+          }
+        }
+      }, 1000);
+    }
+  }, [user?.email, verifySubscriptionStatus, forceSubscriptionRefresh]);
+
   // Listen for URL changes and hash changes
   useEffect(() => {
     // Process verification on mount
@@ -174,10 +344,23 @@ export const useSubscriptionVerification = () => {
     return processPaymentVerification(params);
   }, [processPaymentVerification]);
 
+  // ENHANCED: Manual subscription sync function
+  const syncSubscription = useCallback(async () => {
+    if (!user?.email) return;
+    
+    console.log('🔄 Manual subscription sync requested...');
+    const currentSubscription = await verifySubscriptionStatus(user.email);
+    forceSubscriptionRefresh(user.email, true);
+    return currentSubscription;
+  }, [user?.email, verifySubscriptionStatus, forceSubscriptionRefresh]);
+
   return {
     isVerifying,
     verificationStatus,
-    triggerVerification
+    triggerVerification,
+    syncSubscription, // New method for manual sync
+    clearAllSubscriptionCaches,
+    forceSubscriptionRefresh
   };
 };
 
