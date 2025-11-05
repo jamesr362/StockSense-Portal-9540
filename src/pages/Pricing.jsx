@@ -1,6 +1,6 @@
 import {useState,useEffect} from 'react';
 import {motion} from 'framer-motion';
-import {RiCheckLine,RiArrowRightLine,RiStarLine,RiGiftLine} from 'react-icons/ri';
+import {RiCheckLine,RiArrowRightLine,RiStarLine} from 'react-icons/ri';
 import {useAuth} from '../context/AuthContext';
 import {useNavigate} from 'react-router-dom';
 import {logSecurityEvent} from '../utils/security';
@@ -174,20 +174,6 @@ export default function Pricing() {
             <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-6">
               Start your inventory management journey with a plan that fits your business needs
             </p>
-            
-            {/* 5-Day Free Trial Highlight */}
-            <motion.div
-              initial={{opacity: 0, scale: 0.9}}
-              animate={{opacity: 1, scale: 1}}
-              transition={{delay: 0.3}}
-              className="inline-flex items-center bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-3 rounded-full font-semibold text-lg shadow-lg"
-            >
-              <RiGiftLine className="h-6 w-6 mr-2" />
-              🎉 5-Day FREE Trial on Professional Plan
-            </motion.div>
-            <p className="text-green-400 text-sm mt-2 font-medium">
-              Try all premium features risk-free • No charge for 5 days • Cancel anytime
-            </p>
           </motion.div>
 
           {/* Error Message */}
@@ -221,40 +207,6 @@ export default function Pricing() {
             </motion.div>
           )}
 
-          {/* Free Trial Info Banner */}
-          <motion.div
-            initial={{opacity: 0, y: 20}}
-            animate={{opacity: 1, y: 0}}
-            transition={{delay: 0.2}}
-            className="mb-8 max-w-4xl mx-auto"
-          >
-            <div className="bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-700/50 rounded-xl p-6">
-              <div className="text-center">
-                <h3 className="text-white font-bold text-xl mb-3">
-                  🚀 Start Your 5-Day Free Trial Today!
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                  <div className="flex items-center justify-center text-green-300">
-                    <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                    Complete access to all features
-                  </div>
-                  <div className="flex items-center justify-center text-green-300">
-                    <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                    No payment required upfront
-                  </div>
-                  <div className="flex items-center justify-center text-green-300">
-                    <div className="w-2 h-2 bg-green-400 rounded-full mr-2"></div>
-                    Cancel anytime during trial
-                  </div>
-                </div>
-                <p className="text-gray-300 text-sm mt-4">
-                  <strong className="text-green-400">How it works:</strong> Sign up now and enjoy 5 full days of Professional features. 
-                  Your card will only be charged £9.99/month after the trial period ends.
-                </p>
-              </div>
-            </div>
-          </motion.div>
-
           {/* Pricing Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-4xl mx-auto">
             {plans.map((plan,index)=> (
@@ -270,9 +222,8 @@ export default function Pricing() {
                     ? 'Current Plan'
                     : plan.price===0
                     ? 'Get Started Free'
-                    : 'Start 5-Day Free Trial'
+                    : 'Get Started'
                 }
-                showFreeTrial={plan.price > 0}
               />
             ))}
           </div>
@@ -299,14 +250,9 @@ export default function Pricing() {
                   PCI Compliant
                 </div>
               </div>
-              <p className="text-gray-400 text-sm mb-3">
+              <p className="text-gray-400 text-sm">
                 All payments are processed securely through Stripe. Your payment information is encrypted and never stored on our servers.
               </p>
-              <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3">
-                <p className="text-green-300 text-sm font-medium">
-                  💳 Trial Period: Your card is securely stored but not charged during the 5-day trial period
-                </p>
-              </div>
             </div>
           </motion.div>
         </div>

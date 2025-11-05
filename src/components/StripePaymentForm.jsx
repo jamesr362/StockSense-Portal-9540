@@ -7,8 +7,8 @@ import { createEnhancedCheckoutSession, getPlanById } from '../lib/stripe';
 import { useAuth } from '../context/AuthContext';
 import { logSecurityEvent } from '../utils/security';
 
-const { RiSecurePaymentFill, RiArrowRightLine, RiGiftLine } = RiIcons;
-const { FiCreditCard, FiLock, FiCalendar } = FiIcons;
+const { RiSecurePaymentFill, RiArrowRightLine } = RiIcons;
+const { FiCreditCard, FiLock } = FiIcons;
 
 export default function StripePaymentForm({ planId, onSuccess, onError, className = '' }) {
   const [loading, setLoading] = useState(false);
@@ -89,66 +89,21 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
 
   return (
     <div className={`bg-gray-800 rounded-lg p-6 ${className}`}>
-      {/* Free Trial Header */}
-      {plan.price > 0 && (
-        <div className="mb-6 bg-gradient-to-r from-green-900/40 to-emerald-900/40 border border-green-700/50 rounded-lg p-4">
-          <div className="flex items-center justify-center mb-3">
-            <SafeIcon icon={RiGiftLine} className="h-6 w-6 text-green-400 mr-2" />
-            <h3 className="text-xl font-bold text-green-400">5-Day FREE Trial</h3>
-          </div>
-          <div className="text-center space-y-2">
-            <p className="text-green-300 text-sm font-medium">
-              🎯 Try all premium features completely free for 5 full days
-            </p>
-            <p className="text-green-400 text-xs">
-              Your card will be securely stored but NOT charged during the trial period
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* Plan Summary */}
       <div className="mb-6">
-        <h3 className="text-xl font-semibold text-white mb-4">
-          {plan.price > 0 ? 'Start Your Free Trial' : 'Complete Your Purchase'}
-        </h3>
+        <h3 className="text-xl font-semibold text-white mb-4">Complete Your Purchase</h3>
         <div className="bg-gray-700 rounded-lg p-4 space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-gray-300">Plan:</span>
             <span className="text-white font-medium">{plan.name}</span>
           </div>
           
-          {plan.price > 0 ? (
-            <>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">Trial Period:</span>
-                <span className="text-green-400 font-medium">5 days FREE</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-300">After trial:</span>
-                <span className="text-white font-medium">£{plan.price}/month</span>
-              </div>
-              <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-3 mt-3">
-                <div className="flex items-center text-green-300 text-sm">
-                  <SafeIcon icon={FiCalendar} className="h-4 w-4 mr-2" />
-                  <span className="font-medium">Billing starts: </span>
-                  <span className="ml-1">
-                    {new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Price:</span>
-              <span className="text-white font-medium">Free Forever</span>
-            </div>
-          )}
+          <div className="flex justify-between items-center">
+            <span className="text-gray-300">Price:</span>
+            <span className="text-white font-medium">
+              {plan.price === 0 ? 'Free Forever' : `£${plan.price}/month`}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -178,10 +133,7 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
             🔒 You'll be redirected to Stripe's secure payment page
           </p>
           <p className="text-blue-500 text-xs mt-1">
-            {plan.price > 0 
-              ? 'Set up your free trial - no charge for 5 days!'
-              : 'After payment, you\'ll be automatically returned to activate your subscription'
-            }
+            After payment, you'll be automatically returned to activate your subscription
           </p>
         </motion.div>
       )}
@@ -195,8 +147,6 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
         className={`w-full py-4 px-6 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center ${
           loading
             ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : plan.price > 0
-            ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white shadow-lg hover:shadow-xl'
             : 'bg-primary-600 hover:bg-primary-700 text-white shadow-lg hover:shadow-xl'
         }`}
       >
@@ -207,8 +157,8 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
           </>
         ) : (
           <>
-            <SafeIcon icon={plan.price > 0 ? RiGiftLine : FiCreditCard} className="h-5 w-5 mr-3" />
-            {plan.price > 0 ? 'Start 5-Day FREE Trial' : 'Continue to Secure Payment'}
+            <SafeIcon icon={FiCreditCard} className="h-5 w-5 mr-3" />
+            Continue to Secure Payment
             <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-3" />
           </>
         )}
@@ -220,24 +170,10 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
         Secured by Stripe • SSL Encrypted
       </div>
 
-      {/* Trial Terms */}
-      {plan.price > 0 && (
-        <div className="mt-4 bg-gray-700/50 rounded-lg p-3">
-          <h4 className="text-white font-medium text-sm mb-2">Free Trial Terms:</h4>
-          <ul className="text-gray-300 text-xs space-y-1">
-            <li>• Full access to all premium features for 5 days</li>
-            <li>• Your payment method is securely stored but not charged</li>
-            <li>• Cancel anytime during trial with no charges</li>
-            <li>• After trial: £{plan.price}/month, cancel anytime</li>
-            <li>• Automatic billing starts only after trial ends</li>
-          </ul>
-        </div>
-      )}
-
       {/* Additional Info */}
       <div className="mt-4 text-center">
         <p className="text-gray-400 text-xs">
-          🔄 You'll be redirected back automatically after setup
+          🔄 You'll be redirected back automatically after payment
         </p>
         <p className="text-gray-500 text-xs mt-1">
           💡 If you're not redirected, check your email and contact support
@@ -246,9 +182,7 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
 
       {/* Plan Features Preview */}
       <div className="mt-6 pt-4 border-t border-gray-700">
-        <h4 className="text-white font-medium mb-3">
-          {plan.price > 0 ? 'What you\'ll get in your free trial:' : 'What you\'ll get:'}
-        </h4>
+        <h4 className="text-white font-medium mb-3">What you'll get:</h4>
         <ul className="space-y-2">
           {plan.features.slice(0, 3).map((feature, index) => (
             <li key={index} className="flex items-center text-sm">
