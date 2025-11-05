@@ -52,7 +52,7 @@ export default function PaymentSuccess() {
     return () => clearTimeout(timer);
   }, [searchParams, user]);
 
-  const handleContinue = async (e) => {
+  const handleContinue = (e) => {
     // Prevent any default behavior
     if (e) {
       e.preventDefault();
@@ -68,98 +68,25 @@ export default function PaymentSuccess() {
     setIsNavigating(true);
     console.log('🚀 Starting navigation to dashboard...');
     
-    try {
-      // Clear any payment-related session storage
-      sessionStorage.removeItem('paymentUserEmail');
-      sessionStorage.removeItem('pendingPayment');
-      sessionStorage.removeItem('paymentTracking');
-      sessionStorage.removeItem('awaitingPayment');
-      
-      // Trigger subscription refresh events
-      const events = [
-        'subscriptionUpdated',
-        'refreshFeatureAccess',
-        'planActivated'
-      ];
-      
-      events.forEach((eventName, index) => {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent(eventName, {
-            detail: {
-              source: 'payment_success',
-              userEmail: user?.email,
-              force: true,
-              timestamp: Date.now()
-            }
-          }));
-        }, index * 100);
-      });
-      
-      console.log('📍 Using HashRouter navigation to /dashboard');
-      
-      // **FIXED: Proper HashRouter navigation**
-      // Since we're using HashRouter, navigate directly with React Router
-      navigate('/dashboard', { 
-        replace: true,
-        state: { 
-          fromPaymentSuccess: true,
-          timestamp: Date.now() 
-        }
-      });
-      
-      // **ENHANCED FALLBACK**: If React Router fails, use direct hash manipulation
-      setTimeout(() => {
-        const currentHash = window.location.hash;
-        console.log('🔍 Checking navigation result. Current hash:', currentHash);
-        
-        if (!currentHash.includes('/dashboard')) {
-          console.log('📍 React Router navigation failed, using hash fallback...');
-          
-          // Force hash change
-          window.location.hash = '/dashboard';
-          
-          // **ULTIMATE FALLBACK**: Full page reload to dashboard
-          setTimeout(() => {
-            const finalHash = window.location.hash;
-            console.log('🔍 Final check. Hash:', finalHash);
-            
-            if (!finalHash.includes('/dashboard')) {
-              console.log('📍 Hash navigation failed, using full redirect...');
-              
-              // Complete URL reconstruction
-              const baseUrl = window.location.origin + window.location.pathname;
-              const dashboardUrl = `${baseUrl}#/dashboard`;
-              
-              console.log('🎯 Full redirect to:', dashboardUrl);
-              window.location.href = dashboardUrl;
-            } else {
-              console.log('✅ Hash navigation successful!');
-              setIsNavigating(false);
-            }
-          }, 1000);
-        } else {
-          console.log('✅ React Router navigation successful!');
-          setIsNavigating(false);
-        }
-      }, 500);
-      
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-      
-      // Emergency fallback - direct hash navigation
-      try {
-        console.log('🆘 Emergency navigation fallback...');
-        const baseUrl = window.location.origin + window.location.pathname;
-        const dashboardUrl = `${baseUrl}#/dashboard`;
-        
-        console.log('🎯 Emergency redirect to:', dashboardUrl);
-        window.location.href = dashboardUrl;
-      } catch (finalError) {
-        console.error('❌ All navigation methods failed:', finalError);
-        alert('Navigation failed. Please manually go to the dashboard or refresh the page.');
-        setIsNavigating(false);
-      }
-    }
+    // Clear any payment-related session storage
+    sessionStorage.removeItem('paymentUserEmail');
+    sessionStorage.removeItem('pendingPayment');
+    sessionStorage.removeItem('paymentTracking');
+    sessionStorage.removeItem('awaitingPayment');
+    
+    // Trigger subscription refresh events
+    window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+      detail: { source: 'payment_success', userEmail: user?.email, force: true }
+    }));
+    window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+      detail: { source: 'payment_success', force: true }
+    }));
+    
+    // **DIRECT NAVIGATION TO EXACT URL**
+    console.log('🎯 Navigating directly to: https://gotrackio.netlify.app/#/dashboard');
+    
+    // Force immediate redirect to the exact URL
+    window.location.href = 'https://gotrackio.netlify.app/#/dashboard';
   };
 
   const planId = searchParams.get('plan') || result?.planId || 'professional';
@@ -188,7 +115,7 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  navigate('/pricing', { replace: true });
+                  window.location.href = 'https://gotrackio.netlify.app/#/pricing';
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -197,8 +124,7 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  // Use hash navigation for dashboard
-                  window.location.hash = '/dashboard';
+                  window.location.href = 'https://gotrackio.netlify.app/#/dashboard';
                 }}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -325,7 +251,7 @@ export default function PaymentSuccess() {
           
           <p className="text-gray-400 text-sm mt-4">
             {isNavigating ? (
-              'Please wait while we redirect you...'
+              'Redirecting to your dashboard...'
             ) : (
               'Your subscription is ready to use!'
             )}
@@ -335,36 +261,25 @@ export default function PaymentSuccess() {
           {!isNavigating && (
             <div className="mt-6 pt-4 border-t border-gray-700">
               <p className="text-gray-500 text-sm mb-3">
-                Having trouble? Try these alternatives:
+                Having trouble? Try this direct link:
               </p>
-              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <div className="flex justify-center">
                 <button
-                  onClick={() => window.location.hash = '/dashboard'}
-                  className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                  onClick={() => window.location.href = 'https://gotrackio.netlify.app/#/dashboard'}
+                  className="px-6 py-3 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
                 >
-                  Direct Dashboard Link
-                </button>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
-                >
-                  Refresh Page
+                  🎯 Direct Dashboard Link
                 </button>
               </div>
             </div>
           )}
           
-          {/* Debug info in development */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-800 rounded">
-              <p><strong>Debug Info:</strong></p>
-              <p>Current URL: {window.location.href}</p>
-              <p>Hash: {window.location.hash}</p>
-              <p>Pathname: {window.location.pathname}</p>
-              <p>User: {user?.email}</p>
-              <p>Router Type: HashRouter</p>
-            </div>
-          )}
+          {/* Debug info */}
+          <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-800 rounded">
+            <p><strong>Target URL:</strong> https://gotrackio.netlify.app/#/dashboard</p>
+            <p><strong>Current URL:</strong> {window.location.href}</p>
+            <p><strong>User:</strong> {user?.email}</p>
+          </div>
         </motion.div>
       </motion.div>
     </div>
