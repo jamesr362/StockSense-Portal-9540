@@ -6,7 +6,7 @@ import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../context/AuthContext';
 import { SUBSCRIPTION_PLANS, handlePostPaymentReturn } from '../lib/stripe';
 
-const { RiCheckboxCircleFill, RiArrowRightLine, RiRefreshLine, RiHomeLine } = RiIcons;
+const { RiCheckboxCircleFill, RiArrowRightLine, RiRefreshLine, RiHomeLine, RiErrorWarningLine } = RiIcons;
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -16,7 +16,39 @@ export default function PaymentSuccess() {
   const [error, setError] = useState(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [urlDebug, setUrlDebug] = useState({});
   const { user, loading: authLoading } = useAuth();
+
+  // Parse and clean URL parameters
+  useEffect(() => {
+    const currentUrl = window.location.href;
+    const cleanUrl = currentUrl.replace(/%3C\/code%3E/g, ''); // Remove malformed HTML encoding
+    
+    // Parse parameters from both URL and hash
+    const urlParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    
+    const debugInfo = {
+      originalUrl: currentUrl,
+      cleanUrl,
+      urlParams: Object.fromEntries(urlParams.entries()),
+      hashParams: Object.fromEntries(hashParams.entries()),
+      hasSessionId: urlParams.has('session_id') || hashParams.has('session_id'),
+      hasPaymentStatus: urlParams.has('payment_status') || hashParams.has('payment_status'),
+      hasPlan: urlParams.has('plan') || hashParams.has('plan')
+    };
+    
+    setUrlDebug(debugInfo);
+    console.log('🔍 URL Debug Info:', debugInfo);
+    
+    // If URL is malformed, try to clean it
+    if (currentUrl.includes('%3C/code%3E') && !window.location.href.includes('cleaned=true')) {
+      console.log('🧹 Cleaning malformed URL...');
+      const cleanedUrl = cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + 'cleaned=true';
+      window.location.href = cleanedUrl;
+      return;
+    }
+  }, []);
 
   // Debug logging
   console.log('🔍 PaymentSuccess Debug:', {
@@ -24,7 +56,8 @@ export default function PaymentSuccess() {
     authLoading,
     authChecked,
     currentUrl: window.location.href,
-    currentHash: window.location.hash
+    currentHash: window.location.hash,
+    urlDebug
   });
 
   useEffect(() => {
@@ -53,8 +86,27 @@ export default function PaymentSuccess() {
           return;
         }
 
+        // Extract parameters from URL or hash
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+        
+        // Create a combined search params object
+        const combinedParams = new URLSearchParams();
+        
+        // Add URL params
+        for (const [key, value] of urlParams) {
+          combinedParams.set(key, value);
+        }
+        
+        // Add hash params (hash params take precedence)
+        for (const [key, value] of hashParams) {
+          combinedParams.set(key, value);
+        }
+        
+        console.log('📋 Combined parameters:', Object.fromEntries(combinedParams.entries()));
+
         // Process the payment return
-        const result = await handlePostPaymentReturn(searchParams, user.email);
+        const result = await handlePostPaymentReturn(combinedParams, user.email);
         
         if (result.success) {
           setResult(result);
@@ -87,14 +139,14 @@ export default function PaymentSuccess() {
     }
   }, [searchParams, user, authLoading, navigate]);
 
-  const handleContinue = async (method = 'auto') => {
+  const handleContinue = async () => {
     if (isNavigating) {
       console.log('🚫 Navigation already in progress...');
       return;
     }
     
     setIsNavigating(true);
-    console.log(`🚀 Starting navigation to dashboard using method: ${method}`);
+    console.log('🚀 Starting navigation to dashboard');
     
     try {
       // Ensure user is authenticated
@@ -105,74 +157,39 @@ export default function PaymentSuccess() {
       }
 
       // Clear payment-related session storage
-      sessionStorage.removeItem('paymentUserEmail');
-      sessionStorage.removeItem('pendingPayment');
-      sessionStorage.removeItem('paymentTracking');
-      sessionStorage.removeItem('awaitingPayment');
+      const clearKeys = [
+        'paymentUserEmail',
+        'pendingPayment', 
+        'paymentTracking',
+        'awaitingPayment'
+      ];
+      
+      clearKeys.forEach(key => {
+        sessionStorage.removeItem(key);
+        localStorage.removeItem(key);
+      });
       
       // Trigger one more subscription refresh
       window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
         detail: { source: 'navigation', userEmail: user.email, force: true }
       }));
 
-      console.log('🎯 Attempting navigation to dashboard...');
-
-      switch (method) {
-        case 'react-router':
-          console.log('🔄 Using React Router navigate...');
-          navigate('/dashboard', { replace: true });
-          break;
-          
-        case 'hash-direct':
-          console.log('🔄 Using direct hash manipulation...');
-          window.location.hash = '#/dashboard';
-          break;
-          
-        case 'full-redirect':
-          console.log('🔄 Using full page redirect...');
-          const baseUrl = window.location.origin + window.location.pathname;
-          window.location.href = baseUrl + '#/dashboard';
-          break;
-          
-        case 'force-reload':
-          console.log('🔄 Using force reload...');
-          sessionStorage.setItem('redirectToDashboard', 'true');
-          window.location.reload();
-          break;
-          
-        default: // 'auto'
-          console.log('🔄 Using auto navigation (React Router first)...');
-          navigate('/dashboard', { replace: true });
-          
-          // Fallback after delay
-          setTimeout(() => {
-            if (!window.location.hash.includes('/dashboard')) {
-              console.log('🔄 Fallback: Using hash manipulation...');
-              window.location.hash = '#/dashboard';
-            }
-          }, 1000);
-          
-          // Final fallback
-          setTimeout(() => {
-            if (!window.location.hash.includes('/dashboard')) {
-              console.log('🔄 Final fallback: Force redirect...');
-              const baseUrl = window.location.origin + window.location.pathname;
-              window.location.href = baseUrl + '#/dashboard';
-            }
-          }, 3000);
-          break;
-      }
+      console.log('🎯 Navigating to dashboard...');
+      
+      // Use direct URL navigation for better compatibility
+      const baseUrl = window.location.origin + window.location.pathname;
+      window.location.href = baseUrl + '#/dashboard';
       
     } catch (navError) {
       console.error('❌ Navigation error:', navError);
       // Ultimate fallback
       window.location.hash = '#/dashboard';
+    } finally {
+      // Reset navigation state after delay
+      setTimeout(() => {
+        setIsNavigating(false);
+      }, 3000);
     }
-    
-    // Reset navigation state after delay
-    setTimeout(() => {
-      setIsNavigating(false);
-    }, 5000);
   };
 
   // Handle redirect on page load if needed
@@ -182,12 +199,13 @@ export default function PaymentSuccess() {
       sessionStorage.removeItem('redirectToDashboard');
       console.log('🔄 Redirecting to dashboard after reload...');
       setTimeout(() => {
-        navigate('/dashboard', { replace: true });
+        const baseUrl = window.location.origin + window.location.pathname;
+        window.location.href = baseUrl + '#/dashboard';
       }, 1000);
     }
-  }, [navigate]);
+  }, []);
 
-  const planId = searchParams.get('plan') || result?.planId || 'professional';
+  const planId = searchParams.get('plan') || urlDebug.hashParams?.plan || result?.planId || 'professional';
   const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.professional;
 
   // Show loading while auth is being checked
@@ -213,6 +231,7 @@ export default function PaymentSuccess() {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
+            <SafeIcon icon={RiErrorWarningLine} className="h-16 w-16 text-red-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-red-300 mb-2">
               {!user ? 'Authentication Required' : 'Payment Issue'}
             </h2>
@@ -221,19 +240,33 @@ export default function PaymentSuccess() {
             </p>
             <div className="space-y-2">
               <button
-                onClick={() => navigate(!user ? '/login' : '/pricing', { replace: true })}
+                onClick={() => {
+                  const baseUrl = window.location.origin + window.location.pathname;
+                  window.location.href = baseUrl + (!user ? '#/login' : '#/pricing');
+                }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
                 {!user ? 'Go to Login' : 'Return to Pricing'}
               </button>
               {user && (
                 <button
-                  onClick={() => handleContinue('react-router')}
+                  onClick={handleContinue}
                   className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
                 >
                   Try Dashboard Anyway
                 </button>
               )}
+            </div>
+          </div>
+          
+          {/* Debug Information for Errors */}
+          <div className="mt-4 text-xs text-gray-500 p-4 bg-gray-800 rounded-lg">
+            <h3 className="font-semibold mb-2 text-gray-400">Debug Information:</h3>
+            <div className="text-left space-y-1">
+              <p><strong>URL:</strong> {urlDebug.originalUrl}</p>
+              <p><strong>Has Session ID:</strong> {urlDebug.hasSessionId ? 'Yes' : 'No'}</p>
+              <p><strong>Has Payment Status:</strong> {urlDebug.hasPaymentStatus ? 'Yes' : 'No'}</p>
+              <p><strong>User:</strong> {user?.email || 'Not logged in'}</p>
             </div>
           </div>
         </div>
@@ -334,7 +367,7 @@ export default function PaymentSuccess() {
         >
           <button
             type="button"
-            onClick={() => handleContinue('auto')}
+            onClick={handleContinue}
             disabled={isNavigating}
             className={`inline-flex items-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 mb-6 ${
               isNavigating 
@@ -356,53 +389,37 @@ export default function PaymentSuccess() {
             )}
           </button>
           
-          {/* Alternative Navigation Methods */}
+          {/* Manual Navigation Fallback */}
           {!isNavigating && (
-            <div className="space-y-4">
-              <p className="text-gray-400 text-sm">
-                Having trouble? Try these alternative methods:
+            <div className="mb-6">
+              <p className="text-gray-400 text-sm mb-3">
+                Having trouble? Click here to go directly:
               </p>
-              
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button
-                  onClick={() => handleContinue('react-router')}
-                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  🎯 React Router
-                </button>
-                <button
-                  onClick={() => handleContinue('hash-direct')}
-                  className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  🔗 Hash Navigation
-                </button>
-                <button
-                  onClick={() => handleContinue('full-redirect')}
-                  className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  🚀 Full Redirect
-                </button>
-                <button
-                  onClick={() => handleContinue('force-reload')}
-                  className="px-4 py-2 text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors font-medium"
-                >
-                  <SafeIcon icon={RiRefreshLine} className="h-4 w-4 mr-1" />
-                  Force Reload
-                </button>
-              </div>
+              <a
+                href="#/dashboard"
+                className="inline-flex items-center px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                onClick={(e) => {
+                  e.preventDefault();
+                  const baseUrl = window.location.origin + window.location.pathname;
+                  window.location.href = baseUrl + '#/dashboard';
+                }}
+              >
+                <SafeIcon icon={RiHomeLine} className="h-4 w-4 mr-2" />
+                Direct Dashboard Link
+              </a>
             </div>
           )}
           
           {/* Debug Information */}
           <div className="mt-8 text-xs text-gray-500 p-4 bg-gray-800 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-400">Debug Information:</h3>
+            <h3 className="font-semibold mb-2 text-gray-400">Navigation Debug:</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
               <p><strong>Current URL:</strong> {window.location.href}</p>
               <p><strong>Current Hash:</strong> {window.location.hash}</p>
               <p><strong>Target:</strong> #/dashboard</p>
               <p><strong>User:</strong> {user?.email}</p>
-              <p><strong>Auth Loading:</strong> {authLoading.toString()}</p>
               <p><strong>Navigation State:</strong> {isNavigating ? 'Navigating...' : 'Ready'}</p>
+              <p><strong>URL Clean:</strong> {urlDebug.originalUrl?.includes('%3C/code%3E') ? 'No (Fixed)' : 'Yes'}</p>
             </div>
           </div>
         </motion.div>
