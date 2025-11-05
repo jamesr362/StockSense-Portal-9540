@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import * as RiIcons from 'react-icons/ri';
 import SafeIcon from '../common/SafeIcon';
@@ -10,20 +10,10 @@ const { RiCheckboxCircleFill, RiArrowRightLine, RiHomeLine, RiErrorWarningLine }
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(true);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const { user, loading: authLoading } = useAuth();
-
-  // Debug logging
-  console.log('🔍 PaymentSuccess Debug:', {
-    user: user?.email,
-    authLoading,
-    currentUrl: window.location.href,
-    currentHash: window.location.hash,
-    navigate: typeof navigate
-  });
 
   useEffect(() => {
     const processPaymentReturn = async () => {
@@ -111,67 +101,20 @@ export default function PaymentSuccess() {
     }
   }, [searchParams, user, authLoading]);
 
-  // Simple navigation handlers
+  // Force navigation using hash (the method that works)
   const goToDashboard = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('🚀 Dashboard button clicked');
-    
-    try {
-      console.log('🎯 Navigating to dashboard...');
-      navigate('/dashboard', { replace: true });
-    } catch (navError) {
-      console.error('❌ Navigation error, trying hash fallback:', navError);
-      window.location.hash = '#/dashboard';
-    }
+    console.log('🚀 Going to Dashboard...');
+    window.location.hash = '#/dashboard';
+    window.location.reload();
   };
 
   const goToLogin = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('🔑 Login button clicked');
-    
-    try {
-      console.log('🎯 Navigating to login...');
-      navigate('/login', { replace: true });
-    } catch (navError) {
-      console.error('❌ Navigation error, trying hash fallback:', navError);
-      window.location.hash = '#/login';
-    }
-  };
-
-  const goToSubscription = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('💳 Subscription button clicked');
-    
-    try {
-      console.log('🎯 Navigating to subscription...');
-      navigate('/subscription', { replace: true });
-    } catch (navError) {
-      console.error('❌ Navigation error, trying hash fallback:', navError);
-      window.location.hash = '#/subscription';
-    }
-  };
-
-  const goToPricing = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('💰 Pricing button clicked');
-    
-    try {
-      console.log('🎯 Navigating to pricing...');
-      navigate('/pricing', { replace: true });
-    } catch (navError) {
-      console.error('❌ Navigation error, trying hash fallback:', navError);
-      window.location.hash = '#/pricing';
-    }
-  };
-
-  // Force navigation using hash (ultimate fallback)
-  const forceNavigate = (path) => {
-    console.log('🔧 Force navigating to:', path);
-    window.location.hash = `#${path}`;
+    console.log('🔑 Going to Login...');
+    window.location.hash = '#/login';
     window.location.reload();
   };
 
@@ -206,20 +149,12 @@ export default function PaymentSuccess() {
               Payment Processing Issue
             </h2>
             <p className="text-red-200 mb-4">{error}</p>
-            <div className="space-y-2">
-              <button
-                onClick={goToPricing}
-                className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                Return to Pricing
-              </button>
-              <button
-                onClick={goToDashboard}
-                className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
-              >
-                Try Dashboard Anyway
-              </button>
-            </div>
+            <button
+              onClick={goToDashboard}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+            >
+              Go to Dashboard
+            </button>
           </div>
         </div>
       </div>
@@ -330,108 +265,38 @@ export default function PaymentSuccess() {
           </div>
         </motion.div>
 
-        {/* Navigation Section */}
+        {/* Single Navigation Button */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="text-center space-y-4"
+          className="text-center"
         >
-          {/* Primary Action Button */}
-          <div>
-            {result?.requiresLogin ? (
-              <button
-                type="button"
-                onClick={goToLogin}
-                className="inline-flex items-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <SafeIcon icon={RiHomeLine} className="h-5 w-5 mr-2" />
-                Login to Continue
-                <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={goToDashboard}
-                className="inline-flex items-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-primary-600 hover:bg-primary-700 text-white"
-              >
-                <SafeIcon icon={RiHomeLine} className="h-5 w-5 mr-2" />
-                Go to Dashboard
-                <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
-              </button>
-            )}
-          </div>
-          
-          {/* Alternative Navigation Options */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {result?.requiresLogin ? (
+            <button
+              type="button"
+              onClick={goToLogin}
+              className="inline-flex items-center justify-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-blue-600 hover:bg-blue-700 text-white text-lg"
+            >
+              <SafeIcon icon={RiHomeLine} className="h-6 w-6 mr-3" />
+              Login to Continue
+              <SafeIcon icon={RiArrowRightLine} className="h-6 w-6 ml-3" />
+            </button>
+          ) : (
             <button
               type="button"
               onClick={goToDashboard}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition-colors font-medium flex items-center justify-center"
+              className="inline-flex items-center justify-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-primary-600 hover:bg-primary-700 text-white text-lg"
             >
-              <SafeIcon icon={RiHomeLine} className="h-4 w-4 mr-2" />
-              Dashboard
+              <SafeIcon icon={RiHomeLine} className="h-6 w-6 mr-3" />
+              Go to Dashboard
+              <SafeIcon icon={RiArrowRightLine} className="h-6 w-6 ml-3" />
             </button>
-            
-            <button
-              type="button"
-              onClick={goToSubscription}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg transition-colors font-medium flex items-center justify-center"
-            >
-              Subscription
-            </button>
-            
-            <button
-              type="button"
-              onClick={goToPricing}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition-colors font-medium flex items-center justify-center"
-            >
-              Pricing
-            </button>
-          </div>
+          )}
 
-          {/* Force Navigation Fallbacks (for debugging) */}
-          <div className="mt-6 p-4 bg-gray-800 rounded-lg">
-            <p className="text-gray-400 text-sm mb-3">
-              <strong>Navigation not working?</strong> Try these direct links:
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => forceNavigate('/dashboard')}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm transition-colors"
-              >
-                Force Dashboard
-              </button>
-              <button
-                type="button"
-                onClick={() => forceNavigate('/login')}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm transition-colors"
-              >
-                Force Login
-              </button>
-              <button
-                type="button"
-                onClick={() => forceNavigate('/subscription')}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm transition-colors"
-              >
-                Force Subscription
-              </button>
-            </div>
-          </div>
-          
-          {/* Debug Information */}
-          <div className="mt-4 text-xs text-gray-500 p-4 bg-gray-800 rounded-lg">
-            <h3 className="font-semibold mb-2 text-gray-400">Navigation Debug:</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
-              <p><strong>Current URL:</strong> {window.location.href}</p>
-              <p><strong>Current Hash:</strong> {window.location.hash}</p>
-              <p><strong>Target:</strong> {result?.requiresLogin ? '/login' : '/dashboard'}</p>
-              <p><strong>User:</strong> {user?.email || 'Not logged in'}</p>
-              <p><strong>Router:</strong> HashRouter</p>
-              <p><strong>Navigate Function:</strong> {typeof navigate}</p>
-            </div>
-          </div>
+          <p className="text-gray-400 text-sm mt-4">
+            Ready to start using your new subscription features!
+          </p>
         </motion.div>
       </motion.div>
     </div>
