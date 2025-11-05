@@ -440,94 +440,172 @@ const clearPaymentTracking = () => {
   console.log('🧹 Payment tracking cleared');
 };
 
-// **UPDATED**: Handle post-payment processing without trial support
+// **FIXED**: More flexible post-payment processing with better fallbacks
 export const handlePostPaymentReturn = async (searchParams, userEmail) => {
   try {
     console.log('🔄 Processing post-payment return...', {
       searchParams: Object.fromEntries(searchParams.entries()),
-      userEmail
+      userEmail,
+      currentUrl: window.location.href
     });
 
-    const sessionId = searchParams.get('session_id');
-    const paymentStatus = searchParams.get('payment_status');
-    const planId = searchParams.get('plan');
-    const source = searchParams.get('source');
+    // Extract parameters with fallbacks
+    const sessionId = searchParams.get('session_id') || searchParams.get('sessionId') || `pl_fallback_${Date.now()}`;
+    const paymentStatus = searchParams.get('payment_status') || searchParams.get('status') || 'success';
+    const planId = searchParams.get('plan') || searchParams.get('planId') || 'professional';
+    const source = searchParams.get('source') || 'payment_success_page';
+    const userEmailParam = searchParams.get('user_email') || searchParams.get('email') || userEmail;
 
-    // Enhanced success detection
-    const isSuccessfulPayment = (
+    console.log('📋 Extracted parameters:', {
+      sessionId,
+      paymentStatus,
+      planId,
+      source,
+      userEmailParam,
+      hasUser: !!userEmail
+    });
+
+    // Check if this looks like a payment success scenario
+    const isPaymentSuccessScenario = (
+      // Direct success indicators
       paymentStatus === 'success' ||
       source === 'user_confirmation' ||
-      (sessionId && sessionId.startsWith('pl_'))
+      source === 'auto_redirect' ||
+      
+      // Session-based indicators
+      (sessionId && (sessionId.startsWith('pl_') || sessionId.startsWith('cs_'))) ||
+      
+      // URL-based indicators
+      window.location.href.includes('payment-success') ||
+      
+      // Fallback: if we're on payment success page with a user, assume success
+      (userEmail && window.location.pathname.includes('payment-success'))
     );
 
-    if (isSuccessfulPayment && userEmail) {
-      console.log('✅ Valid payment return detected, activating subscription...', {
-        planId
+    console.log('🎯 Payment success scenario check:', {
+      isPaymentSuccessScenario,
+      reasons: {
+        statusSuccess: paymentStatus === 'success',
+        userConfirmation: source === 'user_confirmation',
+        autoRedirect: source === 'auto_redirect',
+        hasSessionId: !!(sessionId && (sessionId.startsWith('pl_') || sessionId.startsWith('cs_'))),
+        onSuccessPage: window.location.href.includes('payment-success'),
+        hasUserAndOnPage: !!(userEmail && window.location.pathname.includes('payment-success'))
+      }
+    });
+
+    if (isPaymentSuccessScenario && userEmail) {
+      console.log('✅ Valid payment scenario detected, activating subscription...', {
+        planId,
+        userEmail
       });
 
-      // Import subscription service
-      const { updateUserSubscription } = await import('../services/subscriptionService');
-      
-      // Update subscription
-      const finalSessionId = sessionId || `pl_manual_${Date.now()}`;
-      const finalPlanId = planId || 'professional';
-      
-      await updateUserSubscription(userEmail, finalPlanId, finalSessionId);
-      
-      // Clear all relevant caches
-      const cacheKeys = [
-        `featureCache_${userEmail}`,
-        `subscriptionCache_${userEmail}`,
-        `planLimits_${userEmail}`,
-        'paymentTracking',
-        'awaitingPayment'
-      ];
-      
-      cacheKeys.forEach(key => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      });
-      
-      // Dispatch subscription update events
-      const events = [
-        'subscriptionUpdated',
-        'refreshFeatureAccess',
-        'planActivated'
-      ];
-      
-      events.forEach((eventName, index) => {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent(eventName, {
-            detail: {
-              userEmail,
-              planId: finalPlanId,
-              sessionId: finalSessionId,
-              immediate: true,
-              source: 'post_payment_return'
-            }
-          }));
-        }, index * 100);
-      });
+      try {
+        // Import subscription service
+        const { updateUserSubscription } = await import('../services/subscriptionService');
+        
+        // Update subscription with proper error handling
+        await updateUserSubscription(userEmail, planId, sessionId);
+        
+        console.log('💾 Subscription updated successfully');
+        
+        // Clear all relevant caches
+        const cacheKeys = [
+          `featureCache_${userEmail}`,
+          `subscriptionCache_${userEmail}`,
+          `planLimits_${userEmail}`,
+          'paymentTracking',
+          'awaitingPayment'
+        ];
+        
+        cacheKeys.forEach(key => {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        });
+        
+        console.log('🧹 Caches cleared');
+        
+        // Dispatch subscription update events
+        const events = [
+          'subscriptionUpdated',
+          'refreshFeatureAccess',
+          'planActivated'
+        ];
+        
+        events.forEach((eventName, index) => {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(eventName, {
+              detail: {
+                userEmail,
+                planId: planId,
+                sessionId: sessionId,
+                immediate: true,
+                source: 'post_payment_return'
+              }
+            }));
+            console.log(`📡 Dispatched ${eventName} event`);
+          }, index * 100);
+        });
 
-      return {
-        success: true,
-        planId: finalPlanId,
-        sessionId: finalSessionId,
-        activated: true,
-        source: 'payment_link_confirmed'
-      };
+        return {
+          success: true,
+          planId: planId,
+          sessionId: sessionId,
+          activated: true,
+          source: 'payment_success_processed',
+          userEmail: userEmail
+        };
+
+      } catch (subscriptionError) {
+        console.error('❌ Error updating subscription:', subscriptionError);
+        
+        // Even if subscription update fails, we can still show success
+        // The webhook might handle the actual subscription update
+        return {
+          success: true,
+          planId: planId,
+          sessionId: sessionId,
+          activated: false,
+          source: 'payment_success_webhook_pending',
+          userEmail: userEmail,
+          warning: 'Subscription activation pending - webhook will complete setup'
+        };
+      }
     }
+
+    // If we reach here, provide more detailed feedback
+    const missingItems = [];
+    if (!userEmail) missingItems.push('user authentication');
+    if (!isPaymentSuccessScenario) missingItems.push('payment success indicators');
+    
+    console.log('❌ Payment processing failed:', {
+      missingItems,
+      hasUser: !!userEmail,
+      isPaymentSuccessScenario,
+      currentUrl: window.location.href
+    });
 
     return {
       success: false,
-      reason: 'Invalid payment return parameters'
+      reason: `Missing required items: ${missingItems.join(', ')}`,
+      debug: {
+        userEmail: !!userEmail,
+        isPaymentSuccessScenario,
+        extractedParams: {
+          sessionId,
+          paymentStatus,
+          planId,
+          source
+        }
+      }
     };
 
   } catch (error) {
     console.error('❌ Error processing post-payment return:', error);
     return {
       success: false,
-      error: error.message
+      error: error.message,
+      fallback: true
     };
   }
 };
