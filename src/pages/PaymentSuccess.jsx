@@ -82,11 +82,40 @@ export default function PaymentSuccess() {
       detail: { source: 'payment_success', force: true }
     }));
     
-    // **DIRECT NAVIGATION TO EXACT URL**
-    console.log('🎯 Navigating directly to: https://gotrackio.netlify.app/#/dashboard');
+    // **HASH ROUTER NAVIGATION - Multiple approaches**
+    console.log('🎯 Navigating to dashboard using hash router...');
     
-    // Force immediate redirect to the exact URL
-    window.location.href = 'https://gotrackio.netlify.app/#/dashboard';
+    try {
+      // Method 1: Use React Router navigate
+      console.log('🔄 Trying React Router navigate...');
+      navigate('/dashboard', { replace: true });
+      
+      // Method 2: Direct hash manipulation (backup)
+      setTimeout(() => {
+        if (window.location.hash !== '#/dashboard') {
+          console.log('🔄 Trying hash manipulation...');
+          window.location.hash = '#/dashboard';
+        }
+      }, 100);
+      
+      // Method 3: Force page navigation (final backup)
+      setTimeout(() => {
+        if (!window.location.href.includes('#/dashboard')) {
+          console.log('🔄 Trying force navigation...');
+          window.location.href = window.location.origin + window.location.pathname + '#/dashboard';
+        }
+      }, 500);
+      
+    } catch (navError) {
+      console.error('❌ Navigation error:', navError);
+      // Ultimate fallback - direct hash set
+      window.location.hash = '#/dashboard';
+    }
+    
+    // Reset navigation state after a delay
+    setTimeout(() => {
+      setIsNavigating(false);
+    }, 2000);
   };
 
   const planId = searchParams.get('plan') || result?.planId || 'professional';
@@ -115,7 +144,7 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  window.location.href = 'https://gotrackio.netlify.app/#/pricing';
+                  navigate('/pricing', { replace: true });
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -124,7 +153,7 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  window.location.href = 'https://gotrackio.netlify.app/#/dashboard';
+                  navigate('/dashboard', { replace: true });
                 }}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -261,14 +290,26 @@ export default function PaymentSuccess() {
           {!isNavigating && (
             <div className="mt-6 pt-4 border-t border-gray-700">
               <p className="text-gray-500 text-sm mb-3">
-                Having trouble? Try this direct link:
+                Alternative navigation options:
               </p>
-              <div className="flex justify-center">
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
-                  onClick={() => window.location.href = 'https://gotrackio.netlify.app/#/dashboard'}
-                  className="px-6 py-3 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                  onClick={() => navigate('/dashboard', { replace: true })}
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
                 >
-                  🎯 Direct Dashboard Link
+                  🎯 React Router
+                </button>
+                <button
+                  onClick={() => window.location.hash = '#/dashboard'}
+                  className="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  🔗 Hash Navigation
+                </button>
+                <button
+                  onClick={() => window.location.href = window.location.origin + window.location.pathname + '#/dashboard'}
+                  className="px-4 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  🚀 Force Navigate
                 </button>
               </div>
             </div>
@@ -276,9 +317,11 @@ export default function PaymentSuccess() {
           
           {/* Debug info */}
           <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-800 rounded">
-            <p><strong>Target URL:</strong> https://gotrackio.netlify.app/#/dashboard</p>
             <p><strong>Current URL:</strong> {window.location.href}</p>
+            <p><strong>Current Hash:</strong> {window.location.hash}</p>
+            <p><strong>Target:</strong> #/dashboard</p>
             <p><strong>User:</strong> {user?.email}</p>
+            <p><strong>Navigation State:</strong> {isNavigating ? 'Navigating...' : 'Ready'}</p>
           </div>
         </motion.div>
       </motion.div>
