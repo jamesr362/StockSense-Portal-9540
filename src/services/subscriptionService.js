@@ -338,7 +338,7 @@ export const createOrUpdateSubscription = async (subscriptionData) => {
 };
 
 /**
- * Cancel subscription with REAL Stripe integration
+ * Cancel subscription with ENHANCED Stripe integration and error handling
  */
 export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
   if (!userEmail || !supabase) {
@@ -346,7 +346,7 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
   }
 
   try {
-    console.log('❌ Canceling subscription for user:', userEmail, { cancelAtPeriodEnd });
+    console.log('❌ Starting subscription cancellation for user:', userEmail, { cancelAtPeriodEnd });
 
     // Get current subscription first
     const { data: currentSub, error: fetchError } = await supabase
@@ -362,12 +362,14 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
       throw fetchError;
     }
 
-    // **NEW: Cancel in Stripe if we have a Stripe subscription ID**
+    console.log('📋 Current subscription:', currentSub);
+
+    // **ENHANCED: Cancel in Stripe FIRST before updating database**
+    let stripeResult = null;
     if (currentSub.stripe_subscription_id && !currentSub.stripe_subscription_id.startsWith('manual_')) {
       try {
         console.log('🔄 Cancelling subscription in Stripe:', currentSub.stripe_subscription_id);
         
-        // Call Netlify function to cancel in Stripe
         const response = await fetch('/.netlify/functions/cancel-subscription', {
           method: 'POST',
           headers: {
@@ -380,29 +382,39 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
         });
 
         if (!response.ok) {
-          const errorData = await response.text();
-          console.error('Stripe cancellation failed:', errorData);
-          throw new Error(`Failed to cancel in Stripe: ${errorData}`);
+          const errorText = await response.text();
+          console.error('❌ Stripe cancellation failed:', errorText);
+          throw new Error(`Stripe cancellation failed: ${errorText}`);
         }
 
-        const stripeResult = await response.json();
+        stripeResult = await response.json();
         console.log('✅ Stripe cancellation successful:', stripeResult);
         
-        // Log security event for Stripe cancellation
+        // Log security event for successful Stripe cancellation
         logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELED', {
           userEmail,
           stripeSubscriptionId: currentSub.stripe_subscription_id,
-          cancelAtPeriodEnd
+          cancelAtPeriodEnd,
+          stripeResponse: stripeResult
         });
 
       } catch (stripeError) {
-        console.error('❌ Error cancelling in Stripe:', stripeError);
-        // Continue with local cancellation even if Stripe fails
-        // In production, you might want to handle this differently
+        console.error('❌ Critical error cancelling in Stripe:', stripeError);
+        
+        // Log the failed Stripe cancellation
+        logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_FAILED', {
+          userEmail,
+          stripeSubscriptionId: currentSub.stripe_subscription_id,
+          error: stripeError.message
+        });
+        
+        // **IMPORTANT: Don't proceed with local cancellation if Stripe fails**
+        // This prevents the user thinking they're cancelled when they're still being charged
+        throw new Error(`Failed to cancel subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
       }
     }
 
-    // **Update local database**
+    // **Update local database ONLY after Stripe success**
     const updateData = {
       updated_at: new Date().toISOString()
     };
@@ -426,37 +438,61 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Database update failed after Stripe cancellation:', error);
+      throw new Error(`Database update failed: ${error.message}`);
+    }
 
-    console.log('✅ Canceled subscription in database:', data);
+    console.log('✅ Successfully canceled subscription in both Stripe and database:', data);
     
-    // Log security event
-    logSecurityEvent('SUBSCRIPTION_CANCELED', {
+    // Log successful complete cancellation
+    logSecurityEvent('SUBSCRIPTION_CANCELED_COMPLETE', {
       userEmail,
       subscriptionId: data.id,
       cancelAtPeriodEnd,
-      immediateCancel: !cancelAtPeriodEnd
+      immediateCancel: !cancelAtPeriodEnd,
+      stripeResult
     });
 
-    // Dispatch events to update UI
+    // Dispatch events to update UI immediately
     window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-      detail: { userEmail, force: true, immediate: true }
+      detail: { 
+        userEmail, 
+        force: true, 
+        immediate: true, 
+        action: 'canceled',
+        cancelAtPeriodEnd
+      }
     }));
 
     window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-      detail: { userEmail, force: true }
+      detail: { userEmail, force: true, action: 'canceled' }
     }));
 
-    return data;
+    return {
+      ...data,
+      stripeResult,
+      message: cancelAtPeriodEnd 
+        ? 'Subscription will be cancelled at the end of your billing period' 
+        : 'Subscription cancelled immediately'
+    };
 
   } catch (error) {
-    console.error('❌ Error canceling subscription:', error);
+    console.error('❌ Error in cancelSubscription:', error);
+    
+    // Log the failed cancellation attempt
+    logSecurityEvent('SUBSCRIPTION_CANCEL_FAILED', {
+      userEmail,
+      error: error.message,
+      cancelAtPeriodEnd
+    });
+    
     throw error;
   }
 };
 
 /**
- * Reactivate subscription - FIXED VERSION
+ * Reactivate subscription - ENHANCED VERSION
  */
 export const reactivateSubscription = async (userEmail, planId = 'price_professional') => {
   if (!userEmail || !supabase) {
@@ -464,7 +500,7 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
   }
 
   try {
-    console.log('🔄 Reactivating subscription for user:', userEmail, { planId });
+    console.log('🔄 Starting subscription reactivation for user:', userEmail, { planId });
 
     // Get current subscription first
     const { data: currentSub, error: fetchError } = await supabase
@@ -480,12 +516,14 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
       throw fetchError;
     }
 
-    // **NEW: Reactivate in Stripe if we have a Stripe subscription ID**
+    console.log('📋 Current subscription:', currentSub);
+
+    // **ENHANCED: Reactivate in Stripe FIRST**
+    let stripeResult = null;
     if (currentSub.stripe_subscription_id && !currentSub.stripe_subscription_id.startsWith('manual_')) {
       try {
         console.log('🔄 Reactivating subscription in Stripe:', currentSub.stripe_subscription_id);
         
-        // Call Netlify function to reactivate in Stripe
         const response = await fetch('/.netlify/functions/reactivate-subscription', {
           method: 'POST',
           headers: {
@@ -497,27 +535,37 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
         });
 
         if (!response.ok) {
-          const errorData = await response.text();
-          console.error('Stripe reactivation failed:', errorData);
-          throw new Error(`Failed to reactivate in Stripe: ${errorData}`);
+          const errorText = await response.text();
+          console.error('❌ Stripe reactivation failed:', errorText);
+          throw new Error(`Stripe reactivation failed: ${errorText}`);
         }
 
-        const stripeResult = await response.json();
+        stripeResult = await response.json();
         console.log('✅ Stripe reactivation successful:', stripeResult);
         
-        // Log security event for Stripe reactivation
+        // Log security event for successful Stripe reactivation
         logSecurityEvent('STRIPE_SUBSCRIPTION_REACTIVATED', {
           userEmail,
-          stripeSubscriptionId: currentSub.stripe_subscription_id
+          stripeSubscriptionId: currentSub.stripe_subscription_id,
+          stripeResponse: stripeResult
         });
 
       } catch (stripeError) {
-        console.error('❌ Error reactivating in Stripe:', stripeError);
-        // Continue with local reactivation even if Stripe fails
+        console.error('❌ Critical error reactivating in Stripe:', stripeError);
+        
+        // Log the failed Stripe reactivation
+        logSecurityEvent('STRIPE_SUBSCRIPTION_REACTIVATE_FAILED', {
+          userEmail,
+          stripeSubscriptionId: currentSub.stripe_subscription_id,
+          error: stripeError.message
+        });
+        
+        // **IMPORTANT: Don't proceed with local reactivation if Stripe fails**
+        throw new Error(`Failed to reactivate subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
       }
     }
 
-    // **Update local database**
+    // **Update local database ONLY after Stripe success**
     const updateData = {
       status: 'active',
       cancel_at_period_end: false,
@@ -535,30 +583,51 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Database update failed after Stripe reactivation:', error);
+      throw new Error(`Database update failed: ${error.message}`);
+    }
 
-    console.log('✅ Reactivated subscription:', data);
+    console.log('✅ Successfully reactivated subscription in both Stripe and database:', data);
     
-    // Log security event
-    logSecurityEvent('SUBSCRIPTION_REACTIVATED', {
+    // Log successful complete reactivation
+    logSecurityEvent('SUBSCRIPTION_REACTIVATED_COMPLETE', {
       userEmail,
       subscriptionId: data.id,
-      planId: updateData.plan_id
+      planId: updateData.plan_id,
+      stripeResult
     });
 
-    // Dispatch events to update UI
+    // Dispatch events to update UI immediately
     window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-      detail: { userEmail, force: true, immediate: true }
+      detail: { 
+        userEmail, 
+        force: true, 
+        immediate: true, 
+        action: 'reactivated'
+      }
     }));
 
     window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-      detail: { userEmail, force: true }
+      detail: { userEmail, force: true, action: 'reactivated' }
     }));
 
-    return data;
+    return {
+      ...data,
+      stripeResult,
+      message: 'Subscription successfully reactivated'
+    };
 
   } catch (error) {
-    console.error('❌ Error reactivating subscription:', error);
+    console.error('❌ Error in reactivateSubscription:', error);
+    
+    // Log the failed reactivation attempt
+    logSecurityEvent('SUBSCRIPTION_REACTIVATE_FAILED', {
+      userEmail,
+      error: error.message,
+      planId
+    });
+    
     throw error;
   }
 };
