@@ -181,8 +181,7 @@ export default function PaymentSuccess() {
       // Check if user needs to log in first
       if (!user?.email && result?.requiresLogin) {
         console.log('🔑 User needs to log in first');
-        const baseUrl = window.location.origin + window.location.pathname;
-        window.location.href = baseUrl + '#/login';
+        navigate('/login', { replace: true });
         return;
       }
 
@@ -208,13 +207,12 @@ export default function PaymentSuccess() {
 
       console.log('🎯 Navigating to dashboard...');
       
-      // Use direct URL navigation for better compatibility
-      const baseUrl = window.location.origin + window.location.pathname;
-      window.location.href = baseUrl + '#/dashboard';
+      // Use React Router navigate for proper routing
+      navigate('/dashboard', { replace: true });
       
     } catch (navError) {
       console.error('❌ Navigation error:', navError);
-      // Ultimate fallback
+      // Ultimate fallback - try hash navigation
       window.location.hash = '#/dashboard';
     } finally {
       // Reset navigation state after delay
@@ -231,11 +229,10 @@ export default function PaymentSuccess() {
       sessionStorage.removeItem('redirectToDashboard');
       console.log('🔄 Redirecting to dashboard after reload...');
       setTimeout(() => {
-        const baseUrl = window.location.origin + window.location.pathname;
-        window.location.href = baseUrl + '#/dashboard';
+        navigate('/dashboard', { replace: true });
       }, 1000);
     }
-  }, []);
+  }, [navigate]);
 
   const planId = searchParams.get('plan') || urlDebug.hashParams?.plan || result?.planId || 'professional';
   const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.professional;
@@ -272,10 +269,7 @@ export default function PaymentSuccess() {
             </p>
             <div className="space-y-2">
               <button
-                onClick={() => {
-                  const baseUrl = window.location.origin + window.location.pathname;
-                  window.location.href = baseUrl + '#/pricing';
-                }}
+                onClick={() => navigate('/pricing', { replace: true })}
                 className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
                 Return to Pricing
@@ -461,21 +455,43 @@ export default function PaymentSuccess() {
               <p className="text-gray-400 text-sm mb-3">
                 Having trouble? Click here to go directly:
               </p>
-              <a
-                href={result?.requiresLogin ? "#/login" : "#/dashboard"}
-                className="inline-flex items-center px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                onClick={(e) => {
-                  e.preventDefault();
-                  const baseUrl = window.location.origin + window.location.pathname;
-                  const target = result?.requiresLogin ? '#/login' : '#/dashboard';
-                  window.location.href = baseUrl + target;
+              <button
+                onClick={() => {
+                  const target = result?.requiresLogin ? '/login' : '/dashboard';
+                  navigate(target, { replace: true });
                 }}
+                className="inline-flex items-center px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
               >
                 <SafeIcon icon={RiHomeLine} className="h-4 w-4 mr-2" />
                 {result?.requiresLogin ? 'Direct Login Link' : 'Direct Dashboard Link'}
-              </a>
+              </button>
             </div>
           )}
+          
+          {/* Additional Navigation Options */}
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate('/dashboard', { replace: true })}
+              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+            >
+              <SafeIcon icon={RiHomeLine} className="h-4 w-4 mr-2 inline" />
+              Dashboard
+            </button>
+            
+            <button
+              onClick={() => navigate('/subscription', { replace: true })}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+            >
+              Subscription Management
+            </button>
+            
+            <button
+              onClick={() => navigate('/pricing', { replace: true })}
+              className="w-full bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors font-medium"
+            >
+              View Pricing
+            </button>
+          </div>
           
           {/* Debug Information */}
           <div className="mt-8 text-xs text-gray-500 p-4 bg-gray-800 rounded-lg">
@@ -483,10 +499,11 @@ export default function PaymentSuccess() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
               <p><strong>Current URL:</strong> {window.location.href}</p>
               <p><strong>Current Hash:</strong> {window.location.hash}</p>
-              <p><strong>Target:</strong> {result?.requiresLogin ? '#/login' : '#/dashboard'}</p>
+              <p><strong>Target:</strong> {result?.requiresLogin ? '/login' : '/dashboard'}</p>
               <p><strong>User:</strong> {user?.email || 'Not logged in'}</p>
               <p><strong>Navigation State:</strong> {isNavigating ? 'Navigating...' : 'Ready'}</p>
               <p><strong>Subscription Status:</strong> {result?.activated ? 'Active' : 'Pending'}</p>
+              <p><strong>Router:</strong> HashRouter</p>
             </div>
             {result?.debug && (
               <div className="mt-2 pt-2 border-t border-gray-700">
