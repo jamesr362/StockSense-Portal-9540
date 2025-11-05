@@ -72,64 +72,68 @@ export default function PaymentSuccess() {
       // Clear any payment-related session storage
       sessionStorage.removeItem('paymentUserEmail');
       sessionStorage.removeItem('pendingPayment');
+      sessionStorage.removeItem('paymentTracking');
+      sessionStorage.removeItem('awaitingPayment');
       
-      // Trigger a refresh of feature access and subscription data
-      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { 
-          source: 'payment_success', 
-          timestamp: Date.now(),
-          userEmail: user?.email,
-          force: true
+      // Trigger subscription refresh events
+      const events = [
+        'subscriptionUpdated',
+        'refreshFeatureAccess',
+        'planActivated'
+      ];
+      
+      events.forEach((eventName, index) => {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent(eventName, {
+            detail: {
+              source: 'payment_success',
+              userEmail: user?.email,
+              force: true,
+              timestamp: Date.now()
+            }
+          }));
+        }, index * 100);
+      });
+      
+      console.log('📍 Using HashRouter navigation to /dashboard');
+      
+      // **FIXED: Proper HashRouter navigation**
+      // Since we're using HashRouter, navigate directly with React Router
+      navigate('/dashboard', { 
+        replace: true,
+        state: { 
+          fromPaymentSuccess: true,
+          timestamp: Date.now() 
         }
-      }));
+      });
       
-      window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-        detail: { 
-          userEmail: user?.email, 
-          force: true, 
-          source: 'payment_success' 
-        }
-      }));
-      
-      // **ENHANCED NAVIGATION STRATEGY**
-      console.log('📍 Method 1: React Router navigation...');
-      
-      // Method 1: Use React Router navigate with replace
-      navigate('/dashboard', { replace: true });
-      
-      // Method 2: Wait and check if navigation worked, then try hash navigation
+      // **ENHANCED FALLBACK**: If React Router fails, use direct hash manipulation
       setTimeout(() => {
-        const currentPath = window.location.pathname + window.location.hash;
-        console.log('🔍 Current path after React Router:', currentPath);
+        const currentHash = window.location.hash;
+        console.log('🔍 Checking navigation result. Current hash:', currentHash);
         
-        if (!currentPath.includes('/dashboard')) {
-          console.log('📍 Method 2: Hash navigation fallback...');
+        if (!currentHash.includes('/dashboard')) {
+          console.log('📍 React Router navigation failed, using hash fallback...');
           
-          // Force hash navigation
-          if (window.location.hash) {
-            // We're using hash routing
-            window.location.hash = '/dashboard';
-          } else {
-            // We're using regular routing
-            window.history.pushState(null, '', '/dashboard');
-          }
+          // Force hash change
+          window.location.hash = '/dashboard';
           
-          // Method 3: Ultimate fallback - full page redirect
+          // **ULTIMATE FALLBACK**: Full page reload to dashboard
           setTimeout(() => {
-            const finalPath = window.location.pathname + window.location.hash;
-            console.log('🔍 Final path check:', finalPath);
+            const finalHash = window.location.hash;
+            console.log('🔍 Final check. Hash:', finalHash);
             
-            if (!finalPath.includes('/dashboard')) {
-              console.log('📍 Method 3: Full redirect fallback...');
+            if (!finalHash.includes('/dashboard')) {
+              console.log('📍 Hash navigation failed, using full redirect...');
               
-              // Get the base URL
-              const baseUrl = window.location.origin;
-              const dashboardUrl = `${baseUrl}/#/dashboard`;
+              // Complete URL reconstruction
+              const baseUrl = window.location.origin + window.location.pathname;
+              const dashboardUrl = `${baseUrl}#/dashboard`;
               
-              console.log('🎯 Redirecting to:', dashboardUrl);
+              console.log('🎯 Full redirect to:', dashboardUrl);
               window.location.href = dashboardUrl;
             } else {
-              console.log('✅ Navigation successful!');
+              console.log('✅ Hash navigation successful!');
               setIsNavigating(false);
             }
           }, 1000);
@@ -142,14 +146,17 @@ export default function PaymentSuccess() {
     } catch (error) {
       console.error('❌ Navigation error:', error);
       
-      // Emergency fallback - direct URL change
+      // Emergency fallback - direct hash navigation
       try {
-        const baseUrl = window.location.origin;
-        const dashboardUrl = `${baseUrl}/#/dashboard`;
-        console.log('🆘 Emergency redirect to:', dashboardUrl);
+        console.log('🆘 Emergency navigation fallback...');
+        const baseUrl = window.location.origin + window.location.pathname;
+        const dashboardUrl = `${baseUrl}#/dashboard`;
+        
+        console.log('🎯 Emergency redirect to:', dashboardUrl);
         window.location.href = dashboardUrl;
       } catch (finalError) {
-        console.error('❌ Emergency navigation also failed:', finalError);
+        console.error('❌ All navigation methods failed:', finalError);
+        alert('Navigation failed. Please manually go to the dashboard or refresh the page.');
         setIsNavigating(false);
       }
     }
@@ -190,8 +197,8 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  const dashboardUrl = `${window.location.origin}/#/dashboard`;
-                  window.location.href = dashboardUrl;
+                  // Use hash navigation for dashboard
+                  window.location.hash = '/dashboard';
                 }}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -324,12 +331,38 @@ export default function PaymentSuccess() {
             )}
           </p>
           
+          {/* Additional Navigation Options */}
+          {!isNavigating && (
+            <div className="mt-6 pt-4 border-t border-gray-700">
+              <p className="text-gray-500 text-sm mb-3">
+                Having trouble? Try these alternatives:
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <button
+                  onClick={() => window.location.hash = '/dashboard'}
+                  className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                >
+                  Direct Dashboard Link
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </div>
+          )}
+          
           {/* Debug info in development */}
           {process.env.NODE_ENV === 'development' && (
-            <div className="mt-4 text-xs text-gray-500">
+            <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-800 rounded">
+              <p><strong>Debug Info:</strong></p>
               <p>Current URL: {window.location.href}</p>
               <p>Hash: {window.location.hash}</p>
+              <p>Pathname: {window.location.pathname}</p>
               <p>User: {user?.email}</p>
+              <p>Router Type: HashRouter</p>
             </div>
           )}
         </motion.div>
