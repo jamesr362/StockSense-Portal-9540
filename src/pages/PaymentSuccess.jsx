@@ -51,28 +51,53 @@ export default function PaymentSuccess() {
     return () => clearTimeout(timer);
   }, [searchParams, user]);
 
-  const handleContinue = () => {
+  const handleContinue = (e) => {
+    // Prevent any default behavior
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     console.log('🚀 Navigating to dashboard...');
     
-    // Clear any payment-related session storage
-    sessionStorage.removeItem('paymentUserEmail');
-    sessionStorage.removeItem('pendingPayment');
-    
-    // Use replace to prevent going back to payment success
-    navigate('/dashboard', { replace: true });
-    
-    // Trigger a refresh of feature access and subscription data
-    window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-      detail: { source: 'payment_success', timestamp: Date.now() }
-    }));
-    
-    // Additional fallback for hash routing
-    setTimeout(() => {
-      if (window.location.hash !== '#/dashboard') {
-        console.log('🔄 Fallback navigation to dashboard');
-        window.location.hash = '#/dashboard';
-      }
-    }, 100);
+    try {
+      // Clear any payment-related session storage
+      sessionStorage.removeItem('paymentUserEmail');
+      sessionStorage.removeItem('pendingPayment');
+      
+      // Trigger a refresh of feature access and subscription data
+      window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+        detail: { source: 'payment_success', timestamp: Date.now() }
+      }));
+      
+      // Use replace to prevent going back to payment success
+      console.log('📍 Attempting React Router navigation...');
+      navigate('/dashboard', { replace: true });
+      
+      // Additional fallback for hash routing - more robust approach
+      setTimeout(() => {
+        const currentHash = window.location.hash;
+        console.log('🔍 Current hash after navigation:', currentHash);
+        
+        if (!currentHash.includes('/dashboard')) {
+          console.log('🔄 Fallback navigation - setting hash directly');
+          window.location.hash = '/dashboard';
+          
+          // Force reload if still not working
+          setTimeout(() => {
+            if (!window.location.hash.includes('/dashboard')) {
+              console.log('🔄 Final fallback - force reload to dashboard');
+              window.location.href = window.location.origin + '/#/dashboard';
+            }
+          }, 500);
+        }
+      }, 200);
+      
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+      // Emergency fallback
+      window.location.href = window.location.origin + '/#/dashboard';
+    }
   };
 
   const planId = searchParams.get('plan') || result?.planId || 'professional';
@@ -103,13 +128,19 @@ export default function PaymentSuccess() {
             <p className="text-red-200 mb-4">{error}</p>
             <div className="space-y-2">
               <button
-                onClick={() => navigate('/pricing')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/pricing', { replace: true });
+                }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
                 Return to Pricing
               </button>
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/dashboard', { replace: true });
+                }}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
                 Go to Dashboard
@@ -307,6 +338,7 @@ export default function PaymentSuccess() {
           className="text-center"
         >
           <button
+            type="button"
             onClick={handleContinue}
             className="inline-flex items-center bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-8 rounded-lg transition-colors shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900"
           >
