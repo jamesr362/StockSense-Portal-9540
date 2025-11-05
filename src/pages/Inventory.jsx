@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
-import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine, RiLockLine, RiStarLine, RiArrowRightLine } from 'react-icons/ri';
+import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiStore2Line, RiScanLine, RiLockLine, RiStarLine, RiArrowRightLine, RiPercentLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
 
 import AddItemModal from '../components/AddItemModal';
@@ -291,7 +291,7 @@ export default function Inventory() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold text-white">Inventory</h1>
             <p className="mt-1 text-sm text-gray-400">
-              Manage your inventory items
+              Manage your inventory items with VAT configuration
               {currentPlan === 'free' && (
                 <span className="ml-2 text-yellow-400">
                   ({inventoryItems.length}/100 items used)
@@ -526,6 +526,9 @@ export default function Inventory() {
                           <div className="flex flex-col">
                             <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Unit Price</span>
                             <span className="text-white font-medium">{formatCurrency(item.unitPrice)}</span>
+                            {item.vatIncluded && (
+                              <span className="text-gray-500 text-xs">Inc. VAT ({item.vatPercentage}%)</span>
+                            )}
                           </div>
                           <div className="flex flex-col">
                             <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Total Value</span>
@@ -543,6 +546,17 @@ export default function Inventory() {
                             <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Date Added</span>
                             <span className="text-white">{formatDate(item.dateAdded)}</span>
                           </div>
+                          {item.vatPercentage > 0 && (
+                            <div className="flex flex-col">
+                              <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">
+                                <RiPercentLine className="h-3 w-3 inline mr-1" />
+                                VAT Info
+                              </span>
+                              <span className="text-white text-xs">
+                                {item.vatPercentage}% {item.vatIncluded ? 'included' : 'excluded'}
+                              </span>
+                            </div>
+                          )}
                           {item.description && (
                             <div className="flex flex-col">
                               <span className="text-gray-400 text-xs font-medium uppercase tracking-wide">Description</span>
@@ -564,34 +578,40 @@ export default function Inventory() {
                     <table className="w-full table-fixed">
                       <thead className="bg-gray-700 sticky top-0 z-10">
                         <tr>
-                          <th className="w-32 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
+                          <th className="w-28 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
                             Name
                           </th>
-                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Category
                           </th>
                           <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Qty
                           </th>
-                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Price
+                          </th>
+                          <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                            <div className="flex items-center">
+                              <RiPercentLine className="h-4 w-4 mr-1" />
+                              VAT
+                            </div>
                           </th>
                           <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Total
                           </th>
-                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Status
                           </th>
-                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-18 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             <div className="flex items-center">
                               <RiCalendarLine className="h-4 w-4 mr-1" />
                               Date
                             </div>
                           </th>
-                          <th className="w-32 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-28 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Description
                           </th>
-                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th className="w-18 px-3 py-3.5 text-left text-sm font-semibold text-white">
                             Actions
                           </th>
                         </tr>
@@ -604,12 +624,12 @@ export default function Inventory() {
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.3 }}
                           >
-                            <td className="w-32 py-4 pl-4 pr-3 text-sm font-medium text-white">
+                            <td className="w-28 py-4 pl-4 pr-3 text-sm font-medium text-white">
                               <div className="truncate" title={item.name}>
                                 {item.name}
                               </div>
                             </td>
-                            <td className="w-24 px-3 py-4 text-sm text-gray-300">
+                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
                               <div className="truncate" title={item.category}>
                                 {item.category}
                               </div>
@@ -617,9 +637,20 @@ export default function Inventory() {
                             <td className="w-16 px-3 py-4 text-sm text-gray-300">
                               {item.quantity}
                             </td>
-                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                            <td className="w-24 px-3 py-4 text-sm text-gray-300">
                               <div className="truncate">
                                 {formatCurrency(item.unitPrice)}
+                                {item.vatIncluded && (
+                                  <div className="text-xs text-gray-500">Inc. VAT</div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="w-16 px-3 py-4 text-sm text-gray-300">
+                              <div className="text-xs">
+                                {item.vatPercentage}%
+                                <div className="text-gray-500">
+                                  {item.vatIncluded ? 'Inc' : 'Ex'}
+                                </div>
                               </div>
                             </td>
                             <td className="w-20 px-3 py-4 text-sm text-gray-300 font-medium">
@@ -627,22 +658,22 @@ export default function Inventory() {
                                 {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
                               </div>
                             </td>
-                            <td className="w-24 px-3 py-4 text-sm">
+                            <td className="w-20 px-3 py-4 text-sm">
                               <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(item.status)}`}>
                                 {item.status}
                               </span>
                             </td>
-                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
+                            <td className="w-18 px-3 py-4 text-sm text-gray-300">
                               <div className="truncate">
                                 {formatDate(item.dateAdded)}
                               </div>
                             </td>
-                            <td className="w-32 px-3 py-4 text-sm text-gray-300">
+                            <td className="w-28 px-3 py-4 text-sm text-gray-300">
                               <div className="truncate" title={item.description || 'No description'}>
                                 {item.description || 'No description'}
                               </div>
                             </td>
-                            <td className="w-20 px-3 py-4 text-sm">
+                            <td className="w-18 px-3 py-4 text-sm">
                               <div className="flex space-x-2">
                                 <button
                                   onClick={() => handleEditItem(item)}

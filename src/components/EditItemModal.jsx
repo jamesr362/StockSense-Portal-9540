@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiCloseLine } from 'react-icons/ri';
+import { RiCloseLine, RiInformationLine } from 'react-icons/ri';
 import { useState, useEffect } from 'react';
 
 export default function EditItemModal({ isOpen, onClose, onSave, item }) {
@@ -11,6 +11,8 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
     unitPrice: '',
     status: 'In Stock',
     dateAdded: '',
+    vatIncluded: false,
+    vatPercentage: '20.00'
   });
 
   const categories = [
@@ -43,6 +45,12 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
     { value: 'Out of Stock', label: 'Out of Stock' }
   ];
 
+  const vatRates = [
+    { value: '0.00', label: '0% (Zero-rated)' },
+    { value: '5.00', label: '5% (Reduced rate)' },
+    { value: '20.00', label: '20% (Standard rate)' }
+  ];
+
   useEffect(() => {
     if (item) {
       setFormData({
@@ -53,26 +61,70 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
         unitPrice: item.unitPrice?.toString() || '',
         status: item.status || 'In Stock',
         dateAdded: item.dateAdded || new Date().toISOString().split('T')[0],
+        vatIncluded: item.vatIncluded || false,
+        vatPercentage: item.vatPercentage?.toString() || '20.00'
       });
     }
   }, [item]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
+  const handleVatRateChange = (e) => {
+    const value = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      vatPercentage: value
+    }));
+  };
+
+  // Calculate VAT breakdown for display
+  const calculateVatBreakdown = () => {
+    const unitPrice = parseFloat(formData.unitPrice) || 0;
+    const vatPercentage = parseFloat(formData.vatPercentage) || 0;
+    
+    if (unitPrice === 0) return { priceExVat: 0, vatAmount: 0, priceIncVat: 0 };
+
+    let priceExVat, vatAmount, priceIncVat;
+
+    if (formData.vatIncluded) {
+      // Price includes VAT
+      priceIncVat = unitPrice;
+      priceExVat = unitPrice / (1 + (vatPercentage / 100));
+      vatAmount = priceIncVat - priceExVat;
+    } else {
+      // Price excludes VAT
+      priceExVat = unitPrice;
+      vatAmount = unitPrice * (vatPercentage / 100);
+      priceIncVat = priceExVat + vatAmount;
+    }
+
+    return {
+      priceExVat: Math.round(priceExVat * 100) / 100,
+      vatAmount: Math.round(vatAmount * 100) / 100,
+      priceIncVat: Math.round(priceIncVat * 100) / 100
+    };
+  };
+
+  const vatBreakdown = calculateVatBreakdown();
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({
+    
+    const updatedItem = {
       ...item,
       ...formData,
       quantity: parseInt(formData.quantity),
       unitPrice: parseFloat(formData.unitPrice),
-    });
+      vatPercentage: parseFloat(formData.vatPercentage)
+    };
+    
+    onSave(updatedItem);
     onClose();
   };
 
@@ -96,7 +148,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative inline-block transform overflow-hidden rounded-lg bg-gray-800 px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle"
+              className="relative inline-block transform overflow-hidden rounded-lg bg-gray-800 px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6 sm:align-middle"
             >
               <div className="absolute right-0 top-0 pr-4 pt-4">
                 <button
@@ -122,7 +174,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                         name="name"
                         id="name"
                         required
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
                         value={formData.name}
                         onChange={handleChange}
                       />
@@ -136,7 +188,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                         id="category"
                         name="category"
                         required
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
                         value={formData.category}
                         onChange={handleChange}
                       >
@@ -159,7 +211,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                           id="quantity"
                           min="0"
                           required
-                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
                           value={formData.quantity}
                           onChange={handleChange}
                         />
@@ -173,7 +225,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                           id="status"
                           name="status"
                           required
-                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
                           value={formData.status}
                           onChange={handleChange}
                         >
@@ -186,44 +238,114 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                      <div>
-                        <label htmlFor="unitPrice" className="block text-sm font-medium text-white">
-                          Unit Price
-                        </label>
-                        <div className="relative mt-1 rounded-md shadow-sm">
-                          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                            <span className="text-gray-400 sm:text-sm">£</span>
+                    {/* VAT Configuration Section */}
+                    <div className="border-t border-gray-700 pt-4">
+                      <h4 className="text-md font-medium text-white mb-4 flex items-center">
+                        <RiInformationLine className="h-5 w-5 mr-2 text-blue-400" />
+                        VAT Configuration
+                      </h4>
+
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex items-center">
+                            <input
+                              id="vatIncluded"
+                              name="vatIncluded"
+                              type="checkbox"
+                              className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-700 bg-gray-700 rounded"
+                              checked={formData.vatIncluded}
+                              onChange={handleChange}
+                            />
+                            <label htmlFor="vatIncluded" className="ml-2 block text-sm text-white">
+                              Price includes VAT
+                            </label>
                           </div>
-                          <input
-                            type="number"
-                            name="unitPrice"
-                            id="unitPrice"
-                            min="0"
-                            step="0.01"
-                            required
-                            className="block w-full rounded-md border-gray-700 bg-gray-700 pl-7 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                            value={formData.unitPrice}
-                            onChange={handleChange}
-                          />
+                          <p className="mt-1 text-xs text-gray-400">
+                            {formData.vatIncluded 
+                              ? 'The unit price includes VAT' 
+                              : 'The unit price excludes VAT'
+                            }
+                          </p>
+                        </div>
+
+                        <div>
+                          <label htmlFor="vatRate" className="block text-sm font-medium text-white">
+                            VAT Rate
+                          </label>
+                          <select
+                            id="vatRate"
+                            name="vatRate"
+                            className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                            value={formData.vatPercentage}
+                            onChange={handleVatRateChange}
+                          >
+                            {vatRates.map((rate) => (
+                              <option key={rate.value} value={rate.value}>
+                                {rate.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </div>
+                    </div>
 
-                      <div>
-                        <label htmlFor="dateAdded" className="block text-sm font-medium text-white">
-                          Date Added
-                        </label>
+                    <div>
+                      <label htmlFor="unitPrice" className="block text-sm font-medium text-white">
+                        Unit Price {formData.vatIncluded ? '(Inc. VAT)' : '(Ex. VAT)'}
+                      </label>
+                      <div className="relative mt-1 rounded-md shadow-sm">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                          <span className="text-gray-400 sm:text-sm">£</span>
+                        </div>
                         <input
-                          type="date"
-                          name="dateAdded"
-                          id="dateAdded"
+                          type="number"
+                          name="unitPrice"
+                          id="unitPrice"
+                          min="0"
+                          step="0.01"
                           required
-                          className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          value={formData.dateAdded}
+                          className="block w-full rounded-md border-gray-700 bg-gray-700 pl-7 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2"
+                          value={formData.unitPrice}
                           onChange={handleChange}
-                          max={new Date().toISOString().split('T')[0]} // Prevent future dates
                         />
                       </div>
+
+                      {/* VAT Breakdown Display */}
+                      {formData.unitPrice && parseFloat(formData.unitPrice) > 0 && (
+                        <div className="mt-2 p-3 bg-gray-700/50 rounded-md border border-gray-600">
+                          <h5 className="text-sm font-medium text-white mb-2">VAT Breakdown:</h5>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <span className="text-gray-400">Price Ex. VAT:</span>
+                              <div className="text-white font-medium">£{vatBreakdown.priceExVat.toFixed(2)}</div>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">VAT ({formData.vatPercentage}%):</span>
+                              <div className="text-white font-medium">£{vatBreakdown.vatAmount.toFixed(2)}</div>
+                            </div>
+                            <div>
+                              <span className="text-gray-400">Price Inc. VAT:</span>
+                              <div className="text-white font-medium">£{vatBreakdown.priceIncVat.toFixed(2)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor="dateAdded" className="block text-sm font-medium text-white">
+                        Date Added
+                      </label>
+                      <input
+                        type="date"
+                        name="dateAdded"
+                        id="dateAdded"
+                        required
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
+                        value={formData.dateAdded}
+                        onChange={handleChange}
+                        max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                      />
                     </div>
 
                     <div>
@@ -234,7 +356,7 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                         id="description"
                         name="description"
                         rows={3}
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
                         value={formData.description}
                         onChange={handleChange}
                       />

@@ -325,7 +325,7 @@ export const updateUserLastLoginSupabase = async (email) => {
   }
 };
 
-// Inventory table operations
+// Inventory table operations with VAT support
 export const getInventoryItemsSupabase = async (userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
@@ -350,7 +350,11 @@ export const getInventoryItemsSupabase = async (userEmail) => {
       status: item.status,
       dateAdded: item.date_added,
       createdAt: item.created_at,
-      updatedAt: item.updated_at
+      updatedAt: item.updated_at,
+      vatIncluded: item.vat_included || false,
+      vatPercentage: item.vat_percentage || 20.00,
+      vatAmount: item.vat_amount || 0.00,
+      priceExcludingVat: item.price_excluding_vat || item.unit_price
     }));
 
   } catch (error) {
@@ -377,6 +381,8 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
           status: itemData.status,
           date_added: itemData.dateAdded,
           user_email: userEmail.toLowerCase(),
+          vat_included: itemData.vatIncluded || false,
+          vat_percentage: itemData.vatPercentage || 20.00,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
@@ -396,7 +402,11 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
       status: data.status,
       dateAdded: data.date_added,
       createdAt: data.created_at,
-      updatedAt: data.updated_at
+      updatedAt: data.updated_at,
+      vatIncluded: data.vat_included,
+      vatPercentage: data.vat_percentage,
+      vatAmount: data.vat_amount,
+      priceExcludingVat: data.price_excluding_vat
     };
 
   } catch (error) {
@@ -421,6 +431,8 @@ export const updateInventoryItemSupabase = async (itemData, userEmail) => {
         unit_price: itemData.unitPrice,
         status: itemData.status,
         date_added: itemData.dateAdded,
+        vat_included: itemData.vatIncluded || false,
+        vat_percentage: itemData.vatPercentage || 20.00,
         updated_at: new Date().toISOString()
       })
       .eq('id', itemData.id)
@@ -440,7 +452,11 @@ export const updateInventoryItemSupabase = async (itemData, userEmail) => {
       status: data.status,
       dateAdded: data.date_added,
       createdAt: data.created_at,
-      updatedAt: data.updated_at
+      updatedAt: data.updated_at,
+      vatIncluded: data.vat_included,
+      vatPercentage: data.vat_percentage,
+      vatAmount: data.vat_amount,
+      priceExcludingVat: data.price_excluding_vat
     };
 
   } catch (error) {
@@ -501,7 +517,11 @@ export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
       status: item.status,
       dateAdded: item.date_added,
       createdAt: item.created_at,
-      updatedAt: item.updated_at
+      updatedAt: item.updated_at,
+      vatIncluded: item.vat_included || false,
+      vatPercentage: item.vat_percentage || 20.00,
+      vatAmount: item.vat_amount || 0.00,
+      priceExcludingVat: item.price_excluding_vat || item.unit_price
     }));
 
   } catch (error) {

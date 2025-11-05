@@ -1,6 +1,6 @@
 import {useState,useEffect} from 'react';
 import {motion,AnimatePresence} from 'framer-motion';
-import {RiCloseLine,RiDownloadLine,RiFileTextLine,RiFileExcelLine,RiCalendarLine,RiMoneyDollarCircleLine,RiCalculatorLine,RiCheckLine,RiAlertLine,RiInformationLine,RiRefund2Line} from 'react-icons/ri';
+import {RiCloseLine,RiDownloadLine,RiFileTextLine,RiFileExcelLine,RiCalendarLine,RiMoneyDollarCircleLine,RiCalculatorLine,RiCheckLine,RiAlertLine,RiInformationLine,RiRefund2Line,RiReceiptLine} from 'react-icons/ri';
 import * as XLSX from 'xlsx';
 import {getInventoryItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
@@ -20,12 +20,12 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     includeZeroValue: true,
     includeOutOfStock: true,
     groupByCategory: false,
-    vatRegistered: true, // Assume VAT registered for calculations
+    vatRegistered: true, // This will determine the calculation method
     vatRate: 20, // UK VAT rate
     currencyFormat: 'GBP',
     reportType: 'full'
   });
-  const [vatSummary,setVatSummary]=useState(null);
+  const [taxSummary,setTaxSummary]=useState(null);
   const [error,setError]=useState('');
   const {user}=useAuth();
 
@@ -40,7 +40,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       setIsLoading(true);
       const items=await getInventoryItems(user.email);
       setInventoryData(items);
-      calculateVatSummary(items);
+      calculateTaxSummary(items);
     } catch (error) {
       console.error('Error loading inventory data:',error);
       setError('Failed to load inventory data');
@@ -49,25 +49,63 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     }
   };
 
-  const calculateVatSummary=(items)=> {
+  const calculateTaxSummary=(items)=> {
     const filteredItems=filterItemsByDateRange(items);
     
-    const totalPurchaseCost=filteredItems.reduce((sum,item)=> 
-      sum + (item.quantity * item.unitPrice),0
-    );
+    // Calculate total based on VAT fields if available, fallback to unitPrice
+    const totalPurchaseCost=filteredItems.reduce((sum,item)=> {
+      // Use VAT-inclusive price from database if available, otherwise use unitPrice
+      const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + (item.vatPercentage || 20) / 100));
+      return sum + (item.quantity * itemPrice);
+    }, 0);
     
-    // Calculate VAT refund from VAT-inclusive prices (most common scenario)
-    // Formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)
-    let vatRefundAmount = 0;
+    let taxBenefit = 0;
     let netCostValue = 0;
+    let benefitType = '';
+    let benefitDescription = '';
     
     if (exportSettings.vatRegistered) {
-      // VAT-inclusive calculation (default and most common)
-      vatRefundAmount = totalPurchaseCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-      netCostValue = totalPurchaseCost - vatRefundAmount;
+      // VAT Registered: Calculate VAT refund from VAT-inclusive prices
+      taxBenefit = filteredItems.reduce((sum, item) => {
+        const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+        let itemVatRefund = 0;
+        
+        if (item.vatIncluded) {
+          // Price includes VAT - extract VAT amount
+          const itemCost = item.quantity * item.unitPrice;
+          itemVatRefund = itemCost * (vatPercentage / (100 + vatPercentage));
+        } else {
+          // Price excludes VAT - calculate VAT that would be added
+          const itemCost = item.quantity * item.unitPrice;
+          itemVatRefund = itemCost * (vatPercentage / 100);
+        }
+        
+        return sum + itemVatRefund;
+      }, 0);
+      
+      netCostValue = totalPurchaseCost - taxBenefit;
+      benefitType = 'VAT Refund';
+      benefitDescription = 'VAT you can claim back from HMRC through quarterly VAT returns';
     } else {
-      netCostValue = totalPurchaseCost;
-      vatRefundAmount = 0;
+      // Not VAT Registered: Calculate tax relief on VAT-inclusive items
+      taxBenefit = filteredItems.reduce((sum, item) => {
+        const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+        let taxReliefAmount = 0;
+        
+        if (item.vatIncluded) {
+          // Can claim tax relief on the VAT portion for business expenses
+          const itemCost = item.quantity * item.unitPrice;
+          const vatAmount = itemCost * (vatPercentage / (100 + vatPercentage));
+          // Tax relief on VAT at corporation tax rate (19% for small companies, 25% for large)
+          taxReliefAmount = vatAmount * 0.19; // Assuming small company rate
+        }
+        
+        return sum + taxReliefAmount;
+      }, 0);
+      
+      netCostValue = totalPurchaseCost - taxBenefit;
+      benefitType = 'Tax Relief';
+      benefitDescription = 'Tax relief on business expenses (including VAT portion) through Corporation Tax or Self Assessment';
     }
     
     const categoryBreakdown=filteredItems.reduce((acc,item)=> {
@@ -77,45 +115,59 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           items: 0,
           quantity: 0,
           totalCost: 0,
-          vatRefund: 0,
+          taxBenefit: 0,
           netCost: 0
         };
       }
       
-      const itemCost = item.quantity * item.unitPrice;
-      let itemVatRefund = 0;
-      let itemNetCost = itemCost;
+      const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+      const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + vatPercentage / 100));
+      const itemCost = item.quantity * itemPrice;
+      let itemTaxBenefit = 0;
       
       if (exportSettings.vatRegistered) {
-        // VAT-inclusive calculation
-        itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-        itemNetCost = itemCost - itemVatRefund;
+        // VAT refund calculation
+        if (item.vatIncluded) {
+          itemTaxBenefit = itemCost * (vatPercentage / (100 + vatPercentage));
+        } else {
+          itemTaxBenefit = (item.quantity * item.unitPrice) * (vatPercentage / 100);
+        }
+      } else {
+        // Tax relief calculation
+        if (item.vatIncluded) {
+          const vatAmount = itemCost * (vatPercentage / (100 + vatPercentage));
+          itemTaxBenefit = vatAmount * 0.19; // Corporation tax relief
+        }
       }
+      
+      const itemNetCost = itemCost - itemTaxBenefit;
       
       acc[category].items++;
       acc[category].quantity += item.quantity;
       acc[category].totalCost += itemCost;
-      acc[category].vatRefund += itemVatRefund;
+      acc[category].taxBenefit += itemTaxBenefit;
       acc[category].netCost += itemNetCost;
       
       return acc;
     },{});
 
-    // Calculate potential quarterly and annual refunds
-    const quarterlyRefund = vatRefundAmount / 4; // Quarterly VAT returns
-    const annualRefund = vatRefundAmount;
+    // Calculate potential quarterly and annual benefits
+    const quarterlyBenefit = taxBenefit / 4;
+    const annualBenefit = taxBenefit;
 
-    setVatSummary({
+    setTaxSummary({
       totalItems: filteredItems.length,
       totalQuantity: filteredItems.reduce((sum,item)=> sum + item.quantity,0),
       totalPurchaseCost,
-      vatRefundAmount,
+      taxBenefit,
       netCostValue,
-      quarterlyRefund,
-      annualRefund,
+      quarterlyBenefit,
+      annualBenefit,
       categoryBreakdown,
-      averageVatPerItem: filteredItems.length > 0 ? vatRefundAmount / filteredItems.length : 0,
-      vatPercentage: totalPurchaseCost > 0 ? (vatRefundAmount / totalPurchaseCost) * 100 : 0,
+      averageBenefitPerItem: filteredItems.length > 0 ? taxBenefit / filteredItems.length : 0,
+      benefitPercentage: totalPurchaseCost > 0 ? (taxBenefit / totalPurchaseCost) * 100 : 0,
+      benefitType,
+      benefitDescription,
       dateRange: {
         start: exportSettings.startDate,
         end: exportSettings.endDate
@@ -158,38 +210,52 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     
     if (exportSettings.reportType === 'summary') {
       // Summary report by category
-      const categoryData=Object.entries(vatSummary.categoryBreakdown).map(([category,data])=> ({
+      const categoryData=Object.entries(taxSummary.categoryBreakdown).map(([category,data])=> ({
         'Category': category,
         'Total Items': data.items,
         'Total Quantity': data.quantity,
-        'Total Purchase Cost': data.totalCost.toFixed(2), // Pass as string with 2 decimals
-        'VAT Refund Available': data.vatRefund.toFixed(2), // Pass as string with 2 decimals
-        'Net Cost (Ex-VAT)': data.netCost.toFixed(2), // Pass as string with 2 decimals
-        'Average VAT per Item': (data.items > 0 ? data.vatRefund / data.items : 0).toFixed(2) // Pass as string with 2 decimals
+        'Total Purchase Cost': data.totalCost.toFixed(2),
+        [`${taxSummary.benefitType} Available`]: data.taxBenefit.toFixed(2),
+        'Net Cost After Benefit': data.netCost.toFixed(2),
+        [`Average ${taxSummary.benefitType} per Item`]: (data.items > 0 ? data.taxBenefit / data.items : 0).toFixed(2)
       }));
       
       reportData=categoryData;
     } else {
       // Full detailed report
       reportData=filteredItems.map(item=> {
-        const itemCost=item.quantity * item.unitPrice;
-        let itemVatRefund = 0;
-        let itemNetCost = itemCost;
+        const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+        const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + vatPercentage / 100));
+        const itemCost = item.quantity * itemPrice;
+        let itemTaxBenefit = 0;
         
         if (exportSettings.vatRegistered) {
-          // VAT-inclusive calculation
-          itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-          itemNetCost = itemCost - itemVatRefund;
+          // VAT refund calculation
+          if (item.vatIncluded) {
+            itemTaxBenefit = itemCost * (vatPercentage / (100 + vatPercentage));
+          } else {
+            itemTaxBenefit = (item.quantity * item.unitPrice) * (vatPercentage / 100);
+          }
+        } else {
+          // Tax relief calculation
+          if (item.vatIncluded) {
+            const vatAmount = itemCost * (vatPercentage / (100 + vatPercentage));
+            itemTaxBenefit = vatAmount * 0.19;
+          }
         }
+        
+        const itemNetCost = itemCost - itemTaxBenefit;
         
         return {
           'Item Name': item.name,
           'Category': item.category || 'Uncategorized',
           'Quantity': item.quantity,
-          'Unit Price (Inc VAT)': item.unitPrice.toFixed(2),
+          'Unit Price': item.unitPrice.toFixed(2),
+          'VAT Included': item.vatIncluded ? 'Yes' : 'No',
+          'VAT Rate': `${item.vatPercentage || exportSettings.vatRate}%`,
           'Total Purchase Cost': itemCost.toFixed(2),
-          'VAT Refund Available': itemVatRefund.toFixed(2),
-          'Net Cost (Ex-VAT)': itemNetCost.toFixed(2),
+          [`${taxSummary.benefitType} Available`]: itemTaxBenefit.toFixed(2),
+          'Net Cost After Benefit': itemNetCost.toFixed(2),
           'Status': item.status,
           'Date Added': item.dateAdded,
           'Description': item.description || '',
@@ -204,95 +270,125 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     
     // Main data sheet
     const ws=XLSX.utils.json_to_sheet(reportData);
-    XLSX.utils.book_append_sheet(wb,ws,exportSettings.reportType === 'summary' ? 'Category Summary' : 'VAT Refund Details');
+    XLSX.utils.book_append_sheet(wb,ws,exportSettings.reportType === 'summary' ? 'Category Summary' : `${taxSummary.benefitType} Details`);
 
-    // VAT summary sheet
-    const vatSummaryData=[
-      ['VAT REFUND REPORT',''],
+    // Tax summary sheet
+    const summaryTitle = exportSettings.vatRegistered ? 'VAT REFUND REPORT' : 'TAX RELIEF REPORT';
+    const calculationMethod = exportSettings.vatRegistered 
+      ? 'VAT extracted from purchase prices for HMRC refund claims'
+      : 'Tax relief calculated on business expenses including VAT portion';
+    
+    const taxSummaryData=[
+      [summaryTitle,''],
       ['Generated on:',new Date().toLocaleDateString('en-GB')],
       ['Business Name:',user?.businessName || ''],
       ['Export Period:',exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`],
-      ['VAT Registered:',exportSettings.vatRegistered ? 'Yes' : 'No'],
+      ['VAT Registration Status:',exportSettings.vatRegistered ? 'VAT Registered' : 'Not VAT Registered'],
       ['',''],
-      ['VAT REFUND SUMMARY',''],
-      ['Total Items:',vatSummary.totalItems],
-      ['Total Quantity:',vatSummary.totalQuantity],
-      ['Total Purchase Cost (Inc VAT):',vatSummary.totalPurchaseCost.toFixed(2)],
-      ['VAT Rate:',`${exportSettings.vatRate}%`],
-      ['VAT Refund Available:',vatSummary.vatRefundAmount.toFixed(2)],
-      ['Net Cost (Ex-VAT):',vatSummary.netCostValue.toFixed(2)],
-      ['Average VAT per Item:',vatSummary.averageVatPerItem.toFixed(2)],
+      [`${taxSummary.benefitType.toUpperCase()} SUMMARY`,''],
+      ['Total Items:',taxSummary.totalItems],
+      ['Total Quantity:',taxSummary.totalQuantity],
+      ['Total Purchase Cost:',taxSummary.totalPurchaseCost.toFixed(2)],
+      ['VAT Rate Used:',`${exportSettings.vatRate}%`],
+      [`${taxSummary.benefitType} Available:`,taxSummary.taxBenefit.toFixed(2)],
+      ['Net Cost After Benefit:',taxSummary.netCostValue.toFixed(2)],
+      [`Average ${taxSummary.benefitType} per Item:`,taxSummary.averageBenefitPerItem.toFixed(2)],
       ['',''],
-      ['QUARTERLY VAT RETURNS',''],
-      ['Quarterly Refund Potential:',vatSummary.quarterlyRefund.toFixed(2)],
-      ['Annual Refund Potential:',vatSummary.annualRefund.toFixed(2)],
-      ['',''],
-      ['IMPORTANT NOTES',''],
-      ['Calculation Method:','VAT extracted from VAT-inclusive purchase prices'],
-      ['Formula Used:','VAT = (Purchase Price × 20%) ÷ 120%'],
-      ['Example:','120.00 purchase = 20.00 VAT refund + 100.00 net cost'],
+      ['CALCULATION METHOD',''],
+      ['Description:',calculationMethod],
+      ...(exportSettings.vatRegistered ? [
+        ['VAT Refund Formula:','VAT = (Purchase Price × VAT%) ÷ (100 + VAT%)'],
+        ['Example:','£120.00 purchase = (£120.00 × 20) ÷ 120 = £20.00 VAT refund'],
+        ['How to Claim:','Submit quarterly VAT returns to HMRC'],
+        ['Requirements:','Must be VAT registered with HMRC']
+      ] : [
+        ['Tax Relief Method:','Corporation Tax relief on business expenses'],
+        ['Relief Rate:','19% (small companies) or 25% (large companies)'],
+        ['Example:','£20.00 VAT portion × 19% = £3.80 tax relief'],
+        ['How to Claim:','Include in Corporation Tax return or Self Assessment'],
+        ['Requirements:','Valid business expenses with receipts']
+      ]),
       ['',''],
       ['CATEGORY BREAKDOWN','']
     ];
 
     // Add category breakdown
-    Object.entries(vatSummary.categoryBreakdown).forEach(([category,data])=> {
-      vatSummaryData.push([
+    Object.entries(taxSummary.categoryBreakdown).forEach(([category,data])=> {
+      taxSummaryData.push([
         category,
         `${data.items} items`,
         `Cost: ${data.totalCost.toFixed(2)}`,
-        `VAT Refund: ${data.vatRefund.toFixed(2)}`
+        `${taxSummary.benefitType}: ${data.taxBenefit.toFixed(2)}`
       ]);
     });
 
-    const vatWs=XLSX.utils.aoa_to_sheet(vatSummaryData);
-    XLSX.utils.book_append_sheet(wb,vatWs,'VAT Summary');
+    const taxWs=XLSX.utils.aoa_to_sheet(taxSummaryData);
+    XLSX.utils.book_append_sheet(wb,taxWs,`${taxSummary.benefitType} Summary`);
 
     // Accountant notes sheet
+    const notesTitle = exportSettings.vatRegistered ? 'VAT REFUND REPORT - ACCOUNTANT NOTES' : 'TAX RELIEF REPORT - ACCOUNTANT NOTES';
     const notesData=[
-      ['VAT REFUND REPORT - ACCOUNTANT NOTES',''],
+      [notesTitle,''],
       ['',''],
       ['REPORT DETAILS',''],
       ['Report Generated:',new Date().toLocaleString('en-GB')],
       ['Generated By:',user?.businessName || ''],
       ['Email:',user?.email || ''],
       ['System:','Trackio Inventory Management'],
+      ['VAT Registration:',exportSettings.vatRegistered ? 'VAT Registered Business' : 'Not VAT Registered'],
       ['',''],
-      ['VAT CALCULATION METHOD',''],
-      ['Price Type:','VAT-Inclusive Purchase Prices'],
-      ['VAT Rate Used:',`${exportSettings.vatRate}% (UK Standard Rate)`],
-      ['Calculation Formula:','VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)'],
-      ['Example Calculation:','120.00 purchase price = (120.00 × 20) ÷ 120 = 20.00 VAT refund'],
-      ['Net Cost Formula:','Net Cost = Purchase Price - VAT Amount'],
-      ['Example Net Cost:','120.00 - 20.00 = 100.00 net cost (ex-VAT)'],
+      ...(exportSettings.vatRegistered ? [
+        ['VAT REFUND CALCULATION METHOD',''],
+        ['Calculation Type:','VAT extraction from purchase prices'],
+        ['VAT Rate Used:',`${exportSettings.vatRate}% (UK Standard Rate)`],
+        ['Formula:','VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)'],
+        ['Example:','£120.00 purchase = (£120.00 × 20) ÷ 120 = £20.00 VAT refund'],
+        ['Net Cost:','Purchase Price - VAT Amount'],
+        ['',''],
+        ['HOW TO CLAIM VAT REFUNDS',''],
+        ['1. VAT Registration:','Business must be registered for VAT with HMRC'],
+        ['2. Quarterly Returns:','Submit VAT returns quarterly online'],
+        ['3. Documentation:','Keep all purchase invoices showing VAT separately'],
+        ['4. Deadlines:','Submit by 1 month and 7 days after quarter end'],
+        ['5. Cash Flow:','VAT refunds improve business cash flow'],
+        ['6. Compliance:','Maintain VAT records for 6 years minimum']
+      ] : [
+        ['TAX RELIEF CALCULATION METHOD',''],
+        ['Relief Type:','Corporation Tax relief on business expenses'],
+        ['Relief Rate:','19% (small companies) or 25% (large companies)'],
+        ['VAT Treatment:','Tax relief available on VAT portion of expenses'],
+        ['Formula:','Tax Relief = VAT Amount × Corporation Tax Rate'],
+        ['Example:','£20.00 VAT × 19% = £3.80 tax relief'],
+        ['',''],
+        ['HOW TO CLAIM TAX RELIEF',''],
+        ['1. Business Expenses:','All items must be legitimate business expenses'],
+        ['2. Documentation:','Keep all receipts and invoices'],
+        ['3. Corporation Tax:','Include in annual Corporation Tax return'],
+        ['4. Self Assessment:','Include if sole trader or partnership'],
+        ['5. VAT Consideration:','Cannot register for VAT and claim this relief'],
+        ['6. Professional Advice:','Consider VAT registration if turnover increasing']
+      ]),
       ['',''],
-      ['WHY VAT-INCLUSIVE PRICING?',''],
-      ['Most Common:','Most business purchases show VAT-inclusive prices'],
-      ['Supplier Invoices:','Suppliers typically quote prices including VAT'],
-      ['Receipt Scanning:','Scanned receipts show VAT-inclusive totals'],
-      ['Accurate Refunds:','Extracts actual VAT paid to calculate refunds'],
-      ['',''],
-      ['IMPORTANT NOTES FOR ACCOUNTANT',''],
-      ['1. VAT Refunds:','Only available if business is VAT registered with HMRC'],
-      ['2. Purchase Prices:','All prices assumed to be VAT-inclusive (most common)'],
-      ['3. Documentation:','Ensure purchase invoices show VAT separately for compliance'],
-      ['4. Quarterly Returns:','Submit VAT returns quarterly to claim refunds'],
-      ['5. Record Keeping:','Keep all purchase receipts for HMRC compliance'],
-      ['6. Categories:','Items grouped by business categories for analysis'],
-      ['7. Verification:','All data extracted from Trackio inventory system'],
-      ['8. Cash Flow:','VAT refunds improve business cash flow'],
-      ['',''],
-      ['VAT REGISTRATION GUIDANCE',''],
-      ['Mandatory Registration:','Annual turnover exceeds 85,000 (2024)'],
-      ['Voluntary Registration:','Register below threshold to reclaim VAT'],
-      ['Benefits:','Reclaim VAT on business purchases and expenses'],
-      ['Quarterly Returns:','Submit online by 1 month and 7 days after quarter end'],
+      ['IMPORTANT CONSIDERATIONS',''],
+      ...(exportSettings.vatRegistered ? [
+        ['VAT Registration:','Only VAT registered businesses can claim VAT refunds'],
+        ['Purchase Documentation:','Ensure invoices show VAT separately'],
+        ['Quarterly Submission:','Must submit returns even if no VAT due'],
+        ['Penalties:','Late submission incurs automatic penalties'],
+        ['Record Keeping:','Digital records acceptable, keep for 6 years']
+      ] : [
+        ['VAT Registration Threshold:',`£85,000 annual turnover (2024)`],
+        ['Voluntary Registration:','Can register below threshold to claim VAT'],
+        ['Cost-Benefit Analysis:','Compare tax relief vs. VAT refund potential'],
+        ['Future Planning:','Consider VAT registration as business grows'],
+        ['Professional Advice:','Consult accountant for VAT registration decision']
+      ]),
       ['',''],
       ['EXPORT SETTINGS USED',''],
       ['Include Zero Value Items:',exportSettings.includeZeroValue ? 'Yes' : 'No'],
       ['Include Out of Stock:',exportSettings.includeOutOfStock ? 'Yes' : 'No'],
       ['Group by Category:',exportSettings.groupByCategory ? 'Yes' : 'No'],
-      ['VAT Registered Business:',exportSettings.vatRegistered ? 'Yes' : 'No'],
+      ['VAT Registration Status:',exportSettings.vatRegistered ? 'VAT Registered' : 'Not VAT Registered'],
       ['Report Type:',exportSettings.reportType === 'summary' ? 'Category Summary' : 'Full Detailed Report'],
       ['',''],
       ['CONTACT INFORMATION',''],
@@ -307,7 +403,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     // Generate filename
     const dateStr=new Date().toISOString().split('T')[0];
     const businessName=(user?.businessName || 'Business').replace(/[^a-zA-Z0-9]/g,'_');
-    const fileName=`${businessName}_VAT_Refund_Report_${dateStr}.xlsx`;
+    const excelReportType = exportSettings.vatRegistered ? 'VAT_Refund' : 'Tax_Relief';
+    const fileName=`${businessName}_${excelReportType}_Report_${dateStr}.xlsx`;
 
     // Download file
     XLSX.writeFile(wb,fileName);
@@ -319,24 +416,36 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     const filteredItems=filterItemsByDateRange(inventoryData);
     
     const csvData=filteredItems.map(item=> {
-      const itemCost=item.quantity * item.unitPrice;
-      let itemVatRefund = 0;
-      let itemNetCost = itemCost;
+      const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+      const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + vatPercentage / 100));
+      const itemCost = item.quantity * itemPrice;
+      let itemTaxBenefit = 0;
       
       if (exportSettings.vatRegistered) {
-        // VAT-inclusive calculation
-        itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-        itemNetCost = itemCost - itemVatRefund;
+        if (item.vatIncluded) {
+          itemTaxBenefit = itemCost * (vatPercentage / (100 + vatPercentage));
+        } else {
+          itemTaxBenefit = (item.quantity * item.unitPrice) * (vatPercentage / 100);
+        }
+      } else {
+        if (item.vatIncluded) {
+          const vatAmount = itemCost * (vatPercentage / (100 + vatPercentage));
+          itemTaxBenefit = vatAmount * 0.19;
+        }
       }
+      
+      const itemNetCost = itemCost - itemTaxBenefit;
       
       return {
         'Item Name': item.name,
         'Category': item.category || 'Uncategorized',
         'Quantity': item.quantity,
-        'Unit Price (Inc VAT)': item.unitPrice.toFixed(2), // Pass as string with 2 decimals
-        'Total Purchase Cost': itemCost.toFixed(2), // Pass as string with 2 decimals
-        'VAT Refund Available': itemVatRefund.toFixed(2), // Pass as string with 2 decimals
-        'Net Cost (Ex-VAT)': itemNetCost.toFixed(2), // Pass as string with 2 decimals
+        'Unit Price': item.unitPrice.toFixed(2),
+        'VAT Included': item.vatIncluded ? 'Yes' : 'No',
+        'VAT Rate': `${vatPercentage}%`,
+        'Total Purchase Cost': itemCost.toFixed(2),
+        [`${taxSummary.benefitType} Available`]: itemTaxBenefit.toFixed(2),
+        'Net Cost After Benefit': itemNetCost.toFixed(2),
         'Status': item.status,
         'Date Added': item.dateAdded,
         'Description': item.description || '',
@@ -346,15 +455,16 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
 
     // Convert to CSV
     const headers=Object.keys(csvData[0] || {});
+    const csvReportType = exportSettings.vatRegistered ? 'VAT Refund' : 'Tax Relief';
     const csvContent=[
       // Header with business info
-      `VAT Refund Report - ${user?.businessName || 'Business'}`,
+      `${csvReportType} Report - ${user?.businessName || 'Business'}`,
       `Generated: ${new Date().toLocaleString('en-GB')}`,
       `Period: ${exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`}`,
       `VAT Rate: ${exportSettings.vatRate}%`,
-      `VAT Registered: ${exportSettings.vatRegistered ? 'Yes' : 'No'}`,
-      `Calculation: VAT extracted from VAT-inclusive purchase prices`,
-      `Total VAT Refund Available: ${vatSummary?.vatRefundAmount?.toFixed(2) || '0.00'}`,
+      `VAT Registration Status: ${exportSettings.vatRegistered ? 'VAT Registered' : 'Not VAT Registered'}`,
+      `Calculation Method: ${taxSummary.benefitDescription}`,
+      `Total ${csvReportType} Available: ${taxSummary?.taxBenefit?.toFixed(2) || '0.00'}`,
       '',
       // Column headers
       headers.join(','),
@@ -378,7 +488,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     
     const dateStr=new Date().toISOString().split('T')[0];
     const businessName=(user?.businessName || 'Business').replace(/[^a-zA-Z0-9]/g,'_');
-    const fileName=`${businessName}_VAT_Refund_Report_${dateStr}.csv`;
+    const csvFileReportType = exportSettings.vatRegistered ? 'VAT_Refund' : 'Tax_Relief';
+    const fileName=`${businessName}_${csvFileReportType}_Report_${dateStr}.csv`;
     
     link.setAttribute('download',fileName);
     link.style.visibility='hidden';
@@ -392,12 +503,13 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
   const generatePDFReport=()=> {
     // Generate HTML content for PDF
     const filteredItems=filterItemsByDateRange(inventoryData);
+    const pdfReportType = exportSettings.vatRegistered ? 'VAT Refund' : 'Tax Relief';
     
     const htmlContent=`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>VAT Refund Report - ${user?.businessName || 'Business'}</title>
+        <title>${pdfReportType} Report - ${user?.businessName || 'Business'}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
           .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 20px; }
@@ -406,20 +518,20 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           .summary-card { background: #f9f9f9; padding: 15px; border-left: 4px solid #10b981; }
           .summary-card h3 { margin: 0 0 5px 0; color: #10b981; }
           .summary-card p { margin: 0; font-size: 18px; font-weight: bold; }
-          .refund-highlight { background: #dcfce7; border: 2px solid #10b981; padding: 15px; border-radius: 8px; margin: 20px 0; }
-          .refund-highlight h3 { color: #047857; margin: 0 0 10px 0; }
+          .benefit-highlight { background: ${exportSettings.vatRegistered ? '#dcfce7' : '#dbeafe'}; border: 2px solid ${exportSettings.vatRegistered ? '#10b981' : '#60a5fa'}; padding: 15px; border-radius: 8px; margin: 20px 0; }
+          .benefit-highlight h3 { color: ${exportSettings.vatRegistered ? '#047857' : '#1d4ed8'}; margin: 0 0 10px 0; }
           .calculation-info { background: #dbeafe; border: 1px solid #60a5fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
           table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f2f2f2; font-weight: bold; }
           .number { text-align: right; }
           .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
-          .vat-notice { background: #dbeafe; border: 1px solid #60a5fa; padding: 10px; margin: 20px 0; border-radius: 5px; }
+          .notice { background: #dbeafe; border: 1px solid #60a5fa; padding: 10px; margin: 20px 0; border-radius: 5px; }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>VAT Refund Report</h1>
+          <h1>${pdfReportType} Report</h1>
           <h2>${user?.businessName || 'Business Name'}</h2>
           <p>Generated on ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}</p>
         </div>
@@ -429,82 +541,105 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
           <p><strong>Business Name:</strong> ${user?.businessName || 'N/A'}</p>
           <p><strong>Email:</strong> ${user?.email || 'N/A'}</p>
           <p><strong>Report Period:</strong> ${exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`}</p>
-          <p><strong>VAT Registration:</strong> ${exportSettings.vatRegistered ? 'VAT Registered' : 'Not VAT Registered'}</p>
+          <p><strong>VAT Registration Status:</strong> ${exportSettings.vatRegistered ? 'VAT Registered' : 'Not VAT Registered'}</p>
           <p><strong>Export Date:</strong> ${new Date().toLocaleDateString('en-GB')}</p>
         </div>
 
         <div class="calculation-info">
-          <h3>VAT Calculation Method</h3>
-          <p><strong>Price Type:</strong> VAT-Inclusive Purchase Prices (most common)</p>
-          <p><strong>Formula:</strong> VAT Amount = (Purchase Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
-          <p><strong>Example:</strong> 120.00 purchase price = (120.00 × 20) ÷ 120 = 20.00 VAT refund</p>
-          <p><strong>Net Cost:</strong> 120.00 - 20.00 = 100.00 (actual item cost excluding VAT)</p>
+          <h3>${pdfReportType} Calculation Method</h3>
+          ${exportSettings.vatRegistered ? `
+            <p><strong>Method:</strong> VAT extraction from purchase prices for HMRC refund claims</p>
+            <p><strong>Formula:</strong> VAT Amount = (Purchase Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
+            <p><strong>Example:</strong> £120.00 purchase price = (£120.00 × 20) ÷ 120 = £20.00 VAT refund</p>
+            <p><strong>How to Claim:</strong> Submit quarterly VAT returns to HMRC</p>
+          ` : `
+            <p><strong>Method:</strong> Corporation Tax relief on business expenses including VAT portion</p>
+            <p><strong>Relief Rate:</strong> 19% (small companies) or 25% (large companies)</p>
+            <p><strong>Example:</strong> £20.00 VAT portion × 19% = £3.80 tax relief</p>
+            <p><strong>How to Claim:</strong> Include in Corporation Tax return or Self Assessment</p>
+          `}
         </div>
 
-        ${exportSettings.vatRegistered ? `
-        <div class="refund-highlight">
-          <h3>VAT You Can Claim Back from HMRC</h3>
-          <p style="font-size: 24px; margin: 10px 0;"><strong>${formatCurrency(vatSummary?.vatRefundAmount || 0)}</strong></p>
-          <p>This is the VAT amount you paid on purchases that can be claimed back through your quarterly VAT return.</p>
-          <p><strong>Quarterly Potential:</strong> ${formatCurrency(vatSummary?.quarterlyRefund || 0)} per quarter</p>
+        <div class="benefit-highlight">
+          <h3>${taxSummary.benefitDescription}</h3>
+          <p style="font-size: 24px; margin: 10px 0;"><strong>${formatCurrency(taxSummary?.taxBenefit || 0)}</strong></p>
+          <p>${exportSettings.vatRegistered 
+            ? 'This is the VAT amount you can claim back through your quarterly VAT return.' 
+            : 'This is the tax relief you can claim on business expenses through your tax return.'
+          }</p>
+          <p><strong>Annual Potential:</strong> ${formatCurrency(taxSummary?.annualBenefit || 0)} per year</p>
         </div>
-        ` : `
-        <div class="vat-notice">
-          <strong>VAT Registration Required:</strong> To claim VAT refunds, your business must be registered for VAT with HMRC.
-          This report shows potential VAT refunds if you were VAT registered.
+
+        ${!exportSettings.vatRegistered ? `
+        <div class="notice">
+          <strong>VAT Registration Consideration:</strong> If your annual turnover exceeds £85,000, you must register for VAT. 
+          Consider voluntary VAT registration to claim full VAT refunds instead of limited tax relief.
         </div>
-        `}
+        ` : ''}
 
         <div class="summary">
           <div class="summary-card">
             <h3>Total Items</h3>
-            <p>${vatSummary?.totalItems || 0}</p>
+            <p>${taxSummary?.totalItems || 0}</p>
           </div>
           <div class="summary-card">
             <h3>Total Purchase Cost</h3>
-            <p>${formatCurrency(vatSummary?.totalPurchaseCost || 0)}</p>
+            <p>${formatCurrency(taxSummary?.totalPurchaseCost || 0)}</p>
           </div>
           <div class="summary-card">
-            <h3>VAT Refund Available</h3>
-            <p>${formatCurrency(vatSummary?.vatRefundAmount || 0)}</p>
+            <h3>${taxSummary.benefitType} Available</h3>
+            <p>${formatCurrency(taxSummary?.taxBenefit || 0)}</p>
           </div>
           <div class="summary-card">
-            <h3>Net Cost (Ex-VAT)</h3>
-            <p>${formatCurrency(vatSummary?.netCostValue || 0)}</p>
+            <h3>Net Cost After Benefit</h3>
+            <p>${formatCurrency(taxSummary?.netCostValue || 0)}</p>
           </div>
         </div>
 
-        <h3>Inventory Details with VAT Refunds</h3>
+        <h3>Inventory Details with ${taxSummary.benefitType}</h3>
         <table>
           <thead>
             <tr>
               <th>Item Name</th>
               <th>Category</th>
               <th>Qty</th>
+              <th>VAT Inc.</th>
               <th>Purchase Cost</th>
-              <th>VAT Refund</th>
+              <th>${taxSummary.benefitType}</th>
               <th>Net Cost</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody>
             ${filteredItems.map(item=> {
-              const itemCost = item.quantity * item.unitPrice;
-              let itemVatRefund = 0;
-              let itemNetCost = itemCost;
+              const vatPercentage = item.vatPercentage || exportSettings.vatRate;
+              const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + vatPercentage / 100));
+              const itemCost = item.quantity * itemPrice;
+              let itemTaxBenefit = 0;
               
               if (exportSettings.vatRegistered) {
-                itemVatRefund = itemCost * (exportSettings.vatRate / (100 + exportSettings.vatRate));
-                itemNetCost = itemCost - itemVatRefund;
+                if (item.vatIncluded) {
+                  itemTaxBenefit = itemCost * (vatPercentage / (100 + vatPercentage));
+                } else {
+                  itemTaxBenefit = (item.quantity * item.unitPrice) * (vatPercentage / 100);
+                }
+              } else {
+                if (item.vatIncluded) {
+                  const vatAmount = itemCost * (vatPercentage / (100 + vatPercentage));
+                  itemTaxBenefit = vatAmount * 0.19;
+                }
               }
+              
+              const itemNetCost = itemCost - itemTaxBenefit;
               
               return `
               <tr>
                 <td>${item.name}</td>
                 <td>${item.category || 'Uncategorized'}</td>
                 <td class="number">${item.quantity}</td>
+                <td>${item.vatIncluded ? 'Yes' : 'No'}</td>
                 <td class="number">${formatCurrency(itemCost)}</td>
-                <td class="number" style="color: #10b981; font-weight: bold;">${formatCurrency(itemVatRefund)}</td>
+                <td class="number" style="color: ${exportSettings.vatRegistered ? '#10b981' : '#1d4ed8'}; font-weight: bold;">${formatCurrency(itemTaxBenefit)}</td>
                 <td class="number">${formatCurrency(itemNetCost)}</td>
                 <td>${item.status}</td>
               </tr>
@@ -514,16 +649,17 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
         </table>
 
         <div class="footer">
-          <p><strong>Important:</strong> This report calculates VAT refunds from VAT-inclusive purchase prices using the formula: VAT = (Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%</p>
-          <p>VAT refunds are only available to VAT-registered businesses. Consult your accountant for VAT registration advice.</p>
-          <p>Keep all purchase receipts showing VAT separately for HMRC compliance.</p>
+          <p><strong>Important:</strong> ${exportSettings.vatRegistered 
+            ? `VAT refunds are only available to VAT-registered businesses. Keep all purchase receipts showing VAT separately for HMRC compliance.`
+            : `Tax relief is available on legitimate business expenses. Consider VAT registration if your turnover is increasing.`
+          }</p>
           <p>Generated by Trackio Inventory Management System. For questions: ${user?.email || 'N/A'}</p>
         </div>
       </body>
       </html>
     `;
 
-    // Create and download HTML file (can be opened in browser and printed to PDF)
+    // Create and download HTML file
     const blob=new Blob([htmlContent],{type: 'text/html;charset=utf-8'});
     const link=document.createElement('a');
     const url=URL.createObjectURL(blob);
@@ -531,7 +667,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
     
     const dateStr=new Date().toISOString().split('T')[0];
     const businessName=(user?.businessName || 'Business').replace(/[^a-zA-Z0-9]/g,'_');
-    const fileName=`${businessName}_VAT_Refund_Report_${dateStr}.html`;
+    const pdfFileReportType = exportSettings.vatRegistered ? 'VAT_Refund' : 'Tax_Relief';
+    const fileName=`${businessName}_${pdfFileReportType}_Report_${dateStr}.html`;
     
     link.setAttribute('download',fileName);
     link.style.visibility='hidden';
@@ -572,9 +709,10 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       const exportInfo = {
         format: exportSettings.format,
         fileName,
-        recordCount: vatSummary.totalItems,
-        totalValue: vatSummary.totalPurchaseCost,
-        vatRefundAmount: vatSummary.vatRefundAmount,
+        recordCount: taxSummary.totalItems,
+        totalValue: taxSummary.totalPurchaseCost,
+        taxBenefit: taxSummary.taxBenefit,
+        benefitType: taxSummary.benefitType,
         dateRange: exportSettings.dateRange === 'all' ? 'All Time' : `${exportSettings.startDate} to ${exportSettings.endDate}`,
         settings: exportSettings
       };
@@ -582,8 +720,8 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
       // Success message and close modal
       setTimeout(()=> {
         const message = exportSettings.vatRegistered 
-          ? `VAT refund report exported successfully as ${fileName}!\n\nVAT you can claim back: ${formatCurrency(vatSummary.vatRefundAmount)}\n\nThis file shows VAT extracted from your VAT-inclusive purchase prices and is ready for your accountant.`
-          : `VAT report exported successfully as ${fileName}!\n\nNote: VAT registration required to claim refunds.\n\nThis file shows potential VAT refunds if you register for VAT.`;
+          ? `VAT refund report exported successfully as ${fileName}!\n\n${taxSummary.benefitType} available: ${formatCurrency(taxSummary.taxBenefit)}\n\nThis file shows VAT you can claim back from HMRC through quarterly VAT returns.`
+          : `Tax relief report exported successfully as ${fileName}!\n\n${taxSummary.benefitType} available: ${formatCurrency(taxSummary.taxBenefit)}\n\nThis file shows tax relief you can claim on business expenses through your tax return.`;
         
         alert(message);
         
@@ -643,7 +781,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
 
   useEffect(()=> {
     if (inventoryData.length > 0) {
-      calculateVatSummary(inventoryData);
+      calculateTaxSummary(inventoryData);
     }
   },[exportSettings,inventoryData]);
 
@@ -667,8 +805,14 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-700">
               <div className="flex items-center">
-                <RiRefund2Line className="h-6 w-6 text-green-400 mr-2" />
-                <h3 className="text-lg font-medium text-white">VAT Refund Calculator</h3>
+                {exportSettings.vatRegistered ? (
+                  <RiRefund2Line className="h-6 w-6 text-green-400 mr-2" />
+                ) : (
+                  <RiReceiptLine className="h-6 w-6 text-blue-400 mr-2" />
+                )}
+                <h3 className="text-lg font-medium text-white">
+                  {exportSettings.vatRegistered ? 'VAT Refund Calculator' : 'Tax Relief Calculator'}
+                </h3>
               </div>
               <button
                 onClick={onClose}
@@ -680,6 +824,56 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
 
             {/* Content */}
             <div className="p-6 space-y-6">
+              {/* VAT Registration Status Selection */}
+              <div>
+                <h4 className="text-white font-medium mb-3">VAT Registration Status</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div
+                    onClick={()=> setExportSettings(prev=> ({...prev,vatRegistered: true}))}
+                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      exportSettings.vatRegistered
+                        ? 'border-green-500 bg-green-500/10'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <RiRefund2Line className="h-6 w-6 text-green-400 mr-2" />
+                      <h5 className="text-white font-medium">VAT Registered</h5>
+                    </div>
+                    <p className="text-gray-400 text-sm mb-2">
+                      Calculate VAT refunds you can claim back from HMRC
+                    </p>
+                    <ul className="text-xs text-gray-500 space-y-1">
+                      <li>• Extract VAT from purchase prices</li>
+                      <li>• Submit quarterly VAT returns</li>
+                      <li>• Get full VAT refund on business expenses</li>
+                    </ul>
+                  </div>
+
+                  <div
+                    onClick={()=> setExportSettings(prev=> ({...prev,vatRegistered: false}))}
+                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                      !exportSettings.vatRegistered
+                        ? 'border-blue-500 bg-blue-500/10'
+                        : 'border-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <RiReceiptLine className="h-6 w-6 text-blue-400 mr-2" />
+                      <h5 className="text-white font-medium">Not VAT Registered</h5>
+                    </div>
+                    <p className="text-gray-400 text-sm mb-2">
+                      Calculate tax relief on business expenses including VAT
+                    </p>
+                    <ul className="text-xs text-gray-500 space-y-1">
+                      <li>• Corporation Tax relief on expenses</li>
+                      <li>• Include VAT portion in business costs</li>
+                      <li>• Consider VAT registration if growing</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
               {/* Export Format Selection */}
               <div>
                 <h4 className="text-white font-medium mb-3">Export Format</h4>
@@ -688,7 +882,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                     {
                       value: 'excel',
                       label: 'Excel Workbook',
-                      description: 'Multi-sheet Excel file with detailed VAT calculations',
+                      description: `Multi-sheet Excel file with detailed ${exportSettings.vatRegistered ? 'VAT' : 'tax relief'} calculations`,
                       icon: RiFileExcelLine,
                       recommended: true
                     },
@@ -780,20 +974,11 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                 )}
               </div>
 
-              {/* VAT Settings */}
+              {/* Additional Settings */}
               <div>
-                <h4 className="text-white font-medium mb-3">VAT Settings</h4>
+                <h4 className="text-white font-medium mb-3">Additional Settings</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="flex items-center text-sm text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={exportSettings.vatRegistered}
-                        onChange={(e)=> setExportSettings(prev=> ({...prev,vatRegistered: e.target.checked}))}
-                        className="mr-2 rounded border-gray-600 bg-gray-700 text-green-600"
-                      />
-                      Business is VAT registered
-                    </label>
                     <label className="flex items-center text-sm text-gray-300">
                       <input
                         type="checkbox"
@@ -832,70 +1017,87 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                 </div>
               </div>
 
-              {/* VAT Summary Preview */}
-              {vatSummary && (
+              {/* Tax Summary Preview */}
+              {taxSummary && (
                 <div className="bg-gray-700 rounded-lg p-4">
-                  <h4 className="text-white font-medium mb-3">VAT Refund Preview</h4>
+                  <h4 className="text-white font-medium mb-3">
+                    {exportSettings.vatRegistered ? 'VAT Refund Preview' : 'Tax Relief Preview'}
+                  </h4>
                   
-                  {exportSettings.vatRegistered ? (
-                    <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
-                      <div className="flex items-center mb-2">
+                  <div className={`${exportSettings.vatRegistered ? 'bg-green-900/20 border-green-700' : 'bg-blue-900/20 border-blue-700'} border rounded-lg p-4 mb-4`}>
+                    <div className="flex items-center mb-2">
+                      {exportSettings.vatRegistered ? (
                         <RiRefund2Line className="h-5 w-5 text-green-400 mr-2" />
-                        <h5 className="text-green-400 font-medium">VAT You Can Claim Back</h5>
-                      </div>
-                      <div className="text-2xl font-bold text-green-400 mb-1">
-                        {formatCurrency(vatSummary.vatRefundAmount)}
-                      </div>
-                      <div className="text-sm text-green-300 mb-2">
-                        Quarterly: {formatCurrency(vatSummary.quarterlyRefund)} • Annual: {formatCurrency(vatSummary.annualRefund)}
-                      </div>
-                      <div className="text-xs text-green-300">
-                        Calculated from VAT-inclusive purchase prices using: VAT = (Price × {exportSettings.vatRate}%) ÷ {100 + exportSettings.vatRate}%
-                      </div>
+                      ) : (
+                        <RiReceiptLine className="h-5 w-5 text-blue-400 mr-2" />
+                      )}
+                      <h5 className={`${exportSettings.vatRegistered ? 'text-green-400' : 'text-blue-400'} font-medium`}>
+                        {taxSummary.benefitDescription}
+                      </h5>
                     </div>
-                  ) : (
-                    <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-4">
-                      <div className="flex items-center text-blue-300 text-sm">
-                        <RiInformationLine className="h-4 w-4 mr-2" />
-                        VAT registration required to claim refunds. Report shows potential savings if registered.
-                      </div>
+                    <div className={`text-2xl font-bold ${exportSettings.vatRegistered ? 'text-green-400' : 'text-blue-400'} mb-1`}>
+                      {formatCurrency(taxSummary.taxBenefit)}
                     </div>
-                  )}
+                    <div className={`text-sm ${exportSettings.vatRegistered ? 'text-green-300' : 'text-blue-300'} mb-2`}>
+                      Annual: {formatCurrency(taxSummary.annualBenefit)}
+                    </div>
+                    <div className={`text-xs ${exportSettings.vatRegistered ? 'text-green-300' : 'text-blue-300'}`}>
+                      {exportSettings.vatRegistered 
+                        ? `Calculated from purchase prices using: VAT = (Price × ${exportSettings.vatRate}%) ÷ ${100 + exportSettings.vatRate}%`
+                        : `Tax relief calculated at 19% corporation tax rate on VAT portion of expenses`
+                      }
+                    </div>
+                  </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">Items</div>
-                      <div className="text-white font-bold text-lg">{vatSummary.totalItems}</div>
+                      <div className="text-white font-bold text-lg">{taxSummary.totalItems}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">Purchase Cost</div>
-                      <div className="text-white font-bold text-lg">{formatCurrency(vatSummary.totalPurchaseCost)}</div>
+                      <div className="text-white font-bold text-lg">{formatCurrency(taxSummary.totalPurchaseCost)}</div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
-                      <div className="text-gray-400">VAT Refund</div>
-                      <div className="text-green-400 font-bold text-lg">{formatCurrency(vatSummary.vatRefundAmount)}</div>
+                      <div className="text-gray-400">{taxSummary.benefitType}</div>
+                      <div className={`${exportSettings.vatRegistered ? 'text-green-400' : 'text-blue-400'} font-bold text-lg`}>
+                        {formatCurrency(taxSummary.taxBenefit)}
+                      </div>
                     </div>
                     <div className="bg-gray-800 p-3 rounded">
                       <div className="text-gray-400">Net Cost</div>
-                      <div className="text-white font-bold text-lg">{formatCurrency(vatSummary.netCostValue)}</div>
+                      <div className="text-white font-bold text-lg">{formatCurrency(taxSummary.netCostValue)}</div>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Important Information */}
-              <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
+              <div className={`${exportSettings.vatRegistered ? 'bg-green-900/20 border-green-700' : 'bg-blue-900/20 border-blue-700'} border rounded-lg p-4`}>
                 <div className="flex items-start">
-                  <RiAlertLine className="h-5 w-5 text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
+                  <RiInformationLine className={`h-5 w-5 ${exportSettings.vatRegistered ? 'text-green-400' : 'text-blue-400'} mr-3 mt-0.5 flex-shrink-0`} />
                   <div>
-                    <h5 className="text-blue-400 font-medium mb-2">VAT-Inclusive Price Calculation</h5>
-                    <ul className="text-blue-300 text-sm space-y-1">
-                      <li>• Calculates VAT from VAT-inclusive purchase prices (most common)</li>
-                      <li>• Formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate)</li>
-                      <li>• Example: 120.00 purchase = 20.00 VAT refund + 100.00 net cost</li>
-                      <li>• VAT refunds only available to VAT-registered businesses</li>
-                      <li>• Submit quarterly VAT returns to HMRC to claim refunds</li>
-                      <li>• Keep all purchase invoices showing VAT separately</li>
+                    <h5 className={`${exportSettings.vatRegistered ? 'text-green-400' : 'text-blue-400'} font-medium mb-2`}>
+                      {exportSettings.vatRegistered ? 'VAT Refund Information' : 'Tax Relief Information'}
+                    </h5>
+                    <ul className={`${exportSettings.vatRegistered ? 'text-green-300' : 'text-blue-300'} text-sm space-y-1`}>
+                      {exportSettings.vatRegistered ? (
+                        <>
+                          <li>• Calculates VAT from your inventory purchase prices</li>
+                          <li>• Submit quarterly VAT returns to HMRC to claim refunds</li>
+                          <li>• Keep all purchase invoices showing VAT separately</li>
+                          <li>• VAT refunds improve your business cash flow</li>
+                          <li>• Returns due 1 month and 7 days after quarter end</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>• Tax relief available on legitimate business expenses</li>
+                          <li>• Include VAT portion of purchases in expense claims</li>
+                          <li>• Corporation tax relief at 19% (small) or 25% (large companies)</li>
+                          <li>• Consider VAT registration if turnover exceeds £85,000</li>
+                          <li>• Keep all receipts for tax compliance</li>
+                        </>
+                      )}
                     </ul>
                   </div>
                 </div>
@@ -926,7 +1128,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                 <button
                   onClick={handleExport}
                   disabled={isLoading || !inventoryData.length}
-                  className="flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`flex items-center px-6 py-2 ${exportSettings.vatRegistered ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
                   {isLoading ? (
                     <>
@@ -936,7 +1138,7 @@ export default function TaxExportModal({isOpen,onClose,onExportComplete}) {
                   ) : (
                     <>
                       <RiDownloadLine className="h-4 w-4 mr-2" />
-                      Export VAT Report
+                      Export {exportSettings.vatRegistered ? 'VAT Refund' : 'Tax Relief'} Report
                     </>
                   )}
                 </button>
