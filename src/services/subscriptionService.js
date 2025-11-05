@@ -164,13 +164,14 @@ export const updateUserSubscription = async (userEmail, planId, sessionId = null
     // Clean duplicate subscriptions first
     await cleanupDuplicateSubscriptions(userEmail);
 
-    // Prepare subscription data
+    // **FIXED**: Don't store fake session IDs as subscription IDs
     const subscriptionData = {
       user_email: userEmail.toLowerCase(),
       plan_id: planId.startsWith('price_') ? planId : `price_${planId}`,
       status: 'active',
       stripe_customer_id: null,
-      stripe_subscription_id: sessionId || `manual_${Date.now()}`,
+      // **CRITICAL FIX**: Only store real Stripe subscription IDs
+      stripe_subscription_id: (sessionId && !sessionId.startsWith('pl_') && !sessionId.startsWith('manual_')) ? sessionId : null,
       current_period_start: new Date().toISOString(),
       current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
       updated_at: new Date().toISOString()
@@ -338,7 +339,7 @@ export const createOrUpdateSubscription = async (subscriptionData) => {
 };
 
 /**
- * Cancel subscription with ENHANCED Stripe integration and error handling
+ * **FIXED**: Cancel subscription with proper handling for payment link subscriptions
  */
 export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
   if (!userEmail || !supabase) {
@@ -364,11 +365,18 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
 
     console.log('📋 Current subscription:', currentSub);
 
-    // **ENHANCED: Cancel in Stripe FIRST before updating database**
+    // **ENHANCED**: Determine if this is a Stripe-managed subscription or payment link subscription
+    const hasRealStripeSubscription = currentSub.stripe_subscription_id && 
+      !currentSub.stripe_subscription_id.startsWith('pl_') && 
+      !currentSub.stripe_subscription_id.startsWith('manual_') &&
+      currentSub.stripe_subscription_id.startsWith('sub_');
+
     let stripeResult = null;
-    if (currentSub.stripe_subscription_id && !currentSub.stripe_subscription_id.startsWith('manual_')) {
+
+    if (hasRealStripeSubscription) {
+      // **REAL STRIPE SUBSCRIPTION**: Cancel via Stripe API
       try {
-        console.log('🔄 Cancelling subscription in Stripe:', currentSub.stripe_subscription_id);
+        console.log('🔄 Cancelling real Stripe subscription:', currentSub.stripe_subscription_id);
         
         const response = await fetch('/.netlify/functions/cancel-subscription', {
           method: 'POST',
@@ -409,12 +417,34 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
         });
         
         // **IMPORTANT: Don't proceed with local cancellation if Stripe fails**
-        // This prevents the user thinking they're cancelled when they're still being charged
         throw new Error(`Failed to cancel subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
       }
+    } else {
+      // **PAYMENT LINK SUBSCRIPTION**: Handle locally only
+      console.log('💡 Handling payment link subscription cancellation locally');
+      
+      stripeResult = {
+        success: true,
+        subscription: {
+          id: currentSub.stripe_subscription_id || 'local',
+          status: cancelAtPeriodEnd ? 'active' : 'canceled',
+          cancel_at_period_end: cancelAtPeriodEnd,
+          canceled_at: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(new Date(currentSub.current_period_end).getTime() / 1000)
+        },
+        localOnly: true
+      };
+      
+      // Log security event for local cancellation
+      logSecurityEvent('LOCAL_SUBSCRIPTION_CANCELED', {
+        userEmail,
+        subscriptionId: currentSub.id,
+        cancelAtPeriodEnd,
+        reason: 'payment_link_subscription'
+      });
     }
 
-    // **Update local database ONLY after Stripe success**
+    // **Update local database after Stripe success OR for local-only subscriptions**
     const updateData = {
       updated_at: new Date().toISOString()
     };
@@ -439,11 +469,11 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
       .single();
 
     if (error) {
-      console.error('❌ Database update failed after Stripe cancellation:', error);
+      console.error('❌ Database update failed after cancellation:', error);
       throw new Error(`Database update failed: ${error.message}`);
     }
 
-    console.log('✅ Successfully canceled subscription in both Stripe and database:', data);
+    console.log('✅ Successfully canceled subscription:', data);
     
     // Log successful complete cancellation
     logSecurityEvent('SUBSCRIPTION_CANCELED_COMPLETE', {
@@ -451,7 +481,8 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
       subscriptionId: data.id,
       cancelAtPeriodEnd,
       immediateCancel: !cancelAtPeriodEnd,
-      stripeResult
+      stripeResult,
+      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link'
     });
 
     // Dispatch events to update UI immediately
@@ -472,6 +503,7 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
     return {
       ...data,
       stripeResult,
+      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link',
       message: cancelAtPeriodEnd 
         ? 'Subscription will be cancelled at the end of your billing period' 
         : 'Subscription cancelled immediately'
@@ -492,7 +524,7 @@ export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) =>
 };
 
 /**
- * Reactivate subscription - ENHANCED VERSION
+ * **FIXED**: Reactivate subscription with proper handling for payment link subscriptions
  */
 export const reactivateSubscription = async (userEmail, planId = 'price_professional') => {
   if (!userEmail || !supabase) {
@@ -518,11 +550,18 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
 
     console.log('📋 Current subscription:', currentSub);
 
-    // **ENHANCED: Reactivate in Stripe FIRST**
+    // **ENHANCED**: Determine if this is a Stripe-managed subscription or payment link subscription
+    const hasRealStripeSubscription = currentSub.stripe_subscription_id && 
+      !currentSub.stripe_subscription_id.startsWith('pl_') && 
+      !currentSub.stripe_subscription_id.startsWith('manual_') &&
+      currentSub.stripe_subscription_id.startsWith('sub_');
+
     let stripeResult = null;
-    if (currentSub.stripe_subscription_id && !currentSub.stripe_subscription_id.startsWith('manual_')) {
+
+    if (hasRealStripeSubscription) {
+      // **REAL STRIPE SUBSCRIPTION**: Reactivate via Stripe API
       try {
-        console.log('🔄 Reactivating subscription in Stripe:', currentSub.stripe_subscription_id);
+        console.log('🔄 Reactivating real Stripe subscription:', currentSub.stripe_subscription_id);
         
         const response = await fetch('/.netlify/functions/reactivate-subscription', {
           method: 'POST',
@@ -563,9 +602,32 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
         // **IMPORTANT: Don't proceed with local reactivation if Stripe fails**
         throw new Error(`Failed to reactivate subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
       }
+    } else {
+      // **PAYMENT LINK SUBSCRIPTION**: Handle locally only
+      console.log('💡 Handling payment link subscription reactivation locally');
+      
+      stripeResult = {
+        success: true,
+        subscription: {
+          id: currentSub.stripe_subscription_id || 'local',
+          status: 'active',
+          cancel_at_period_end: false,
+          canceled_at: null,
+          current_period_end: Math.floor(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).getTime() / 1000)
+        },
+        localOnly: true
+      };
+      
+      // Log security event for local reactivation
+      logSecurityEvent('LOCAL_SUBSCRIPTION_REACTIVATED', {
+        userEmail,
+        subscriptionId: currentSub.id,
+        planId,
+        reason: 'payment_link_subscription'
+      });
     }
 
-    // **Update local database ONLY after Stripe success**
+    // **Update local database after Stripe success OR for local-only subscriptions**
     const updateData = {
       status: 'active',
       cancel_at_period_end: false,
@@ -584,18 +646,19 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
       .single();
 
     if (error) {
-      console.error('❌ Database update failed after Stripe reactivation:', error);
+      console.error('❌ Database update failed after reactivation:', error);
       throw new Error(`Database update failed: ${error.message}`);
     }
 
-    console.log('✅ Successfully reactivated subscription in both Stripe and database:', data);
+    console.log('✅ Successfully reactivated subscription:', data);
     
     // Log successful complete reactivation
     logSecurityEvent('SUBSCRIPTION_REACTIVATED_COMPLETE', {
       userEmail,
       subscriptionId: data.id,
       planId: updateData.plan_id,
-      stripeResult
+      stripeResult,
+      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link'
     });
 
     // Dispatch events to update UI immediately
@@ -615,6 +678,7 @@ export const reactivateSubscription = async (userEmail, planId = 'price_professi
     return {
       ...data,
       stripeResult,
+      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link',
       message: 'Subscription successfully reactivated'
     };
 
