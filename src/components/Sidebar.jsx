@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { RiDashboardLine, RiStore2Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiMoneyDollarCircleLine, RiTeamLine, RiFocus3Line } from 'react-icons/ri';
+import { RiDashboardLine, RiStore2Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine, RiFocus3Line } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
@@ -33,7 +33,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
       requiresFeature: 'taxExports',
       planRequired: 'Professional'
     },
-    { name: 'Billing', href: '/billing', icon: RiMoneyDollarCircleLine },
+    { name: 'Support', href: '/support', icon: RiCustomerServiceLine },
     { name: 'Settings', href: '/settings', icon: RiSettings3Line },
   ];
 

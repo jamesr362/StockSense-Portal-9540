@@ -12,7 +12,7 @@ import Admin from './pages/Admin';
 import PlatformAdmin from './pages/PlatformAdmin';
 import Settings from './pages/Settings';
 import SubscriptionManagement from './pages/SubscriptionManagement';
-import Billing from './pages/Billing';
+import Support from './pages/Support';
 import Pricing from './pages/Pricing';
 import PricingGuide from './pages/PricingGuide';
 import PaymentSuccess from './pages/PaymentSuccess';
@@ -163,7 +163,7 @@ function AppRoutes() {
           <Route path="receipt-scanner" element={<ReceiptScanner />} />
           <Route path="excel-importer" element={<ExcelImporter />} />
           <Route path="tax-exports" element={<TaxExports />} />
-          <Route path="billing" element={<Billing />} />
+          <Route path="support" element={<Support />} />
           <Route path="settings/*" element={<Settings />} />
           <Route path="subscription" element={<SubscriptionManagement />} />
           <Route

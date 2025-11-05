@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage, FiX, FiDownload, FiArchive, FiCamera } from 'react-icons/fi';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
+import UsageLimitGate from '../components/UsageLimitGate';
 import { useAuth } from '../context/AuthContext';
 import { addInventoryItem } from '../services/db';
 import receiptStorage from '../services/receiptStorage';
 import SafeIcon from '../common/SafeIcon';
+import useFeatureAccess from '../hooks/useFeatureAccess';
 
 const ReceiptScannerPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,6 +23,66 @@ const ReceiptScannerPage = () => {
   const [selectedReceiptsForExport, setSelectedReceiptsForExport] = useState(new Set());
   const [showExportOptions, setShowExportOptions] = useState(false);
   const { user } = useAuth();
+  const { canScanReceipt, usage, currentPlan, incrementUsage } = useFeatureAccess();
+
+  // Get current usage for receipt scans
+  const [currentScanUsage, setCurrentScanUsage] = useState(0);
+
+  // Load current month's scan usage
+  useEffect(() => {
+    if (user?.email) {
+      loadCurrentScanUsage();
+    }
+  }, [user?.email]);
+
+  const loadCurrentScanUsage = () => {
+    try {
+      const stored = localStorage.getItem(`scanHistory_${user.email}`);
+      if (!stored) {
+        setCurrentScanUsage(0);
+        return;
+      }
+      
+      const history = JSON.parse(stored);
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      const currentMonthScans = history.filter(scan => 
+        new Date(scan.timestamp) >= startOfMonth
+      ).length;
+      
+      setCurrentScanUsage(currentMonthScans);
+    } catch (error) {
+      console.error('Error loading scan usage:', error);
+      setCurrentScanUsage(0);
+    }
+  };
+
+  // Update scan usage when a receipt is successfully scanned
+  const updateScanUsage = () => {
+    try {
+      const stored = localStorage.getItem(`scanHistory_${user.email}`);
+      const history = stored ? JSON.parse(stored) : [];
+      
+      const newScan = {
+        timestamp: new Date().toISOString(),
+        month: new Date().toISOString().substring(0, 7) // YYYY-MM format
+      };
+      
+      history.push(newScan);
+      localStorage.setItem(`scanHistory_${user.email}`, JSON.stringify(history));
+      
+      // Update current usage count
+      setCurrentScanUsage(prev => prev + 1);
+      
+      // Update the feature access hook
+      incrementUsage('receiptScans');
+      
+    } catch (error) {
+      console.error('Error updating scan usage:', error);
+    }
+  };
 
   // Load receipt history on component mount and tab change
   useEffect(() => {
@@ -40,6 +102,18 @@ const ReceiptScannerPage = () => {
     } finally {
       setIsLoadingHistory(false);
     }
+  };
+
+  const handleScanButtonClick = () => {
+    // Check if user can scan before opening modal
+    const scanCheck = canScanReceipt();
+    
+    if (!scanCheck.allowed) {
+      setFeedbackMessage(`❌ ${scanCheck.reason}`);
+      return;
+    }
+    
+    setIsModalOpen(true);
   };
 
   const handleItemsScanned = async (items) => {
@@ -133,6 +207,10 @@ const ReceiptScannerPage = () => {
 
   const handleReceiptSaved = (receiptRecord) => {
     console.log('Receipt saved:', receiptRecord);
+    
+    // Update scan usage when receipt is successfully saved
+    updateScanUsage();
+    
     // Refresh history if we're on that tab
     if (activeTab === 'history') {
       loadReceiptHistory();
@@ -396,6 +474,10 @@ const ReceiptScannerPage = () => {
     });
   };
 
+  // Get scan limit info for display
+  const scanLimitInfo = canScanReceipt();
+  const isProfessional = currentPlan === 'professional';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -409,21 +491,110 @@ const ReceiptScannerPage = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center">
             <SafeIcon icon={FiCamera} className="mr-2 sm:mr-3 text-blue-400" />
             Receipt Scanner
+            {!isProfessional && (
+              <span className="ml-2 px-2 py-1 bg-yellow-600 text-yellow-100 text-xs rounded-full">
+                Free: {scanLimitInfo.remaining || 0}/{scanLimitInfo.limit || 1} left
+              </span>
+            )}
+            {isProfessional && (
+              <span className="ml-2 px-2 py-1 bg-green-600 text-green-100 text-xs rounded-full">
+                Pro: Unlimited
+              </span>
+            )}
           </h1>
           <p className="mt-2 text-gray-400 max-w-2xl text-sm sm:text-base">
             Quickly add items to your inventory by scanning receipt images. 
             Our enhanced OCR technology extracts item names, quantities, and prices automatically with right-side price detection.
+            {!isProfessional && (
+              <span className="block mt-1 text-yellow-400 font-medium">
+                Free plan: {scanLimitInfo.limit || 1} scan per month • Professional: Unlimited scans
+              </span>
+            )}
           </p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          disabled={isProcessing}
-          className="mt-4 sm:mt-0 flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base w-full sm:w-auto"
+
+        {/* Scan Button with Usage Gate */}
+        <UsageLimitGate
+          limitType="receiptScans"
+          currentUsage={currentScanUsage}
+          showUpgradePrompt={false}
         >
-          <SafeIcon icon={FiUploadCloud} className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-          {isProcessing ? 'Processing...' : 'Scan New Receipt'}
-        </button>
+          <button
+            onClick={handleScanButtonClick}
+            disabled={isProcessing || !scanLimitInfo.allowed}
+            className={`mt-4 sm:mt-0 flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 rounded-lg shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 text-sm sm:text-base w-full sm:w-auto ${
+              !scanLimitInfo.allowed 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            <SafeIcon icon={FiUploadCloud} className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+            {isProcessing ? 'Processing...' : 
+             !scanLimitInfo.allowed ? 'Scan Limit Reached' : 
+             'Scan New Receipt'}
+          </button>
+        </UsageLimitGate>
       </div>
+
+      {/* Usage Limit Warning */}
+      {!isProfessional && scanLimitInfo.allowed && scanLimitInfo.remaining <= 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-lg border bg-red-900/30 border-red-700"
+        >
+          <div className="flex items-start">
+            <SafeIcon icon={FiCamera} className="h-5 w-5 text-red-400 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-red-200 font-medium mb-1">Receipt Scan Limit Reached</h3>
+              <p className="text-red-300 text-sm mb-3">
+                You've used all {scanLimitInfo.limit || 1} receipt scan{(scanLimitInfo.limit || 1) > 1 ? 's' : ''} for this month. 
+                Upgrade to Professional for unlimited scans.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <a
+                  href="/pricing"
+                  className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                >
+                  Upgrade to Professional
+                </a>
+                <a
+                  href="/settings/subscription"
+                  className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                >
+                  View Usage Details
+                </a>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Usage Warning for Near Limit */}
+      {!isProfessional && scanLimitInfo.allowed && scanLimitInfo.remaining === 0 && currentScanUsage < (scanLimitInfo.limit || 1) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-lg border bg-yellow-900/30 border-yellow-700"
+        >
+          <div className="flex items-start">
+            <SafeIcon icon={FiCamera} className="h-5 w-5 text-yellow-400 mr-3 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-yellow-200 font-medium mb-1">Last Receipt Scan</h3>
+              <p className="text-yellow-300 text-sm mb-3">
+                This is your final receipt scan for this month on the Free plan. 
+                Consider upgrading to Professional for unlimited scans.
+              </p>
+              <a
+                href="/pricing"
+                className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm"
+              >
+                Learn About Professional
+              </a>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Feedback Message */}
       {feedbackMessage && (
@@ -568,13 +739,27 @@ const ReceiptScannerPage = () => {
                     Start by clicking 'Scan New Receipt' to upload an image of your receipt. 
                     We'll automatically extract the items and add them to your inventory with enhanced accuracy.
                   </p>
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
-                  >
-                    <SafeIcon icon={FiCamera} className="mr-2 h-4 w-4" />
-                    Get Started
-                  </button>
+                  {scanLimitInfo.allowed ? (
+                    <button
+                      onClick={handleScanButtonClick}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                    >
+                      <SafeIcon icon={FiCamera} className="mr-2 h-4 w-4" />
+                      Get Started
+                    </button>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-red-400 mb-4 text-sm">
+                        You've reached your scan limit for this month.
+                      </p>
+                      <a
+                        href="/pricing"
+                        className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                      >
+                        Upgrade for Unlimited Scans
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -881,16 +1066,30 @@ const ReceiptScannerPage = () => {
                   Upload your first receipt to start building your receipt history. 
                   All images will be securely stored for future reference and export.
                 </p>
-                <button
-                  onClick={() => {
-                    setActiveTab('scanner');
-                    setIsModalOpen(true);
-                  }}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
-                >
-                  <SafeIcon icon={FiUploadCloud} className="mr-2 h-4 w-4" />
-                  Scan First Receipt
-                </button>
+                {scanLimitInfo.allowed ? (
+                  <button
+                    onClick={() => {
+                      setActiveTab('scanner');
+                      handleScanButtonClick();
+                    }}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                  >
+                    <SafeIcon icon={FiUploadCloud} className="mr-2 h-4 w-4" />
+                    Scan First Receipt
+                  </button>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-red-400 mb-4 text-sm">
+                      You've reached your scan limit for this month.
+                    </p>
+                    <a
+                      href="/pricing"
+                      className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                    >
+                      Upgrade for Unlimited Scans
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>
