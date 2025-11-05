@@ -52,7 +52,27 @@ export default function PaymentSuccess() {
   }, [searchParams, user]);
 
   const handleContinue = () => {
-    navigate('/dashboard');
+    console.log('🚀 Navigating to dashboard...');
+    
+    // Clear any payment-related session storage
+    sessionStorage.removeItem('paymentUserEmail');
+    sessionStorage.removeItem('pendingPayment');
+    
+    // Use replace to prevent going back to payment success
+    navigate('/dashboard', { replace: true });
+    
+    // Trigger a refresh of feature access and subscription data
+    window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+      detail: { source: 'payment_success', timestamp: Date.now() }
+    }));
+    
+    // Additional fallback for hash routing
+    setTimeout(() => {
+      if (window.location.hash !== '#/dashboard') {
+        console.log('🔄 Fallback navigation to dashboard');
+        window.location.hash = '#/dashboard';
+      }
+    }, 100);
   };
 
   const planId = searchParams.get('plan') || result?.planId || 'professional';
@@ -81,12 +101,20 @@ export default function PaymentSuccess() {
           <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
             <h2 className="text-2xl font-bold text-red-300 mb-2">Payment Issue</h2>
             <p className="text-red-200 mb-4">{error}</p>
-            <button
-              onClick={() => navigate('/pricing')}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
-            >
-              Return to Pricing
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => navigate('/pricing')}
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Return to Pricing
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Go to Dashboard
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -280,7 +308,7 @@ export default function PaymentSuccess() {
         >
           <button
             onClick={handleContinue}
-            className="inline-flex items-center bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-8 rounded-lg transition-colors shadow-lg hover:shadow-xl"
+            className="inline-flex items-center bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-8 rounded-lg transition-colors shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900"
           >
             {trialActivated ? 'Start Using Your Trial' : 'Go to Dashboard'}
             <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
