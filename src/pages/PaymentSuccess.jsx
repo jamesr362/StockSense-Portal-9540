@@ -14,6 +14,7 @@ export default function PaymentSuccess() {
   const [isProcessing, setIsProcessing] = useState(true);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -51,14 +52,21 @@ export default function PaymentSuccess() {
     return () => clearTimeout(timer);
   }, [searchParams, user]);
 
-  const handleContinue = (e) => {
+  const handleContinue = async (e) => {
     // Prevent any default behavior
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
     
-    console.log('🚀 Navigating to dashboard...');
+    // Prevent multiple clicks
+    if (isNavigating) {
+      console.log('🚫 Navigation already in progress...');
+      return;
+    }
+    
+    setIsNavigating(true);
+    console.log('🚀 Starting navigation to dashboard...');
     
     try {
       // Clear any payment-related session storage
@@ -67,36 +75,83 @@ export default function PaymentSuccess() {
       
       // Trigger a refresh of feature access and subscription data
       window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-        detail: { source: 'payment_success', timestamp: Date.now() }
+        detail: { 
+          source: 'payment_success', 
+          timestamp: Date.now(),
+          userEmail: user?.email,
+          force: true
+        }
       }));
       
-      // Use replace to prevent going back to payment success
-      console.log('📍 Attempting React Router navigation...');
+      window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+        detail: { 
+          userEmail: user?.email, 
+          force: true, 
+          source: 'payment_success' 
+        }
+      }));
+      
+      // **ENHANCED NAVIGATION STRATEGY**
+      console.log('📍 Method 1: React Router navigation...');
+      
+      // Method 1: Use React Router navigate with replace
       navigate('/dashboard', { replace: true });
       
-      // Additional fallback for hash routing - more robust approach
+      // Method 2: Wait and check if navigation worked, then try hash navigation
       setTimeout(() => {
-        const currentHash = window.location.hash;
-        console.log('🔍 Current hash after navigation:', currentHash);
+        const currentPath = window.location.pathname + window.location.hash;
+        console.log('🔍 Current path after React Router:', currentPath);
         
-        if (!currentHash.includes('/dashboard')) {
-          console.log('🔄 Fallback navigation - setting hash directly');
-          window.location.hash = '/dashboard';
+        if (!currentPath.includes('/dashboard')) {
+          console.log('📍 Method 2: Hash navigation fallback...');
           
-          // Force reload if still not working
+          // Force hash navigation
+          if (window.location.hash) {
+            // We're using hash routing
+            window.location.hash = '/dashboard';
+          } else {
+            // We're using regular routing
+            window.history.pushState(null, '', '/dashboard');
+          }
+          
+          // Method 3: Ultimate fallback - full page redirect
           setTimeout(() => {
-            if (!window.location.hash.includes('/dashboard')) {
-              console.log('🔄 Final fallback - force reload to dashboard');
-              window.location.href = window.location.origin + '/#/dashboard';
+            const finalPath = window.location.pathname + window.location.hash;
+            console.log('🔍 Final path check:', finalPath);
+            
+            if (!finalPath.includes('/dashboard')) {
+              console.log('📍 Method 3: Full redirect fallback...');
+              
+              // Get the base URL
+              const baseUrl = window.location.origin;
+              const dashboardUrl = `${baseUrl}/#/dashboard`;
+              
+              console.log('🎯 Redirecting to:', dashboardUrl);
+              window.location.href = dashboardUrl;
+            } else {
+              console.log('✅ Navigation successful!');
+              setIsNavigating(false);
             }
-          }, 500);
+          }, 1000);
+        } else {
+          console.log('✅ React Router navigation successful!');
+          setIsNavigating(false);
         }
-      }, 200);
+      }, 500);
       
     } catch (error) {
       console.error('❌ Navigation error:', error);
-      // Emergency fallback
-      window.location.href = window.location.origin + '/#/dashboard';
+      
+      // Emergency fallback - direct URL change
+      try {
+        const baseUrl = window.location.origin;
+        const dashboardUrl = `${baseUrl}/#/dashboard`;
+        console.log('🆘 Emergency redirect to:', dashboardUrl);
+        window.location.href = dashboardUrl;
+      } catch (finalError) {
+        console.error('❌ Emergency navigation also failed:', finalError);
+        setIsNavigating(false);
+      }
     }
   };
 
@@ -139,7 +194,8 @@ export default function PaymentSuccess() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  navigate('/dashboard', { replace: true });
+                  const dashboardUrl = `${window.location.origin}/#/dashboard`;
+                  window.location.href = dashboardUrl;
                 }}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg transition-colors"
               >
@@ -340,18 +396,44 @@ export default function PaymentSuccess() {
           <button
             type="button"
             onClick={handleContinue}
-            className="inline-flex items-center bg-primary-600 hover:bg-primary-700 text-white font-semibold py-4 px-8 rounded-lg transition-colors shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900"
+            disabled={isNavigating}
+            className={`inline-flex items-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+              isNavigating 
+                ? 'bg-gray-600 text-gray-300 cursor-not-allowed' 
+                : 'bg-primary-600 hover:bg-primary-700 text-white'
+            }`}
           >
-            {trialActivated ? 'Start Using Your Trial' : 'Go to Dashboard'}
-            <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
+            {isNavigating ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-300 mr-2"></div>
+                Taking you to dashboard...
+              </>
+            ) : (
+              <>
+                {trialActivated ? 'Start Using Your Trial' : 'Go to Dashboard'}
+                <SafeIcon icon={RiArrowRightLine} className="h-5 w-5 ml-2" />
+              </>
+            )}
           </button>
           
           <p className="text-gray-400 text-sm mt-4">
-            {trialActivated 
-              ? 'Ready to explore all premium features!'
-              : 'Your subscription is ready to use!'
-            }
+            {isNavigating ? (
+              'Please wait while we redirect you...'
+            ) : (
+              trialActivated 
+                ? 'Ready to explore all premium features!'
+                : 'Your subscription is ready to use!'
+            )}
           </p>
+          
+          {/* Debug info in development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mt-4 text-xs text-gray-500">
+              <p>Current URL: {window.location.href}</p>
+              <p>Hash: {window.location.hash}</p>
+              <p>User: {user?.email}</p>
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </div>
