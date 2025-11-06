@@ -159,7 +159,7 @@ const ReceiptScannerPage = () => {
           continue;
         }
 
-        // Prepare item data for database
+        // Prepare item data for database - INCLUDE VAT CONFIGURATION
         const itemData = {
           name: item.name.trim(),
           quantity: parseInt(item.quantity) || 1,
@@ -167,32 +167,48 @@ const ReceiptScannerPage = () => {
           category: item.category || 'Scanned Items',
           description: item.description || `Scanned from receipt on ${new Date().toLocaleDateString()}`,
           status: item.status || 'In Stock',
-          dateAdded: item.dateAdded || new Date().toISOString().split('T')[0]
+          dateAdded: item.dateAdded || new Date().toISOString().split('T')[0],
+          // ✅ CRITICAL: Include VAT configuration from scanned items
+          vatIncluded: item.vatIncluded !== undefined ? item.vatIncluded : false,
+          vatPercentage: item.vatPercentage !== undefined ? item.vatPercentage : 20
         };
 
-        console.log('Calling addInventoryItem with:', itemData, user.email);
+        console.log('Calling addInventoryItem with VAT data:', {
+          ...itemData,
+          vatIncluded: itemData.vatIncluded,
+          vatPercentage: itemData.vatPercentage
+        });
         
         // Call the database function with correct parameter order
         await addInventoryItem(itemData, user.email);
         successCount++;
         
-        console.log('Successfully added item:', item.name);
+        console.log('Successfully added item with VAT config:', item.name, {
+          vatIncluded: itemData.vatIncluded,
+          vatPercentage: itemData.vatPercentage
+        });
       } catch (error) {
         console.error('Failed to add item:', item.name, error);
         failedItems.push(item.name + ' (' + error.message + ')');
       }
     }
     
-    // Update the scanned items list for display
+    // Update the scanned items list for display - include VAT info
     const validItems = items.filter(item => 
       item.name && item.name.trim() && 
       item.unitPrice && item.unitPrice > 0
-    );
+    ).map(item => ({
+      ...item,
+      // Ensure VAT configuration is preserved for display
+      vatIncluded: item.vatIncluded !== undefined ? item.vatIncluded : false,
+      vatPercentage: item.vatPercentage !== undefined ? item.vatPercentage : 20
+    }));
+    
     setScannedItems(prev => [...validItems, ...prev]);
     
     // Show feedback
     if (failedItems.length === 0) {
-      setFeedbackMessage(`✅ Successfully added ${successCount} items to inventory!`);
+      setFeedbackMessage(`✅ Successfully added ${successCount} items to inventory with VAT configuration!`);
     } else if (successCount > 0) {
       setFeedbackMessage(`⚠️ Added ${successCount} items. Failed to add: ${failedItems.join(', ')}`);
     } else {
@@ -503,7 +519,7 @@ const ReceiptScannerPage = () => {
             )}
           </h1>
           <p className="mt-2 text-gray-400 max-w-2xl text-sm sm:text-base">
-            Quickly add items to your inventory by scanning receipt images. 
+            Quickly add items to your inventory by scanning receipt images with VAT configuration. 
             Our enhanced OCR technology extracts item names, quantities, and prices automatically with right-side price detection.
             {!isProfessional && (
               <span className="block mt-1 text-yellow-400 font-medium">
@@ -671,10 +687,10 @@ const ReceiptScannerPage = () => {
             <div className="bg-gray-800 rounded-xl p-4 sm:p-6 border border-gray-700">
               <div className="flex items-center mb-4">
                 <SafeIcon icon={FiCheckCircle} className="h-6 w-6 sm:h-8 sm:w-8 text-green-400 mr-3" />
-                <h3 className="text-base sm:text-lg font-semibold text-white">Receipt Storage</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-white">VAT Configuration</h3>
               </div>
               <p className="text-gray-400 text-xs sm:text-sm">
-                All receipt images are securely stored in your history with extracted items data for future reference.
+                Configure VAT settings for scanned items with support for different rates and inclusion options for accurate tax calculations.
               </p>
             </div>
           </div>
@@ -711,6 +727,15 @@ const ReceiptScannerPage = () => {
                           <span>Added to inventory</span>
                           <span className="hidden sm:inline mx-2">•</span>
                           <span className="truncate">{item.category || 'Scanned Items'}</span>
+                          {/* Show VAT info if configured */}
+                          {item.vatPercentage > 0 && (
+                            <>
+                              <span className="hidden sm:inline mx-2">•</span>
+                              <span className="text-green-400">
+                                VAT {item.vatPercentage}% {item.vatIncluded ? 'inc' : 'exc'}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="text-right ml-3 flex-shrink-0">
@@ -719,6 +744,7 @@ const ReceiptScannerPage = () => {
                         </p>
                         <p className="text-xs text-gray-500">
                           {item.quantity > 1 ? 'per item' : 'total'}
+                          {item.vatIncluded && <span className="block text-green-500">VAT inc.</span>}
                         </p>
                       </div>
                     </motion.div>
@@ -737,7 +763,7 @@ const ReceiptScannerPage = () => {
                   </h3>
                   <p className="text-gray-400 mb-6 max-w-md mx-auto text-sm sm:text-base">
                     Start by clicking 'Scan New Receipt' to upload an image of your receipt. 
-                    We'll automatically extract the items and add them to your inventory with enhanced accuracy.
+                    We'll automatically extract the items and add them to your inventory with VAT configuration and enhanced accuracy.
                   </p>
                   {scanLimitInfo.allowed ? (
                     <button
@@ -781,7 +807,7 @@ const ReceiptScannerPage = () => {
                   )}
                 </h2>
                 <p className="text-gray-400 text-xs sm:text-sm mt-2">
-                  View, export, and manage your uploaded receipt images with extracted item data.
+                  View, export, and manage your uploaded receipt images with extracted item data and VAT information.
                 </p>
               </div>
               
@@ -1063,7 +1089,7 @@ const ReceiptScannerPage = () => {
                   No receipt history yet
                 </h3>
                 <p className="text-gray-400 mb-6 max-w-md mx-auto text-sm sm:text-base">
-                  Upload your first receipt to start building your receipt history. 
+                  Upload your first receipt to start building your receipt history with VAT configuration. 
                   All images will be securely stored for future reference and export.
                 </p>
                 {scanLimitInfo.allowed ? (

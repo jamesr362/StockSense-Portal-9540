@@ -22,6 +22,11 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
   const [ocrText, setOcrText] = useState('');
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [showMobileInstructions, setShowMobileInstructions] = useState(false);
+  
+  // VAT configuration state
+  const [vatIncluded, setVatIncluded] = useState(true);
+  const [vatPercentage, setVatPercentage] = useState(20);
+  
   const fileInputRef = useRef(null);
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
@@ -62,6 +67,8 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setIsSaving(false);
     setOcrText('');
     setShowMobileInstructions(false);
+    setVatIncluded(true);
+    setVatPercentage(20);
   };
 
   const handleClose = () => {
@@ -496,6 +503,23 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setItems([...items, { name: '', quantity: 1, price: 0 }]);
   };
 
+  // Calculate VAT breakdown for preview
+  const calculateVatBreakdown = () => {
+    if (!vatIncluded || items.length === 0) return null;
+
+    const totalPurchasePrice = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const vatAmount = totalPurchasePrice * (vatPercentage / (100 + vatPercentage));
+    const priceExcludingVat = totalPurchasePrice - vatAmount;
+
+    return {
+      totalPurchasePrice,
+      vatAmount,
+      priceExcludingVat
+    };
+  };
+
+  const vatBreakdown = calculateVatBreakdown();
+
   const saveItems = async () => {
     console.log('=== 🚀 SAVE ITEMS CALLED ===');
     
@@ -598,7 +622,10 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
           category: 'Scanned Items',
           description: `Scanned from receipt${receiptRecord ? ` (Receipt #${receiptRecord.id})` : ''} on ${new Date().toLocaleDateString()}`,
           status: 'In Stock',
-          dateAdded: new Date().toISOString().split('T')[0]
+          dateAdded: new Date().toISOString().split('T')[0],
+          // Add VAT configuration
+          vatIncluded: vatIncluded,
+          vatPercentage: vatPercentage
         }));
 
         console.log('📦 Transformed items for inventory:', transformedItems);
@@ -927,6 +954,65 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                     />
                   </div>
                   {progress > 0 && <p className="text-xs sm:text-sm text-gray-400">{progress}% complete</p>}
+                </div>
+              )}
+
+              {/* VAT Configuration - Only show when items are found */}
+              {items.length > 0 && (
+                <div className="bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-white font-medium mb-3 text-sm sm:text-base">VAT Configuration</h4>
+                  <div className="space-y-4">
+                    {/* VAT Included Checkbox */}
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="vatIncluded"
+                        checked={vatIncluded}
+                        onChange={(e) => setVatIncluded(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-600 rounded bg-gray-700"
+                      />
+                      <label htmlFor="vatIncluded" className="ml-2 text-gray-300 text-sm">
+                        Price includes VAT
+                      </label>
+                    </div>
+
+                    {/* VAT Rate Dropdown */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        VAT Rate
+                      </label>
+                      <select
+                        value={vatPercentage}
+                        onChange={(e) => setVatPercentage(parseInt(e.target.value))}
+                        className="w-full rounded-md border-gray-600 bg-gray-700 text-white text-sm p-2 focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={0}>0% (VAT Exempt)</option>
+                        <option value={5}>5% (Reduced Rate)</option>
+                        <option value={20}>20% (Standard Rate)</option>
+                      </select>
+                    </div>
+
+                    {/* VAT Breakdown */}
+                    {vatBreakdown && (
+                      <div className="bg-gray-700 rounded-lg p-3">
+                        <h5 className="text-gray-300 font-medium mb-2 text-sm">VAT Breakdown</h5>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">Total Purchase Price:</span>
+                            <span className="text-white">£{vatBreakdown.totalPurchasePrice.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">VAT Amount ({vatPercentage}%):</span>
+                            <span className="text-green-400">£{vatBreakdown.vatAmount.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between border-t border-gray-600 pt-1">
+                            <span className="text-gray-400">Price Excluding VAT:</span>
+                            <span className="text-white">£{vatBreakdown.priceExcludingVat.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
