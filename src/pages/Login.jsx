@@ -207,11 +207,14 @@ export default function Login() {
             <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
-            <p className="text-sm text-gray-400 mt-2">Inventory Management System</p>
+            <p className="text-sm text-gray-400 mt-2">Purchase Management System</p>
           </motion.div>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white">
             Sign in to your account
           </h2>
+          <p className="mt-2 text-center text-sm text-gray-400">
+            Track business purchases, scan receipts, and calculate VAT refunds
+          </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -341,6 +344,31 @@ export default function Login() {
             </Link>
           </div>
         </form>
+
+        {/* Feature Highlights */}
+        <div className="mt-8 pt-6 border-t border-gray-700">
+          <p className="text-center text-xs text-gray-500 mb-4">
+            Professional purchase tracking features:
+          </p>
+          <div className="grid grid-cols-2 gap-4 text-xs text-gray-400">
+            <div className="text-center">
+              <div className="text-primary-400 font-medium">Receipt Scanning</div>
+              <div>Auto-extract purchase data</div>
+            </div>
+            <div className="text-center">
+              <div className="text-green-400 font-medium">VAT Calculations</div>
+              <div>Calculate VAT refunds</div>
+            </div>
+            <div className="text-center">
+              <div className="text-blue-400 font-medium">Excel Import</div>
+              <div>Bulk purchase imports</div>
+            </div>
+            <div className="text-center">
+              <div className="text-purple-400 font-medium">Tax Reports</div>
+              <div>HMRC-ready exports</div>
+            </div>
+          </div>
+        </div>
       </motion.div>
     </div>
   );

@@ -207,7 +207,7 @@ export default function Register() {
             <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
-            <p className="text-sm text-gray-400 mt-2">Inventory Management System</p>
+            <p className="text-sm text-gray-400 mt-2">Purchase Management System</p>
           </motion.div>
           <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-white">
             Create your account

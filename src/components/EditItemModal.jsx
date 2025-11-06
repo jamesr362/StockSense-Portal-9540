@@ -9,7 +9,6 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
     quantity: '',
     description: '',
     unitPrice: '',
-    status: 'In Stock',
     dateAdded: '',
     vatIncluded: false,
     vatPercentage: '20.00'
@@ -39,12 +38,6 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
     { value: 'Other', label: '📦 Other' }
   ];
 
-  const statusOptions = [
-    { value: 'In Stock', label: 'In Stock' },
-    { value: 'Limited Stock', label: 'Limited Stock' },
-    { value: 'Out of Stock', label: 'Out of Stock' }
-  ];
-
   const vatRates = [
     { value: '0.00', label: '0% (Zero-rated)' },
     { value: '5.00', label: '5% (Reduced rate)' },
@@ -59,7 +52,6 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
         quantity: item.quantity?.toString() || '',
         description: item.description || '',
         unitPrice: item.unitPrice?.toString() || '',
-        status: item.status || 'In Stock',
         dateAdded: item.dateAdded || new Date().toISOString().split('T')[0],
         vatIncluded: item.vatIncluded || false,
         vatPercentage: item.vatPercentage?.toString() || '20.00'
@@ -218,23 +210,19 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                       </div>
 
                       <div>
-                        <label htmlFor="status" className="block text-sm font-medium text-white">
-                          Status
+                        <label htmlFor="dateAdded" className="block text-sm font-medium text-white">
+                          Date Added
                         </label>
-                        <select
-                          id="status"
-                          name="status"
+                        <input
+                          type="date"
+                          name="dateAdded"
+                          id="dateAdded"
                           required
                           className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
-                          value={formData.status}
+                          value={formData.dateAdded}
                           onChange={handleChange}
-                        >
-                          {statusOptions.map((status) => (
-                            <option key={status.value} value={status.value}>
-                              {status.label}
-                            </option>
-                          ))}
-                        </select>
+                          max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                        />
                       </div>
                     </div>
 
@@ -330,22 +318,6 @@ export default function EditItemModal({ isOpen, onClose, onSave, item }) {
                           </div>
                         </div>
                       )}
-                    </div>
-
-                    <div>
-                      <label htmlFor="dateAdded" className="block text-sm font-medium text-white">
-                        Date Added
-                      </label>
-                      <input
-                        type="date"
-                        name="dateAdded"
-                        id="dateAdded"
-                        required
-                        className="mt-1 block w-full rounded-md border-gray-700 bg-gray-700 text-white shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2"
-                        value={formData.dateAdded}
-                        onChange={handleChange}
-                        max={new Date().toISOString().split('T')[0]} // Prevent future dates
-                      />
                     </div>
 
                     <div>

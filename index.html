@@ -4,22 +4,77 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#111827" />
+    
+    <!-- SEO Meta Tags -->
+    <title>Trackio - Professional Purchase Management System</title>
+    <meta name="description" content="Professional purchase management system with receipt scanning, Excel import, and VAT calculations. Track business purchases, manage VAT refunds, and export tax reports." />
+    <meta name="keywords" content="purchase management, purchase tracking, VAT calculator, receipt scanner, business expenses, tax reports, Excel import, HMRC VAT returns" />
+    <meta name="author" content="Trackio" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <meta name="revisit-after" content="7 days" />
+    
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="Trackio - Professional Purchase Management System" />
+    <meta property="og:description" content="Track business purchases, scan receipts, and calculate VAT refunds with our professional purchase management system." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://trackio.example.com" />
+    <meta property="og:image" content="https://trackio.example.com/og-image.jpg" />
+    <meta property="og:site_name" content="Trackio" />
+    <meta property="og:locale" content="en_US" />
+    
+    <!-- Twitter Card Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Trackio - Professional Purchase Management System" />
+    <meta name="twitter:description" content="Track business purchases, scan receipts, and calculate VAT refunds with our professional purchase management system." />
+    <meta name="twitter:image" content="https://trackio.example.com/twitter-image.jpg" />
+    <meta name="twitter:site" content="@trackio" />
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://trackio.example.com" />
+    
+    <!-- Favicon and Manifest -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    
+    <!-- Theme and Mobile Tags -->
+    <meta name="theme-color" content="#3B82F6" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Trackio" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <style>
-      html, body {
-        background-color: #111827 !important;
-        margin: 0;
-        padding: 0;
-        overflow-x: hidden;
+    <meta name="format-detection" content="telephone=no" />
+    
+    <!-- Preconnect and Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Trackio",
+      "description": "Professional purchase management system with receipt scanning, Excel import, and VAT calculations for businesses.",
+      "url": "https://trackio.example.com",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "9.99",
+        "priceCurrency": "GBP",
+        "priceValidUntil": "2025-12-31"
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "Trackio",
+        "url": "https://trackio.example.com"
       }
-    </style>
-    <title>Trackio - Inventory Management System</title>
+    }
+    </script>
   </head>
-  <body style="background-color: #111827;">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

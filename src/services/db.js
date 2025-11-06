@@ -7,18 +7,18 @@ import {
   deleteUserSupabase,
   updateUserRoleSupabase,
   updateUserLastLoginSupabase,
-  getInventoryItemsSupabase,
-  addInventoryItemSupabase,
-  updateInventoryItemSupabase,
-  deleteInventoryItemSupabase,
-  searchInventoryItemsSupabase,
+  getPurchaseItemsSupabase,
+  addPurchaseItemSupabase,
+  updatePurchaseItemSupabase,
+  deletePurchaseItemSupabase,
+  searchPurchaseItemsSupabase,
   getPlatformStatsSupabase
 } from './supabaseDb';
 
 const DB_NAME = 'trackio_db';
 const DB_VERSION = 2;
 const USERS_STORE = 'users';
-const INVENTORY_STORE = 'inventory';
+const PURCHASES_STORE = 'purchases'; // Changed from INVENTORY_STORE
 
 let dbInstance = null;
 
@@ -38,15 +38,20 @@ async function initDB() {
           console.log('Created users store');
         }
 
-        // Create inventory store
-        if (!db.objectStoreNames.contains(INVENTORY_STORE)) {
-          const inventoryStore = db.createObjectStore(INVENTORY_STORE, { 
+        // Create purchases store (previously inventory)
+        if (!db.objectStoreNames.contains(PURCHASES_STORE)) {
+          const purchasesStore = db.createObjectStore(PURCHASES_STORE, { 
             keyPath: 'id', 
             autoIncrement: true 
           });
-          inventoryStore.createIndex('userEmail', 'userEmail');
-          inventoryStore.createIndex('status', 'status');
-          console.log('Created inventory store');
+          purchasesStore.createIndex('userEmail', 'userEmail');
+          console.log('Created purchases store');
+        }
+
+        // Migrate from old inventory store if it exists
+        if (db.objectStoreNames.contains('inventory')) {
+          console.log('Migrating from old inventory store to purchases store...');
+          // This would handle migration if needed
         }
       },
       blocked() {
@@ -328,28 +333,28 @@ export const deleteUser = async (email) => {
     
     // Start transactions for both stores
     const userTx = db.transaction(USERS_STORE, 'readwrite');
-    const inventoryTx = db.transaction(INVENTORY_STORE, 'readwrite');
+    const purchasesTx = db.transaction(PURCHASES_STORE, 'readwrite');
     
     const userStore = userTx.objectStore(USERS_STORE);
-    const inventoryStore = inventoryTx.objectStore(INVENTORY_STORE);
+    const purchasesStore = purchasesTx.objectStore(PURCHASES_STORE);
 
     // Delete user from users store
     await userStore.delete(email.toLowerCase());
 
-    // Delete all inventory items for this user
-    const inventoryIndex = inventoryStore.index('userEmail');
-    const userItems = await inventoryIndex.getAll(email.toLowerCase());
+    // Delete all purchase items for this user
+    const purchasesIndex = purchasesStore.index('userEmail');
+    const userItems = await purchasesIndex.getAll(email.toLowerCase());
     
-    // Delete each inventory item
+    // Delete each purchase item
     for (const item of userItems) {
-      await inventoryStore.delete(item.id);
+      await purchasesStore.delete(item.id);
     }
 
     // Wait for both transactions to complete
     await userTx.done;
-    await inventoryTx.done;
+    await purchasesTx.done;
 
-    console.log('Deleted user and all associated data from IndexedDB:', email);
+    console.log('Deleted user and all associated purchase data from IndexedDB:', email);
     return true;
   } catch (error) {
     console.error('Error deleting user from IndexedDB:', error);
@@ -437,12 +442,13 @@ export const updateUserLastLogin = async (email) => {
   }
 };
 
-export const getInventoryItems = async (userEmail) => {
+// Purchase tracking functions (renamed from inventory functions)
+export const getPurchaseItems = async (userEmail) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      const items = await getInventoryItemsSupabase(userEmail);
-      console.log('Got inventory items from Supabase:', items?.length);
+      const items = await getPurchaseItemsSupabase(userEmail);
+      console.log('Got purchase items from Supabase:', items?.length);
       return items;
     }
   } catch (error) {
@@ -452,27 +458,27 @@ export const getInventoryItems = async (userEmail) => {
   // Fallback to IndexedDB
   try {
     const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readonly');
-    const store = tx.objectStore(INVENTORY_STORE);
+    const tx = db.transaction(PURCHASES_STORE, 'readonly');
+    const store = tx.objectStore(PURCHASES_STORE);
     const index = store.index('userEmail');
     const items = await index.getAll(userEmail.toLowerCase());
     await tx.done;
     
-    console.log('Got inventory items from IndexedDB:', items?.length);
+    console.log('Got purchase items from IndexedDB:', items?.length);
     return items;
   } catch (error) {
-    console.error('Error getting inventory items from IndexedDB:', error);
+    console.error('Error getting purchase items from IndexedDB:', error);
     return [];
   }
 };
 
-export const addInventoryItem = async (itemData, userEmail) => {
-  console.log('===addInventoryItem called===');
+export const addPurchaseItem = async (itemData, userEmail) => {
+  console.log('===addPurchaseItem called===');
   console.log('itemData:', itemData);
   console.log('userEmail:', userEmail);
 
   if (!itemData || !userEmail) {
-    throw new Error('Missing required data for inventory item');
+    throw new Error('Missing required data for purchase item');
   }
 
   // Validate required fields
@@ -483,9 +489,9 @@ export const addInventoryItem = async (itemData, userEmail) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      console.log('Attempting to add item to Supabase...');
-      const result = await addInventoryItemSupabase(itemData, userEmail);
-      console.log('Successfully added item to Supabase:', result);
+      console.log('Attempting to add purchase item to Supabase...');
+      const result = await addPurchaseItemSupabase(itemData, userEmail);
+      console.log('Successfully added purchase item to Supabase:', result);
       return result;
     }
   } catch (error) {
@@ -494,10 +500,10 @@ export const addInventoryItem = async (itemData, userEmail) => {
 
   // Fallback to IndexedDB
   try {
-    console.log('Adding item to IndexedDB...');
+    console.log('Adding purchase item to IndexedDB...');
     const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
+    const tx = db.transaction(PURCHASES_STORE, 'readwrite');
+    const store = tx.objectStore(PURCHASES_STORE);
 
     const newItem = {
       name: itemData.name,
@@ -505,31 +511,33 @@ export const addInventoryItem = async (itemData, userEmail) => {
       quantity: parseInt(itemData.quantity),
       unitPrice: parseFloat(itemData.unitPrice),
       description: itemData.description || '',
-      status: itemData.status || 'In Stock',
       dateAdded: itemData.dateAdded || new Date().toISOString().split('T')[0],
       userEmail: userEmail.toLowerCase(),
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      // Add VAT fields if provided
+      vatIncluded: itemData.vatIncluded || false,
+      vatPercentage: parseFloat(itemData.vatPercentage) || 0
     };
 
-    console.log('Adding item to IndexedDB:', newItem);
+    console.log('Adding purchase item to IndexedDB:', newItem);
     const id = await store.add(newItem);
     await tx.done;
 
     const result = { ...newItem, id };
-    console.log('Successfully added item to IndexedDB:', result);
+    console.log('Successfully added purchase item to IndexedDB:', result);
     return result;
   } catch (error) {
-    console.error('Error adding inventory item to IndexedDB:', error);
+    console.error('Error adding purchase item to IndexedDB:', error);
     throw error;
   }
 };
 
-export const updateInventoryItem = async (itemData, userEmail) => {
+export const updatePurchaseItem = async (itemData, userEmail) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await updateInventoryItemSupabase(itemData, userEmail);
+      return await updatePurchaseItemSupabase(itemData, userEmail);
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -538,8 +546,8 @@ export const updateInventoryItem = async (itemData, userEmail) => {
   // Fallback to IndexedDB
   try {
     const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
+    const tx = db.transaction(PURCHASES_STORE, 'readwrite');
+    const store = tx.objectStore(PURCHASES_STORE);
 
     const updatedItem = {
       ...itemData,
@@ -552,16 +560,16 @@ export const updateInventoryItem = async (itemData, userEmail) => {
 
     return updatedItem;
   } catch (error) {
-    console.error('Error updating inventory item in IndexedDB:', error);
+    console.error('Error updating purchase item in IndexedDB:', error);
     throw error;
   }
 };
 
-export const deleteInventoryItem = async (itemId, userEmail) => {
+export const deletePurchaseItem = async (itemId, userEmail) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await deleteInventoryItemSupabase(itemId, userEmail);
+      return await deletePurchaseItemSupabase(itemId, userEmail);
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -570,35 +578,35 @@ export const deleteInventoryItem = async (itemId, userEmail) => {
   // Fallback to IndexedDB
   try {
     const db = await initDB();
-    const tx = db.transaction(INVENTORY_STORE, 'readwrite');
-    const store = tx.objectStore(INVENTORY_STORE);
+    const tx = db.transaction(PURCHASES_STORE, 'readwrite');
+    const store = tx.objectStore(PURCHASES_STORE);
 
     // First verify the item belongs to the user
     const item = await store.get(itemId);
     if (!item) {
-      throw new Error('Item not found');
+      throw new Error('Purchase item not found');
     }
 
     if (item.userEmail !== userEmail.toLowerCase()) {
-      throw new Error('You do not have permission to delete this item');
+      throw new Error('You do not have permission to delete this purchase item');
     }
 
     await store.delete(itemId);
     await tx.done;
 
-    console.log('Deleted inventory item from IndexedDB:', itemId);
+    console.log('Deleted purchase item from IndexedDB:', itemId);
     return true;
   } catch (error) {
-    console.error('Error deleting inventory item from IndexedDB:', error);
+    console.error('Error deleting purchase item from IndexedDB:', error);
     throw error;
   }
 };
 
-export const searchInventoryItems = async (searchTerm, userEmail) => {
+export const searchPurchaseItems = async (searchTerm, userEmail) => {
   try {
     // Try Supabase first
     if (supabaseAvailable()) {
-      return await searchInventoryItemsSupabase(searchTerm, userEmail);
+      return await searchPurchaseItemsSupabase(searchTerm, userEmail);
     }
   } catch (error) {
     console.log('Supabase failed, falling back to IndexedDB:', error.message);
@@ -606,7 +614,7 @@ export const searchInventoryItems = async (searchTerm, userEmail) => {
 
   // Fallback to IndexedDB
   try {
-    const items = await getInventoryItems(userEmail);
+    const items = await getPurchaseItems(userEmail);
     
     if (!searchTerm) return items;
 
@@ -617,10 +625,17 @@ export const searchInventoryItems = async (searchTerm, userEmail) => {
       item.description?.toLowerCase().includes(lowerSearchTerm)
     );
   } catch (error) {
-    console.error('Error searching inventory items in IndexedDB:', error);
+    console.error('Error searching purchase items in IndexedDB:', error);
     return [];
   }
 };
+
+// Legacy function names for backward compatibility
+export const getInventoryItems = getPurchaseItems;
+export const addInventoryItem = addPurchaseItem;
+export const updateInventoryItem = updatePurchaseItem;
+export const deleteInventoryItem = deletePurchaseItem;
+export const searchInventoryItems = searchPurchaseItems;
 
 // Platform admin specific functions
 export const getPlatformStats = async () => {
@@ -638,23 +653,23 @@ export const getPlatformStats = async () => {
     const db = await initDB();
     
     const userTx = db.transaction(USERS_STORE, 'readonly');
-    const inventoryTx = db.transaction(INVENTORY_STORE, 'readonly');
+    const purchasesTx = db.transaction(PURCHASES_STORE, 'readonly');
     
     const userStore = userTx.objectStore(USERS_STORE);
-    const inventoryStore = inventoryTx.objectStore(INVENTORY_STORE);
+    const purchasesStore = purchasesTx.objectStore(PURCHASES_STORE);
     
     const allUsers = await userStore.getAll();
-    const allInventoryItems = await inventoryStore.getAll();
+    const allPurchaseItems = await purchasesStore.getAll();
     
     await userTx.done;
-    await inventoryTx.done;
+    await purchasesTx.done;
 
     const stats = {
       totalUsers: allUsers.length,
       totalAdmins: allUsers.filter(u => u.role === 'admin').length,
       totalRegularUsers: allUsers.filter(u => u.role === 'user').length,
       totalPlatformAdmins: allUsers.filter(u => u.role === 'platformadmin').length,
-      totalInventoryItems: allInventoryItems.length,
+      totalPurchaseItems: allPurchaseItems.length,
       recentUsers: allUsers
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, 5)

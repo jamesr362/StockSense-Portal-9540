@@ -2,7 +2,7 @@ import {motion} from 'framer-motion';
 import {useState,useEffect} from 'react';
 import {RiCalculatorLine,RiDownloadLine,RiFileTextLine,RiCalendarLine,RiMoneyDollarCircleLine,RiHistoryLine,RiEyeLine,RiDeleteBin6Line,RiAlertLine,RiLockLine,RiStarLine,RiArrowRightLine,RiRefund2Line,RiInformationLine,RiCheckLine} from 'react-icons/ri';
 import TaxExportModal from '../components/TaxExportModal';
-import {getInventoryItems} from '../services/db';
+import {getPurchaseItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 import {Link} from 'react-router-dom';
@@ -10,7 +10,7 @@ import {Link} from 'react-router-dom';
 export default function TaxExports() {
   const [isExportModalOpen,setIsExportModalOpen]=useState(false);
   const [exportHistory,setExportHistory]=useState([]);
-  const [inventoryStats,setInventoryStats]=useState(null);
+  const [purchaseStats,setPurchaseStats]=useState(null);
   const [isLoading,setIsLoading]=useState(true);
   const [error,setError]=useState('');
   const [vatRegistered,setVatRegistered]=useState(null); // null = not selected, true = VAT registered, false = not VAT registered
@@ -31,8 +31,8 @@ export default function TaxExports() {
       setIsLoading(true);
       setError('');
 
-      // Load inventory data for stats
-      const items=await getInventoryItems(user.email);
+      // Load purchase data for stats
+      const items=await getPurchaseItems(user.email);
       const totalPurchaseCost=items.reduce((sum,item)=> {
         // Use VAT-inclusive price from database if available, otherwise use unitPrice
         const itemPrice = item.vatIncluded ? item.unitPrice : (item.unitPrice * (1 + (item.vatPercentage || 20) / 100));
@@ -94,7 +94,7 @@ export default function TaxExports() {
         return acc;
       },{});
 
-      setInventoryStats({
+      setPurchaseStats({
         totalItems: items.length,
         totalPurchaseCost,
         netCostValue,
@@ -119,7 +119,7 @@ export default function TaxExports() {
 
   // Recalculate when VAT registration status changes
   useEffect(() => {
-    if (vatRegistered !== null && inventoryStats) {
+    if (vatRegistered !== null && purchaseStats) {
       loadData();
     }
   }, [vatRegistered]);
@@ -199,7 +199,7 @@ export default function TaxExports() {
             <div>
               <h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Calculator</h1>
               <p className="mt-1 text-sm text-gray-400">
-                Calculate VAT refunds from your inventory purchases
+                Calculate VAT refunds from your purchase tracking data
               </p>
             </div>
           </div>
@@ -216,7 +216,7 @@ export default function TaxExports() {
               </h3>
 
               <p className="text-gray-300 mb-6 max-w-2xl mx-auto">
-                VAT calculation features are available exclusively with the Professional plan. Calculate VAT refunds from your inventory purchases for VAT registered businesses.
+                VAT calculation features are available exclusively with the Professional plan. Calculate VAT refunds from your purchase tracking data for VAT registered businesses.
               </p>
 
               {/* Current Plan Info */}
@@ -252,7 +252,7 @@ export default function TaxExports() {
                   <div>
                     <h5 className="text-white font-medium mb-2">Additional Features:</h5>
                     <ul className="text-gray-300 text-sm space-y-1">
-                      <li>• Unlimited inventory items</li>
+                      <li>• Unlimited purchase tracking</li>
                       <li>• Unlimited receipt scans</li>
                       <li>• Unlimited Excel imports</li>
                       <li>• Category-wise breakdowns</li>
@@ -302,7 +302,7 @@ export default function TaxExports() {
                   <li>• <strong>Maximize Cash Flow:</strong> Get money back from HMRC through quarterly VAT returns</li>
                   <li>• <strong>Professional Reports:</strong> Accountant-ready documentation for VAT submissions</li>
                   <li>• <strong>Compliance:</strong> Proper records for HMRC inspections</li>
-                  <li>• <strong>Time-Saving:</strong> Automated VAT calculations from your inventory data</li>
+                  <li>• <strong>Time-Saving:</strong> Automated VAT calculations from your purchase tracking data</li>
                   <li>• <strong>Business Growth:</strong> Improve cash flow to reinvest in your business</li>
                 </ul>
               </div>
@@ -334,7 +334,7 @@ export default function TaxExports() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold text-white">VAT Calculator</h1>
             <p className="mt-1 text-sm text-gray-400">
-              Calculate VAT refunds from your inventory purchases
+              Calculate VAT refunds from your purchase tracking data
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
@@ -364,7 +364,7 @@ export default function TaxExports() {
             <RiStarLine className="h-5 w-5 text-green-400 mr-2" />
             <div>
               <h3 className="text-green-400 font-medium">Professional Feature Active</h3>
-              <p className="text-gray-300 text-sm">Calculate VAT refunds from your inventory purchases</p>
+              <p className="text-gray-300 text-sm">Calculate VAT refunds from your purchase tracking data</p>
             </div>
           </div>
         </div>
@@ -485,7 +485,7 @@ export default function TaxExports() {
         )}
 
         {/* VAT Summary for VAT Registered */}
-        {inventoryStats && vatRegistered === true && (
+        {purchaseStats && vatRegistered === true && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             <motion.div
               initial={{opacity: 0,y: 20}}
@@ -501,11 +501,11 @@ export default function TaxExports() {
                   <div className="ml-3 sm:ml-4 w-0 flex-1">
                     <dl>
                       <dt className="text-xs sm:text-sm font-medium text-gray-400 truncate">
-                        Total Items
+                        Total Purchases
                       </dt>
                       <dd className="flex items-baseline mt-1">
                         <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {inventoryStats.totalItems}
+                          {purchaseStats.totalItems}
                         </div>
                       </dd>
                     </dl>
@@ -532,7 +532,7 @@ export default function TaxExports() {
                       </dt>
                       <dd className="flex items-baseline mt-1">
                         <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {formatCurrency(inventoryStats.totalPurchaseCost)}
+                          {formatCurrency(purchaseStats.totalPurchaseCost)}
                         </div>
                       </dd>
                     </dl>
@@ -559,7 +559,7 @@ export default function TaxExports() {
                       </dt>
                       <dd className="flex items-baseline mt-1">
                         <div className="text-xl sm:text-2xl font-semibold text-green-400">
-                          {formatCurrency(inventoryStats.vatRefund)}
+                          {formatCurrency(purchaseStats.vatRefund)}
                         </div>
                       </dd>
                     </dl>
@@ -586,7 +586,7 @@ export default function TaxExports() {
                       </dt>
                       <dd className="flex items-baseline mt-1">
                         <div className="text-xl sm:text-2xl font-semibold text-white">
-                          {formatCurrency(inventoryStats.netCostValue)}
+                          {formatCurrency(purchaseStats.netCostValue)}
                         </div>
                       </dd>
                     </dl>
@@ -630,14 +630,14 @@ export default function TaxExports() {
                   </div>
                 </div>
 
-                {inventoryStats && (
+                {purchaseStats && (
                   <div className="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
                     <h6 className="text-green-400 font-medium mb-2">Potential VAT Refund if You Were Registered:</h6>
                     <div className="text-2xl font-bold text-green-400 mb-2">
-                      {formatCurrency(inventoryStats.totalPurchaseCost * 0.167)} {/* Approximate 20% VAT extraction */}
+                      {formatCurrency(purchaseStats.totalPurchaseCost * 0.167)} {/* Approximate 20% VAT extraction */}
                     </div>
                     <p className="text-green-300 text-sm">
-                      This is an estimate of VAT you could claim back annually if you were VAT registered, based on your current inventory purchases.
+                      This is an estimate of VAT you could claim back annually if you were VAT registered, based on your current purchase tracking data.
                     </p>
                   </div>
                 )}
@@ -701,7 +701,7 @@ export default function TaxExports() {
                   </div>
                   <h4 className="text-white font-medium mb-2">Track Purchases</h4>
                   <p className="text-gray-400 text-sm">
-                    Keep all VAT receipts showing VAT separately for business inventory purchases.
+                    Keep all VAT receipts showing VAT separately for business purchases.
                   </p>
                 </div>
 
@@ -746,7 +746,7 @@ export default function TaxExports() {
                     <li>• VAT refund amounts by category</li>
                     <li>• Net costs excluding VAT</li>
                     <li>• Potential quarterly refund amounts</li>
-                    <li>• Individual item VAT breakdowns</li>
+                    <li>• Individual purchase VAT breakdowns</li>
                     <li>• Annual VAT refund projections</li>
                   </ul>
                 </div>
@@ -824,7 +824,7 @@ export default function TaxExports() {
                           </span>
                         </div>
                         <div className="mt-1 flex items-center space-x-4 text-sm text-gray-400">
-                          <span>{exportRecord.recordCount} items</span>
+                          <span>{exportRecord.recordCount} purchases</span>
                           <span>Cost: {formatCurrency(exportRecord.totalValue)}</span>
                           <span>VAT Refund: {formatCurrency(exportRecord.vatRefund)}</span>
                           <span className="capitalize">{exportRecord.format} format</span>
@@ -844,7 +844,7 @@ export default function TaxExports() {
 File: ${exportRecord.fileName || 'VAT Refund Report'}
 Date: ${formatDate(exportRecord.timestamp)}
 Format: ${exportRecord.format.toUpperCase()}
-Items: ${exportRecord.recordCount}
+Purchases: ${exportRecord.recordCount}
 Total Cost: ${formatCurrency(exportRecord.totalValue)}
 VAT Refund: ${formatCurrency(exportRecord.vatRefund)}
 Period: ${exportRecord.dateRange || 'All Time'}
@@ -873,7 +873,7 @@ ${exportRecord.settings ? Object.entries(exportRecord.settings).map(([key,value]
                       <h4 className="text-sm font-medium text-white mb-2">VAT Refund Summary:</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>
-                          <div className="text-gray-400">Items</div>
+                          <div className="text-gray-400">Purchases</div>
                           <div className="text-white font-medium">{exportRecord.recordCount}</div>
                         </div>
                         <div>

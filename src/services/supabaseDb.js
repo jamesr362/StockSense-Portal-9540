@@ -234,13 +234,13 @@ export const deleteUserSupabase = async (email) => {
 
     if (subscriptionError) throw subscriptionError;
 
-    // Delete inventory items
-    const {error: inventoryError} = await supabase
-      .from('inventory_tb2k4x9p1m')
+    // Delete purchase items (previously inventory items)
+    const {error: purchaseError} = await supabase
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .delete()
       .eq('user_email', email.toLowerCase());
 
-    if (inventoryError) throw inventoryError;
+    if (purchaseError) throw purchaseError;
 
     // Delete user from our custom table
     const {error: userError} = await supabase
@@ -325,15 +325,15 @@ export const updateUserLastLoginSupabase = async (email) => {
   }
 };
 
-// Inventory table operations with VAT support
-export const getInventoryItemsSupabase = async (userEmail) => {
+// Purchase tracking operations (renamed from inventory operations)
+export const getPurchaseItemsSupabase = async (userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
     const {data, error} = await supabase
-      .from('inventory_tb2k4x9p1m')
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .select('*')
       .eq('user_email', userEmail.toLowerCase())
       .order('created_at', {ascending: false});
@@ -347,7 +347,6 @@ export const getInventoryItemsSupabase = async (userEmail) => {
       quantity: item.quantity,
       description: item.description,
       unitPrice: item.unit_price,
-      status: item.status,
       dateAdded: item.date_added,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
@@ -358,19 +357,19 @@ export const getInventoryItemsSupabase = async (userEmail) => {
     }));
 
   } catch (error) {
-    console.error('Error getting inventory items from Supabase:', error);
+    console.error('Error getting purchase items from Supabase:', error);
     throw error;
   }
 };
 
-export const addInventoryItemSupabase = async (itemData, userEmail) => {
+export const addPurchaseItemSupabase = async (itemData, userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
     const {data, error} = await supabase
-      .from('inventory_tb2k4x9p1m')
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .insert([
         {
           name: itemData.name,
@@ -378,7 +377,6 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
           quantity: itemData.quantity,
           description: itemData.description,
           unit_price: itemData.unitPrice,
-          status: itemData.status,
           date_added: itemData.dateAdded,
           user_email: userEmail.toLowerCase(),
           vat_included: itemData.vatIncluded || false,
@@ -399,7 +397,6 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
       quantity: data.quantity,
       description: data.description,
       unitPrice: data.unit_price,
-      status: data.status,
       dateAdded: data.date_added,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -410,26 +407,25 @@ export const addInventoryItemSupabase = async (itemData, userEmail) => {
     };
 
   } catch (error) {
-    console.error('Error adding inventory item to Supabase:', error);
+    console.error('Error adding purchase item to Supabase:', error);
     throw error;
   }
 };
 
-export const updateInventoryItemSupabase = async (itemData, userEmail) => {
+export const updatePurchaseItemSupabase = async (itemData, userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
     const {data, error} = await supabase
-      .from('inventory_tb2k4x9p1m')
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .update({
         name: itemData.name,
         category: itemData.category,
         quantity: itemData.quantity,
         description: itemData.description,
         unit_price: itemData.unitPrice,
-        status: itemData.status,
         date_added: itemData.dateAdded,
         vat_included: itemData.vatIncluded || false,
         vat_percentage: itemData.vatPercentage || 20.00,
@@ -449,7 +445,6 @@ export const updateInventoryItemSupabase = async (itemData, userEmail) => {
       quantity: data.quantity,
       description: data.description,
       unitPrice: data.unit_price,
-      status: data.status,
       dateAdded: data.date_added,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
@@ -460,19 +455,19 @@ export const updateInventoryItemSupabase = async (itemData, userEmail) => {
     };
 
   } catch (error) {
-    console.error('Error updating inventory item in Supabase:', error);
+    console.error('Error updating purchase item in Supabase:', error);
     throw error;
   }
 };
 
-export const deleteInventoryItemSupabase = async (itemId, userEmail) => {
+export const deletePurchaseItemSupabase = async (itemId, userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
     const {error} = await supabase
-      .from('inventory_tb2k4x9p1m')
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .delete()
       .eq('id', itemId)
       .eq('user_email', userEmail.toLowerCase());
@@ -482,19 +477,19 @@ export const deleteInventoryItemSupabase = async (itemId, userEmail) => {
     return true;
 
   } catch (error) {
-    console.error('Error deleting inventory item from Supabase:', error);
+    console.error('Error deleting purchase item from Supabase:', error);
     throw error;
   }
 };
 
-export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
+export const searchPurchaseItemsSupabase = async (searchTerm, userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
     let query = supabase
-      .from('inventory_tb2k4x9p1m')
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .select('*')
       .eq('user_email', userEmail.toLowerCase());
 
@@ -514,7 +509,6 @@ export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
       quantity: item.quantity,
       description: item.description,
       unitPrice: item.unit_price,
-      status: item.status,
       dateAdded: item.date_added,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
@@ -525,10 +519,17 @@ export const searchInventoryItemsSupabase = async (searchTerm, userEmail) => {
     }));
 
   } catch (error) {
-    console.error('Error searching inventory items in Supabase:', error);
+    console.error('Error searching purchase items in Supabase:', error);
     throw error;
   }
 };
+
+// Legacy function names for backward compatibility
+export const getInventoryItemsSupabase = getPurchaseItemsSupabase;
+export const addInventoryItemSupabase = addPurchaseItemSupabase;
+export const updateInventoryItemSupabase = updatePurchaseItemSupabase;
+export const deleteInventoryItemSupabase = deletePurchaseItemSupabase;
+export const searchInventoryItemsSupabase = searchPurchaseItemsSupabase;
 
 // Subscription operations
 export const getUserSubscriptionSupabase = async (userEmail) => {
@@ -590,13 +591,13 @@ export const getPlatformStatsSupabase = async () => {
 
     console.log('Users fetched successfully:', users?.length);
 
-    // Get inventory items
-    const {data: inventoryItems, error: inventoryError} = await supabase
-      .from('inventory_tb2k4x9p1m')
+    // Get purchase items (previously inventory items)
+    const {data: purchaseItems, error: purchaseError} = await supabase
+      .from('inventory_tb2k4x9p1m') // Table name stays the same for database compatibility
       .select('id');
 
-    if (inventoryError) {
-      console.error('Error fetching inventory:', inventoryError);
+    if (purchaseError) {
+      console.error('Error fetching purchase items:', purchaseError);
       // Don't throw, just set to empty array
     }
 
@@ -615,7 +616,7 @@ export const getPlatformStatsSupabase = async () => {
       totalAdmins: users?.filter(u => u.role === 'admin').length || 0,
       totalRegularUsers: users?.filter(u => u.role === 'user').length || 0,
       totalPlatformAdmins: users?.filter(u => u.role === 'platformadmin').length || 0,
-      totalInventoryItems: inventoryItems?.length || 0,
+      totalPurchaseItems: purchaseItems?.length || 0,
       totalActiveSubscriptions: subscriptions?.filter(s => s.status === 'active').length || 0,
       recentUsers: (users || [])
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
@@ -632,7 +633,8 @@ export const getPlatformStatsSupabase = async () => {
       totalUsers: stats.totalUsers,
       recentUsers: stats.recentUsers.length,
       totalAdmins: stats.totalAdmins,
-      totalRegularUsers: stats.totalRegularUsers
+      totalRegularUsers: stats.totalRegularUsers,
+      totalPurchaseItems: stats.totalPurchaseItems
     });
 
     return stats;

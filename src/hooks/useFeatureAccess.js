@@ -12,7 +12,7 @@ export const useFeatureAccess = () => {
   const [subscription, setSubscription] = useState(null);
   const [planLimits, setPlanLimits] = useState(null);
   const [usage, setUsage] = useState({
-    inventoryItems: 0,
+    purchaseItems: 0,
     receiptScans: 0,
     excelImports: 0
   });
@@ -105,11 +105,11 @@ export const useFeatureAccess = () => {
       
       // Set fallback to free plan
       const freePlanLimits = {
-        inventoryItems: 100,
+        purchaseItems: 100,
         receiptScans: 1,
         excelImports: 1,
         taxExports: false,
-        features: ['inventory']
+        features: ['purchaseTracking']
       };
       
       setSubscription(null);
@@ -137,7 +137,7 @@ export const useFeatureAccess = () => {
   // Fetch usage statistics
   const fetchUsage = useCallback(async () => {
     if (!user?.email) {
-      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
       return;
     }
 
@@ -145,12 +145,12 @@ export const useFeatureAccess = () => {
       console.log('📊 Fetching usage statistics for:', user.email);
 
       // Get current usage from various sources
-      const inventoryCount = await getCurrentInventoryCount();
+      const purchaseCount = await getCurrentPurchaseCount();
       const monthlyScans = await getCurrentMonthScans();
       const monthlyImports = await getCurrentMonthImports();
 
       const usageData = {
-        inventoryItems: inventoryCount,
+        purchaseItems: purchaseCount,
         receiptScans: monthlyScans,
         excelImports: monthlyImports,
         lastUpdated: Date.now()
@@ -161,18 +161,18 @@ export const useFeatureAccess = () => {
 
     } catch (error) {
       console.error('❌ Error fetching usage:', error);
-      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
     }
   }, [user?.email]);
 
   // Helper functions to get current usage
-  const getCurrentInventoryCount = async () => {
+  const getCurrentPurchaseCount = async () => {
     try {
-      const { getInventoryItems } = await import('../services/db');
-      const items = await getInventoryItems(user.email);
+      const { getPurchaseItems } = await import('../services/db');
+      const items = await getPurchaseItems(user.email);
       return items.length;
     } catch (error) {
-      console.error('Error getting inventory count:', error);
+      console.error('Error getting purchase count:', error);
       return 0;
     }
   };
@@ -261,7 +261,7 @@ export const useFeatureAccess = () => {
       case 'taxExports':
         return currentPlan === 'professional';
 
-      case 'unlimitedInventory':
+      case 'unlimitedPurchases':
         return currentPlan === 'professional';
 
       default:
@@ -269,16 +269,16 @@ export const useFeatureAccess = () => {
     }
   }, [getCurrentPlan, usage, planLimits]);
 
-  // Check if user can add inventory item
-  const canAddInventoryItem = useCallback((currentCount = null) => {
+  // Check if user can add purchase item
+  const canAddPurchaseItem = useCallback((currentCount = null) => {
     const currentPlan = getCurrentPlan();
-    const count = currentCount !== null ? currentCount : usage.inventoryItems;
+    const count = currentCount !== null ? currentCount : usage.purchaseItems;
     
     if (currentPlan === 'professional') {
       return { allowed: true, limit: -1, remaining: Infinity };
     }
     
-    const limit = planLimits?.inventoryItems || 100;
+    const limit = planLimits?.purchaseItems || 100;
     const allowed = count < limit;
     const remaining = Math.max(0, limit - count);
     
@@ -286,9 +286,12 @@ export const useFeatureAccess = () => {
       allowed,
       limit,
       remaining,
-      reason: allowed ? null : `You have reached your inventory limit of ${limit} items. Upgrade to Professional for unlimited items.`
+      reason: allowed ? null : `You have reached your purchase tracking limit of ${limit} items. Upgrade to Professional for unlimited purchase tracking.`
     };
-  }, [getCurrentPlan, usage.inventoryItems, planLimits]);
+  }, [getCurrentPlan, usage.purchaseItems, planLimits]);
+
+  // Legacy function name for backward compatibility
+  const canAddInventoryItem = canAddPurchaseItem;
 
   // Check if user can scan receipt
   const canScanReceipt = useCallback(() => {
@@ -376,7 +379,7 @@ export const useFeatureAccess = () => {
     } else {
       setSubscription(null);
       setPlanLimits(null);
-      setUsage({ inventoryItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
       setLoading(false);
     }
   }, [user?.email, fetchSubscription, fetchUsage]);
@@ -447,7 +450,8 @@ export const useFeatureAccess = () => {
     currentPlan: getCurrentPlan(),
     planInfo: getPlanInfo(),
     canUseFeature,
-    canAddInventoryItem,
+    canAddPurchaseItem,
+    canAddInventoryItem, // Legacy compatibility
     canScanReceipt,
     canImportExcel,
     incrementUsage,

@@ -147,14 +147,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }) {
       return;
     }
 
-    // Auto-determine status based on quantity
-    let status = 'In Stock';
-    if (quantity === 0) {
-      status = 'Out of Stock';
-    } else if (quantity <= 10) {
-      status = 'Limited Stock';
-    }
-
     try {
       setIsSubmitting(true);
 
@@ -165,7 +157,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }) {
         quantity: quantity,
         unitPrice: unitPrice,
         description: formData.description.trim() || '',
-        status: status,
         dateAdded: formData.dateAdded,
         vatIncluded: formData.vatIncluded,
         vatPercentage: vatPercentage
@@ -345,9 +336,6 @@ export default function AddItemModal({ isOpen, onClose, onAdd }) {
                           onChange={handleChange}
                           placeholder="0"
                         />
-                        <p className="mt-1 text-xs text-gray-400">
-                          Status auto-set: 0=Out of Stock, 1-10=Limited Stock, 11+=In Stock
-                        </p>
                       </div>
 
                       <div>

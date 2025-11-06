@@ -458,7 +458,6 @@ export default function ReceiptScanner({ isOpen, onClose, onItemsExtracted }) {
       quantity: 1,
       category: guessCategory(cleanName),
       dateAdded: new Date().toISOString().split('T')[0],
-      status: 'In Stock',
       description: description,
       originalLine: originalLine // Keep for reference
     };

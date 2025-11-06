@@ -20,7 +20,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
     quantity: '',
     unitPrice: '',
     description: '',
-    status: '',
     dateAdded: ''
   });
   const [previewData, setPreviewData] = useState([]);
@@ -110,8 +109,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
       unitPrice: ['price', 'unit price', 'cost', 'rate', 'value', 'item price', 'unit cost', 'price per unit'],
       // Description mappings
       description: ['description', 'desc', 'details', 'notes', 'info', 'specifications', 'specs'],
-      // Status mappings
-      status: ['status', 'state', 'condition', 'availability'],
       // Date mappings
       dateAdded: ['date', 'date added', 'created date', 'purchase date', 'entry date', 'added on']
     };
@@ -257,17 +254,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
     const category = sanitizeInput(getValue('category') || 'Other');
     const description = sanitizeInput(getValue('description') || `Imported from ${uploadedFile?.name || 'spreadsheet'} on ${new Date().toLocaleDateString()}`);
     
-    // Status mapping with sanitization
-    let status = sanitizeInput(getValue('status') || 'In Stock');
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes('out') || statusLower.includes('0') || parsedQuantity === 0) {
-      status = 'Out of Stock';
-    } else if (statusLower.includes('limited') || statusLower.includes('low') || parsedQuantity <= 10) {
-      status = 'Limited Stock';
-    } else {
-      status = 'In Stock';
-    }
-    
     // Date handling with validation
     let dateAdded = getValue('dateAdded');
     if (dateAdded) {
@@ -297,7 +283,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
       quantity: parsedQuantity,
       unitPrice: parsedPrice,
       description,
-      status,
       dateAdded,
       sourceRow: rowNumber
     };
@@ -366,11 +351,11 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
 
   const downloadTemplate = () => {
     const sampleData = [
-      ['Item Name', 'Category', 'Quantity', 'Unit Price', 'Description', 'Status', 'Date Added'],
-      ['Apple iPhone 15', 'Electronics', '5', '999.99', 'Latest iPhone model', 'In Stock', '2024-01-15'],
-      ['Office Chair', 'Furniture', '10', '149.99', 'Ergonomic office chair', 'In Stock', '2024-01-10'],
-      ['Coffee Beans', 'Food & Beverages', '25', '12.50', 'Premium arabica beans', 'Limited Stock', '2024-01-12'],
-      ['Wireless Mouse', 'Electronics', '0', '29.99', 'Bluetooth wireless mouse', 'Out of Stock', '2024-01-08']
+      ['Item Name', 'Category', 'Quantity', 'Unit Price', 'Description', 'Date Added'],
+      ['Apple iPhone 15', 'Electronics', '5', '999.99', 'Latest iPhone model', '2024-01-15'],
+      ['Office Chair', 'Furniture', '10', '149.99', 'Ergonomic office chair', '2024-01-10'],
+      ['Coffee Beans', 'Food & Beverages', '25', '12.50', 'Premium arabica beans', '2024-01-12'],
+      ['Wireless Mouse', 'Electronics', '15', '29.99', 'Bluetooth wireless mouse', '2024-01-08']
     ];
     
     const ws = XLSX.utils.aoa_to_sheet(sampleData);
@@ -399,7 +384,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
       quantity: '',
       unitPrice: '',
       description: '',
-      status: '',
       dateAdded: ''
     });
     onClose();
@@ -656,7 +640,6 @@ export default function ExcelImporterModal({isOpen, onClose, onItemsImported}) {
                         unitPrice: { label: 'Unit Price', required: true, description: 'Price per item (in £)' },
                         category: { label: 'Category', required: false, description: 'Type or group of the item' },
                         description: { label: 'Description', required: false, description: 'Details about the item' },
-                        status: { label: 'Status', required: false, description: 'In Stock, Limited Stock, or Out of Stock' },
                         dateAdded: { label: 'Date Added', required: false, description: 'When the item was added' }
                       }).map(([key, config]) => (
                         <div key={key} className="bg-gray-800 p-4 rounded-lg">

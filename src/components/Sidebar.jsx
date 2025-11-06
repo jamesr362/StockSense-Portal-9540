@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { RiDashboardLine, RiStore2Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine, RiFocus3Line } from 'react-icons/ri';
+import { RiDashboardLine, RiShoppingBag3Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine, RiFocus3Line } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
@@ -11,7 +11,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: RiDashboardLine },
-    { name: 'Inventory', href: '/inventory', icon: RiStore2Line },
+    { name: 'Purchase Tracking', href: '/purchases', icon: RiShoppingBag3Line },
     { 
       name: 'Receipt Scanner', 
       href: '/receipt-scanner', 
@@ -58,6 +58,9 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
     if (href === '/dashboard') {
       return location.pathname === '/' || location.pathname === '/dashboard';
     }
+    if (href === '/purchases') {
+      return location.pathname === '/inventory' || location.pathname === '/purchases';
+    }
     return location.pathname.startsWith(href);
   };
 
@@ -86,7 +89,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
             <h1 className="text-xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
-            <p className="text-xs text-gray-400">Inventory System</p>
+            <p className="text-xs text-gray-400">Purchase Tracker</p>
           </div>
         </div>
       </div>

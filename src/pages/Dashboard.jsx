@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { RiBarChartBoxLine, RiStore2Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine, RiCalculatorLine, RiCloseLine, RiLockLine, RiStarLine } from 'react-icons/ri';
+import { RiBarChartBoxLine, RiShoppingBag3Line, RiAlertLine, RiScanLine, RiFileExcelLine, RiLineChartLine, RiCalculatorLine, RiCloseLine, RiLockLine, RiStarLine } from 'react-icons/ri';
 import { useState, useEffect } from 'react';
 import { getInventoryItems } from '../services/db';
 import { useAuth } from '../context/AuthContext';
@@ -14,7 +14,7 @@ import PaymentVerificationBanner from '../components/PaymentVerificationBanner';
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [inventoryCount, setInventoryCount] = useState(0);
+  const [purchaseCount, setPurchaseCount] = useState(0);
   const [error, setError] = useState(null);
 
   const { user } = useAuth();
@@ -32,39 +32,25 @@ export default function Dashboard() {
         setIsLoading(true);
         setError(null);
 
-        // Load inventory data with error handling
+        // Load purchase data with error handling
         let items = [];
         try {
           items = await getInventoryItems(user.email);
-        } catch (inventoryError) {
-          console.error('Error loading inventory:', inventoryError);
+        } catch (purchaseError) {
+          console.error('Error loading purchases:', purchaseError);
           items = []; // Continue with empty array
         }
 
         const totalItems = items.length;
-        const outOfStockItems = items.filter((item) => item.status === 'Out of Stock').length;
-        const limitedStockItems = items.filter((item) => item.status === 'Limited Stock').length;
         const totalValue = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
 
-        setInventoryCount(totalItems);
+        setPurchaseCount(totalItems);
 
         setStats([
           {
-            name: 'Total Items',
+            name: 'Total Purchases',
             value: totalItems.toString(),
-            icon: RiStore2Line,
-          },
-          {
-            name: 'Limited Stock',
-            value: limitedStockItems.toString(),
-            icon: RiAlertLine,
-            changeType: 'warning',
-          },
-          {
-            name: 'Out of Stock',
-            value: outOfStockItems.toString(),
-            icon: RiAlertLine,
-            changeType: 'negative',
+            icon: RiShoppingBag3Line,
           },
           {
             name: 'Total Value',
@@ -143,8 +129,8 @@ export default function Dashboard() {
               {usage && (
                 <div className="text-xs text-gray-500">
                   {currentPlan === 'professional'
-                    ? 'Unlimited items'
-                    : `${inventoryCount}/100 items used`
+                    ? 'Unlimited purchases'
+                    : `${purchaseCount}/100 purchases tracked`
                   }
                 </div>
               )}
@@ -187,7 +173,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="text-white font-medium">Upgrade to unlock unlimited features</h3>
                 <p className="text-gray-300 text-sm mt-1">
-                  Get unlimited inventory items, receipt scanning, Excel imports, tax exports, and more!
+                  Get unlimited purchase tracking, receipt scanning, Excel imports, tax exports, and more!
                 </p>
               </div>
               <Link
@@ -201,14 +187,14 @@ export default function Dashboard() {
         )}
 
         {/* Free Plan Usage Warning - Show when approaching or at limit */}
-        {currentPlan === 'free' && inventoryCount >= 80 && (
+        {currentPlan === 'free' && purchaseCount >= 80 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className={`mb-6 rounded-lg p-4 border ${
-              inventoryCount >= 100 
+              purchaseCount >= 100 
                 ? 'bg-red-900/20 border-red-700' 
-                : inventoryCount >= 95 
+                : purchaseCount >= 95 
                   ? 'bg-red-900/20 border-red-700' 
                   : 'bg-yellow-900/20 border-yellow-700'
             }`}
@@ -216,33 +202,33 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <RiAlertLine className={`h-5 w-5 mr-2 ${
-                  inventoryCount >= 100 
+                  purchaseCount >= 100 
                     ? 'text-red-400' 
-                    : inventoryCount >= 95 
+                    : purchaseCount >= 95 
                       ? 'text-red-400' 
                       : 'text-yellow-400'
                 }`} />
                 <div>
                   <h3 className={`font-medium ${
-                    inventoryCount >= 100 
+                    purchaseCount >= 100 
                       ? 'text-red-300' 
-                      : inventoryCount >= 95 
+                      : purchaseCount >= 95 
                         ? 'text-red-300' 
                         : 'text-yellow-300'
                   }`}>
-                    {inventoryCount >= 100 
+                    {purchaseCount >= 100 
                       ? 'Free Plan Limit Reached (100/100)' 
-                      : inventoryCount >= 95
-                        ? `Critical: ${inventoryCount}/100 inventory items used`
-                        : `Warning: ${inventoryCount}/100 inventory items used`
+                      : purchaseCount >= 95
+                        ? `Critical: ${purchaseCount}/100 purchases tracked`
+                        : `Warning: ${purchaseCount}/100 purchases tracked`
                     }
                   </h3>
                   <p className="text-gray-300 text-sm mt-1">
-                    {inventoryCount >= 100 
-                      ? 'You cannot add more items. Upgrade to Professional for unlimited inventory items.'
-                      : inventoryCount >= 95
-                        ? 'You\'re almost at your limit! Upgrade to Professional for unlimited items.'
-                        : 'You\'re approaching your Free plan limit. Upgrade for unlimited inventory items.'
+                    {purchaseCount >= 100 
+                      ? 'You cannot add more purchases. Upgrade to Professional for unlimited purchase tracking.'
+                      : purchaseCount >= 95
+                        ? 'You\'re almost at your limit! Upgrade to Professional for unlimited purchases.'
+                        : 'You\'re approaching your Free plan limit. Upgrade for unlimited purchase tracking.'
                     }
                   </p>
                 </div>
@@ -258,13 +244,13 @@ export default function Dashboard() {
               <div className="w-full bg-gray-600 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    inventoryCount >= 100 
+                    purchaseCount >= 100 
                       ? 'bg-red-500' 
-                      : inventoryCount >= 95 
+                      : purchaseCount >= 95 
                         ? 'bg-red-500' 
                         : 'bg-yellow-500'
                   }`}
-                  style={{ width: `${Math.min((inventoryCount / 100) * 100, 100)}%` }}
+                  style={{ width: `${Math.min((purchaseCount / 100) * 100, 100)}%` }}
                 />
               </div>
             </div>
@@ -285,15 +271,7 @@ export default function Dashboard() {
                 <div className="p-4 sm:p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <stat.icon
-                        className={`h-6 w-6 sm:h-7 sm:w-7 ${
-                          stat.changeType === 'negative'
-                            ? 'text-red-400'
-                            : stat.changeType === 'warning'
-                            ? 'text-yellow-400'
-                            : 'text-gray-400'
-                        }`}
-                      />
+                      <stat.icon className="h-6 w-6 sm:h-7 sm:w-7 text-gray-400" />
                     </div>
                     <div className="ml-3 sm:ml-4 w-0 flex-1">
                       <dl>
@@ -318,15 +296,15 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-gray-800 overflow-hidden rounded-lg shadow p-6 sm:p-8 text-center text-gray-400"
           >
-            <RiStore2Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No inventory items yet</h3>
+            <RiShoppingBag3Line className="mx-auto h-12 w-12 text-gray-500 mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No purchases tracked yet</h3>
             <p className="text-sm">
-              {currentPlan === 'free' && inventoryCount >= 100
-                ? 'You\'ve reached the 100 item limit for the Free plan. Upgrade to add more items.'
-                : 'Add some items to your inventory to see your dashboard statistics.'
+              {currentPlan === 'free' && purchaseCount >= 100
+                ? 'You\'ve reached the 100 purchase limit for the Free plan. Upgrade to track more purchases.'
+                : 'Start tracking your purchases to see your dashboard statistics.'
               }
             </p>
-            {currentPlan === 'free' && inventoryCount >= 100 && (
+            {currentPlan === 'free' && purchaseCount >= 100 && (
               <Link
                 to="/pricing"
                 className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors mt-4"
@@ -349,25 +327,25 @@ export default function Dashboard() {
           >
             <div className="flex items-center mb-4">
               <div className="bg-blue-900/30 p-3 rounded-lg">
-                <RiStore2Line className="h-6 w-6 text-blue-400" />
+                <RiShoppingBag3Line className="h-6 w-6 text-blue-400" />
               </div>
               <h3 className="ml-3 text-lg font-medium text-white">Manual Entry</h3>
             </div>
             <p className="text-gray-400 mb-4">
-              Add inventory items manually with full control over details.
+              Add purchases manually with full control over details and VAT.
             </p>
             <div className="mt-2">
               <Link
-                to="/inventory"
+                to="/purchases"
                 className="inline-flex items-center text-blue-400 hover:text-blue-300"
               >
-                Manage Inventory
+                Manage Purchases
                 <RiArrowRightIcon className="ml-1 h-4 w-4" />
               </Link>
               {currentPlan === 'free' && (
                 <div className="mt-2 text-xs text-gray-500">
-                  {inventoryCount}/100 items used
-                  {inventoryCount >= 100 && (
+                  {purchaseCount}/100 purchases tracked
+                  {purchaseCount >= 100 && (
                     <span className="text-red-400 ml-2">• Limit reached</span>
                   )}
                 </div>
@@ -389,7 +367,7 @@ export default function Dashboard() {
               <h3 className="ml-3 text-lg font-medium text-white">Receipt Scanner</h3>
             </div>
             <p className="text-gray-400 mb-4">
-              Quickly scan receipts to add items to your inventory automatically.
+              Quickly scan receipts to track purchases automatically.
             </p>
             <div className="mt-2">
               {canUseFeature('receiptScanner') ? (
@@ -426,7 +404,7 @@ export default function Dashboard() {
               <h3 className="ml-3 text-lg font-medium text-white">Excel Import</h3>
             </div>
             <p className="text-gray-400 mb-4">
-              Bulk import your inventory data from Excel spreadsheets.
+              Bulk import your purchase data from Excel spreadsheets.
             </p>
             <div className="mt-2">
               {canUseFeature('excelImporter') ? (

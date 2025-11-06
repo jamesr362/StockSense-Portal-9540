@@ -4,7 +4,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Inventory from './pages/Inventory';
+import Purchases from './pages/Inventory'; // Import as Purchases but use existing file
 import ReceiptScanner from './pages/ReceiptScanner';
 import ExcelImporter from './pages/ExcelImporter';
 import TaxExports from './pages/TaxExports';
@@ -159,7 +159,9 @@ function AppRoutes() {
         >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="inventory" element={<Inventory />} />
+          <Route path="purchases" element={<Purchases />} />
+          {/* Keep old inventory route for backwards compatibility */}
+          <Route path="inventory" element={<Navigate to="/purchases" replace />} />
           <Route path="receipt-scanner" element={<ReceiptScanner />} />
           <Route path="excel-importer" element={<ExcelImporter />} />
           <Route path="tax-exports" element={<TaxExports />} />
