@@ -1,11 +1,9 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { RiCalendarLine, RiLineChartLine, RiSettings3Line, RiUserLine } from 'react-icons/ri';
+import { RiCalendarLine, RiLineChartLine } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import useSubscription from '../hooks/useSubscription';
 import SubscriptionStatus from '../components/SubscriptionStatus';
-import UsageMetrics from '../components/UsageMetrics';
-import BillingHistory from '../components/BillingHistory';
 import PlanUpgradeModal from '../components/PlanUpgradeModal';
 import { SUBSCRIPTION_PLANS } from '../lib/stripe';
 
@@ -32,10 +30,7 @@ export default function SubscriptionManagement() {
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: RiLineChartLine },
-    { id: 'subscription', name: 'Subscription', icon: RiLineChartLine },
-    { id: 'usage', name: 'Usage', icon: RiUserLine },
-    { id: 'billing', name: 'Billing History', icon: RiCalendarLine },
-    { id: 'settings', name: 'Settings', icon: RiSettings3Line }
+    { id: 'subscription', name: 'Subscription', icon: RiCalendarLine }
   ];
 
   const handlePlanUpgrade = async (plan) => {
@@ -122,7 +117,7 @@ export default function SubscriptionManagement() {
           <div className="sm:flex-auto">
             <h1 className="text-2xl font-semibold text-white">Subscription Management</h1>
             <p className="mt-2 text-sm text-gray-400">
-              Manage your subscription, billing, and usage
+              Manage your subscription and view usage
             </p>
           </div>
           <div className="mt-4 sm:mt-0">
@@ -339,66 +334,6 @@ export default function SubscriptionManagement() {
                         {isProcessing ? 'Reactivating...' : 'Reactivate Subscription'}
                       </button>
                     )}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {activeTab === 'usage' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <UsageMetrics userPlan={currentPlan} />
-            </motion.div>
-          )}
-
-          {activeTab === 'billing' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              <BillingHistory customerId={user?.email} />
-            </motion.div>
-          )}
-
-          {activeTab === 'settings' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-6"
-            >
-              <div className="bg-gray-800 rounded-lg p-6">
-                <h3 className="text-lg font-medium text-white mb-4">Subscription Settings</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-medium">Auto-renewal</h4>
-                      <p className="text-gray-400 text-sm">Automatically renew your monthly subscription</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only peer" 
-                        defaultChecked={!willCancelAtPeriodEnd}
-                        disabled={!isActive}
-                      />
-                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-white font-medium">Email notifications</h4>
-                      <p className="text-gray-400 text-sm">Receive billing notifications via email</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
                   </div>
                 </div>
               </div>

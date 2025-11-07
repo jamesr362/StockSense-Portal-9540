@@ -1,28 +1,24 @@
-import {motion} from 'framer-motion';
-import {useState} from 'react';
-import {RiNotification3Line, RiUser3Line, RiLockLine, RiStore2Line, RiMoneyDollarCircleLine} from 'react-icons/ri';
-import {useAuth} from '../context/AuthContext';
-import SecurityAuditLog from '../components/SecurityAuditLog';
+import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { RiUser3Line, RiMoneyDollarCircleLine } from 'react-icons/ri';
+import { useAuth } from '../context/AuthContext';
 import SubscriptionManagement from './SubscriptionManagement';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('general');
-  const {user} = useAuth();
+  const { user } = useAuth();
 
   const tabs = [
-    {id: 'general', name: 'General', icon: RiStore2Line},
-    {id: 'subscription', name: 'Subscription', icon: RiMoneyDollarCircleLine},
-    {id: 'notifications', name: 'Notifications', icon: RiNotification3Line},
-    {id: 'security', name: 'Security', icon: RiLockLine},
-    {id: 'team', name: 'Team', icon: RiUser3Line},
+    { id: 'general', name: 'General', icon: RiUser3Line },
+    { id: 'subscription', name: 'Subscription', icon: RiMoneyDollarCircleLine },
   ];
 
   return (
     <div>
       <motion.div
-        initial={{opacity: 0, y: 20}}
-        animate={{opacity: 1, y: 0}}
-        transition={{duration: 0.5}}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
       >
         <div className="sm:flex sm:items-center mb-8">
           <div className="sm:flex-auto">
@@ -56,9 +52,9 @@ export default function Settings() {
           <div className="mt-8">
             {activeTab === 'general' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
                 <div className="bg-gray-800 rounded-lg p-6">
@@ -111,98 +107,11 @@ export default function Settings() {
 
             {activeTab === 'subscription' && (
               <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
               >
                 <SubscriptionManagement />
-              </motion.div>
-            )}
-
-            {activeTab === 'notifications' && (
-              <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
-                className="space-y-6"
-              >
-                <div className="bg-gray-800 rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-white mb-6">
-                    Notification Preferences
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          id="email-notifications"
-                          name="email-notifications"
-                          type="checkbox"
-                          className="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300 rounded"
-                        />
-                      </div>
-                      <div className="ml-3 text-sm">
-                        <label htmlFor="email-notifications" className="font-medium text-white">
-                          Email Notifications
-                        </label>
-                        <p className="text-gray-400">
-                          Get notified about low stock, new orders, and important updates.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start">
-                      <div className="flex items-center h-5">
-                        <input
-                          id="low-stock-alerts"
-                          name="low-stock-alerts"
-                          type="checkbox"
-                          className="focus:ring-primary-500 h-4 w-4 text-primary-600 border-gray-300 rounded"
-                        />
-                      </div>
-                      <div className="ml-3 text-sm">
-                        <label htmlFor="low-stock-alerts" className="font-medium text-white">
-                          Low Stock Alerts
-                        </label>
-                        <p className="text-gray-400">
-                          Receive alerts when inventory items are running low.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === 'security' && (
-              <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
-                className="space-y-6"
-              >
-                <SecurityAuditLog userEmail={user?.email} />
-              </motion.div>
-            )}
-
-            {activeTab === 'team' && (
-              <motion.div
-                initial={{opacity: 0}}
-                animate={{opacity: 1}}
-                transition={{duration: 0.3}}
-                className="space-y-6"
-              >
-                <div className="bg-gray-800 rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-white mb-6">
-                    Team Management
-                  </h3>
-                  <p className="text-gray-400 mb-4">
-                    Team management features are coming soon. You'll be able to invite team members and manage their permissions.
-                  </p>
-                  <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-                    <p className="text-blue-300 text-sm">
-                      <strong>Current Plan:</strong> Professional Plan
-                    </p>
-                  </div>
-                </div>
               </motion.div>
             )}
           </div>

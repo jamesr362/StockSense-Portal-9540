@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { RiDashboardLine, RiShoppingBag3Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine, RiFocus3Line } from 'react-icons/ri';
+import { RiDashboardLine, RiShoppingBag3Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
@@ -81,16 +81,11 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
     <div className="flex flex-col h-full">
       {/* Logo - Trackio Gradient Branding */}
       <div className="flex items-center flex-shrink-0 px-4 py-6">
-        <div className="flex items-center">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
-            <RiFocus3Line className="h-5 w-5 text-white" />
-          </div>
-          <div className="ml-3">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
-              Trackio
-            </h1>
-            <p className="text-xs text-gray-400">Purchase Management</p>
-          </div>
+        <div className="ml-3">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            Trackio
+          </h1>
+          <p className="text-xs text-gray-400">Purchase Management</p>
         </div>
       </div>
 
@@ -101,7 +96,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
             ? 'bg-gradient-to-r from-green-600/20 to-blue-600/20 border border-green-500/30 text-green-400'
             : 'bg-gray-800 border border-gray-700 text-gray-400'
         }`}>
-          {currentPlan === 'professional' ? '✨ Professional Plan' : '🆓 Free Plan'}
+          {currentPlan === 'professional' ? 'Professional Plan' : 'Free Plan'}
         </div>
         {currentPlan === 'free' && (
           <Link
