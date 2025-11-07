@@ -79,17 +79,17 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
-      {/* Logo - Trackio Branding with Focus Icon */}
+      {/* Logo - Trackio Gradient Branding */}
       <div className="flex items-center flex-shrink-0 px-4 py-6">
         <div className="flex items-center">
           <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center">
             <RiFocus3Line className="h-5 w-5 text-white" />
           </div>
           <div className="ml-3">
-            <h1 className="text-xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
-            <p className="text-xs text-gray-400">Purchase Tracker</p>
+            <p className="text-xs text-gray-400">Purchase Management</p>
           </div>
         </div>
       </div>

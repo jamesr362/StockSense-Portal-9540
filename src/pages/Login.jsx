@@ -4,7 +4,7 @@ import {useAuth} from '../context/AuthContext';
 import {motion} from 'framer-motion';
 import {getUserByEmail,updateUserLastLogin} from '../services/db';
 import {validateEmail,verifyPassword,checkRateLimit,recordFailedAttempt,clearFailedAttempts,logSecurityEvent,sanitizeInput} from '../utils/security';
-import {RiAlertLine,RiEyeLine,RiEyeOffLine} from 'react-icons/ri';
+import {RiAlertLine,RiEyeLine,RiEyeOffLine,RiArrowLeftLine} from 'react-icons/ri';
 import {supabase} from '../lib/supabase';
 
 export default function Login() {
@@ -197,6 +197,17 @@ export default function Login() {
         animate={{opacity: 1,y: 0}}
         className="max-w-md w-full space-y-8"
       >
+        {/* Back Button */}
+        <div className="flex justify-start">
+          <Link
+            to="/"
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+          >
+            <RiArrowLeftLine className="mr-2" />
+            Back to Home
+          </Link>
+        </div>
+
         <div className="text-center">
           <motion.div
             initial={{opacity: 0,scale: 0.9}}
@@ -204,7 +215,7 @@ export default function Login() {
             transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
-            <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
             <p className="text-sm text-gray-400 mt-2">Purchase Management System</p>
@@ -344,31 +355,6 @@ export default function Login() {
             </Link>
           </div>
         </form>
-
-        {/* Feature Highlights */}
-        <div className="mt-8 pt-6 border-t border-gray-700">
-          <p className="text-center text-xs text-gray-500 mb-4">
-            Professional purchase tracking features:
-          </p>
-          <div className="grid grid-cols-2 gap-4 text-xs text-gray-400">
-            <div className="text-center">
-              <div className="text-primary-400 font-medium">Receipt Scanning</div>
-              <div>Auto-extract purchase data</div>
-            </div>
-            <div className="text-center">
-              <div className="text-green-400 font-medium">VAT Calculations</div>
-              <div>Calculate VAT refunds</div>
-            </div>
-            <div className="text-center">
-              <div className="text-blue-400 font-medium">Excel Import</div>
-              <div>Bulk purchase imports</div>
-            </div>
-            <div className="text-center">
-              <div className="text-purple-400 font-medium">Tax Reports</div>
-              <div>HMRC-ready exports</div>
-            </div>
-          </div>
-        </div>
       </motion.div>
     </div>
   );

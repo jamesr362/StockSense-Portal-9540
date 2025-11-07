@@ -5,6 +5,7 @@ import {createUser} from '../services/db';
 import {useAuth} from '../context/AuthContext';
 import PasswordStrengthIndicator from '../components/PasswordStrengthIndicator';
 import {validateEmail, validatePassword, validateBusinessName, sanitizeInput, logSecurityEvent, hashPassword} from '../utils/security';
+import {RiArrowLeftLine} from 'react-icons/ri';
 import {supabase} from '../lib/supabase';
 
 export default function Register() {
@@ -197,6 +198,17 @@ export default function Register() {
         animate={{opacity: 1, y: 0}}
         className="max-w-md w-full space-y-8"
       >
+        {/* Back Button */}
+        <div className="flex justify-start">
+          <Link
+            to="/"
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors"
+          >
+            <RiArrowLeftLine className="mr-2" />
+            Back to Home
+          </Link>
+        </div>
+
         <div className="text-center">
           <motion.div
             initial={{opacity: 0, scale: 0.9}}
@@ -204,7 +216,7 @@ export default function Register() {
             transition={{duration: 0.5}}
             className="mx-auto w-auto mb-8"
           >
-            <h1 className="text-4xl sm:text-5xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            <h1 className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
             <p className="text-sm text-gray-400 mt-2">Purchase Management System</p>

@@ -34,9 +34,9 @@ export default function Header({ onMobileMenuToggle, isMobileMenuOpen }) {
             </button>
           </div>
 
-          {/* Logo - Perfectly centered - Restored Original Trackio Branding */}
+          {/* Logo - Perfectly centered - Trackio Gradient Branding */}
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:static lg:left-auto lg:transform-none">
-            <h1 className="text-xl sm:text-2xl font-bold text-white bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
               Trackio
             </h1>
           </div>

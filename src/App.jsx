@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import Layout from './components/Layout';
+import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -144,24 +145,28 @@ function AppRoutes() {
       <WebhookListener />
       
       <Routes>
+        {/* Public Routes */}
+        <Route path="/home" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/pricing-guide" element={<PricingGuide />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
+        
+        {/* Protected Routes */}
         <Route
-          path="/"
+          path="/app"
           element={
             <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="purchases" element={<Purchases />} />
           {/* Keep old inventory route for backwards compatibility */}
-          <Route path="inventory" element={<Navigate to="/purchases" replace />} />
+          <Route path="inventory" element={<Navigate to="/app/purchases" replace />} />
           <Route path="receipt-scanner" element={<ReceiptScanner />} />
           <Route path="excel-importer" element={<ExcelImporter />} />
           <Route path="tax-exports" element={<TaxExports />} />
@@ -185,8 +190,25 @@ function AppRoutes() {
             }
           />
         </Route>
-        {/* Catch all route - redirect to dashboard if logged in, otherwise to login */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+        {/* Root Route - Landing Page */}
+        <Route path="/" element={<Landing />} />
+        
+        {/* Legacy Routes - Redirect to App */}
+        <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
+        <Route path="/purchases" element={<Navigate to="/app/purchases" replace />} />
+        <Route path="/inventory" element={<Navigate to="/app/purchases" replace />} />
+        <Route path="/receipt-scanner" element={<Navigate to="/app/receipt-scanner" replace />} />
+        <Route path="/excel-importer" element={<Navigate to="/app/excel-importer" replace />} />
+        <Route path="/tax-exports" element={<Navigate to="/app/tax-exports" replace />} />
+        <Route path="/support" element={<Navigate to="/app/support" replace />} />
+        <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
+        <Route path="/subscription" element={<Navigate to="/app/subscription" replace />} />
+        <Route path="/admin" element={<Navigate to="/app/admin" replace />} />
+        <Route path="/platform-admin" element={<Navigate to="/app/platform-admin" replace />} />
+        
+        {/* Catch all route - redirect to landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );
