@@ -555,113 +555,171 @@ export default function Purchases() {
                 ))}
               </div>
 
-              {/* Desktop Table View - Completely contained */}
+              {/* Desktop Table View - Enhanced and Professional */}
               <div className="hidden lg:block h-full w-full overflow-hidden">
-                <div className="h-full w-full flex flex-col bg-gray-800 rounded-lg shadow">
-                  {/* Table Container - Fixed height and width */}
+                <div className="h-full w-full flex flex-col bg-gray-800 rounded-lg shadow-xl border border-gray-700">
+                  {/* Table Header with Summary */}
+                  <div className="px-6 py-4 border-b border-gray-700 bg-gray-750">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-6">
+                        <div className="text-sm text-gray-300">
+                          <span className="font-medium text-white">{purchaseItems.length}</span> purchases
+                        </div>
+                        <div className="text-sm text-gray-300">
+                          Total Value: <span className="font-medium text-green-400">
+                            {formatCurrency(
+                              purchaseItems.reduce((sum, item) => 
+                                sum + ((item.quantity || 0) * (item.unitPrice || 0)), 0
+                              )
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Last updated: {new Date().toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Table Container with Better Scrolling */}
                   <div className="flex-1 min-h-0 w-full overflow-auto">
-                    <table className="w-full table-fixed">
-                      <thead className="bg-gray-700 sticky top-0 z-10">
+                    <table className="w-full">
+                      <thead className="bg-gray-750 sticky top-0 z-10 border-b border-gray-600">
                         <tr>
-                          <th className="w-28 py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-white">
-                            Item
+                          <th scope="col" className="py-4 pl-6 pr-3 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                            Item Details
                           </th>
-                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th scope="col" className="px-3 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
                             Category
                           </th>
-                          <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th scope="col" className="px-3 py-4 text-center text-xs font-semibold text-gray-300 uppercase tracking-wider">
                             Qty
                           </th>
-                          <th className="w-24 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                            Price
+                          <th scope="col" className="px-3 py-4 text-right text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                            Unit Price
                           </th>
-                          <th className="w-16 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                            <div className="flex items-center">
+                          <th scope="col" className="px-3 py-4 text-center text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                            <div className="flex items-center justify-center">
                               <RiPercentLine className="h-4 w-4 mr-1" />
                               VAT
                             </div>
                           </th>
-                          <th className="w-20 px-3 py-3.5 text-left text-sm font-semibold text-white">
-                            Total
+                          <th scope="col" className="px-3 py-4 text-right text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                            Total Value
                           </th>
-                          <th className="w-18 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th scope="col" className="px-3 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
                             <div className="flex items-center">
                               <RiCalendarLine className="h-4 w-4 mr-1" />
                               Date
                             </div>
                           </th>
-                          <th className="w-28 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th scope="col" className="px-3 py-4 text-left text-xs font-semibold text-gray-300 uppercase tracking-wider">
                             Description
                           </th>
-                          <th className="w-18 px-3 py-3.5 text-left text-sm font-semibold text-white">
+                          <th scope="col" className="px-3 py-4 pr-6 text-center text-xs font-semibold text-gray-300 uppercase tracking-wider">
                             Actions
                           </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700 bg-gray-800">
-                        {purchaseItems.map((item) => (
+                        {purchaseItems.map((item, index) => (
                           <motion.tr
                             key={item.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.3 }}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                            className="hover:bg-gray-750 transition-colors duration-150"
                           >
-                            <td className="w-28 py-4 pl-4 pr-3 text-sm font-medium text-white">
-                              <div className="truncate" title={item.name}>
-                                {item.name}
-                              </div>
-                            </td>
-                            <td className="w-20 px-3 py-4 text-sm text-gray-300">
-                              <div className="truncate" title={item.category}>
-                                {item.category}
-                              </div>
-                            </td>
-                            <td className="w-16 px-3 py-4 text-sm text-gray-300">
-                              {item.quantity}
-                            </td>
-                            <td className="w-24 px-3 py-4 text-sm text-gray-300">
-                              <div className="truncate">
-                                {formatCurrency(item.unitPrice)}
-                                {item.vatIncluded && (
-                                  <div className="text-xs text-gray-500">Inc. VAT</div>
+                            {/* Item Details */}
+                            <td className="py-4 pl-6 pr-3">
+                              <div className="flex flex-col">
+                                <div className="text-sm font-medium text-white mb-1 max-w-xs">
+                                  {item.name}
+                                </div>
+                                {item.description && (
+                                  <div className="text-xs text-gray-400 max-w-xs truncate" title={item.description}>
+                                    {item.description}
+                                  </div>
                                 )}
                               </div>
                             </td>
-                            <td className="w-16 px-3 py-4 text-sm text-gray-300">
-                              <div className="text-xs">
-                                {item.vatPercentage}%
-                                <div className="text-gray-500">
+
+                            {/* Category */}
+                            <td className="px-3 py-4">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/30 text-blue-300 border border-blue-700/50">
+                                {item.category}
+                              </span>
+                            </td>
+
+                            {/* Quantity */}
+                            <td className="px-3 py-4 text-center">
+                              <span className="text-sm font-medium text-white">
+                                {item.quantity}
+                              </span>
+                            </td>
+
+                            {/* Unit Price */}
+                            <td className="px-3 py-4 text-right">
+                              <div className="flex flex-col items-end">
+                                <span className="text-sm font-medium text-white">
+                                  {formatCurrency(item.unitPrice)}
+                                </span>
+                                {item.vatIncluded && (
+                                  <span className="text-xs text-gray-500">Inc. VAT</span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* VAT */}
+                            <td className="px-3 py-4 text-center">
+                              <div className="flex flex-col items-center">
+                                <span className="text-sm font-medium text-white">
+                                  {item.vatPercentage}%
+                                </span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  item.vatIncluded 
+                                    ? 'bg-green-900/30 text-green-300 border border-green-700/50' 
+                                    : 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
+                                }`}>
                                   {item.vatIncluded ? 'Inc' : 'Ex'}
-                                </div>
+                                </span>
                               </div>
                             </td>
-                            <td className="w-20 px-3 py-4 text-sm text-gray-300 font-medium">
-                              <div className="truncate">
+
+                            {/* Total Value */}
+                            <td className="px-3 py-4 text-right">
+                              <span className="text-sm font-semibold text-green-400">
                                 {formatCurrency((item.quantity || 0) * (item.unitPrice || 0))}
-                              </div>
+                              </span>
                             </td>
-                            <td className="w-18 px-3 py-4 text-sm text-gray-300">
-                              <div className="truncate">
+
+                            {/* Date */}
+                            <td className="px-3 py-4">
+                              <span className="text-sm text-gray-300">
                                 {formatDate(item.dateAdded)}
-                              </div>
+                              </span>
                             </td>
-                            <td className="w-28 px-3 py-4 text-sm text-gray-300">
-                              <div className="truncate" title={item.description || 'No description'}>
-                                {item.description || 'No description'}
-                              </div>
+
+                            {/* Description (Hidden in this layout as it's shown in Item Details) */}
+                            <td className="px-3 py-4">
+                              <span className="text-sm text-gray-400 max-w-xs truncate block" title={item.description || 'No description'}>
+                                {item.description || '—'}
+                              </span>
                             </td>
-                            <td className="w-18 px-3 py-4 text-sm">
-                              <div className="flex space-x-2">
+
+                            {/* Actions */}
+                            <td className="px-3 py-4 pr-6">
+                              <div className="flex items-center justify-center space-x-2">
                                 <button
                                   onClick={() => handleEditItem(item)}
-                                  className="text-blue-400 hover:text-blue-300"
+                                  className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-900/20 rounded-md transition-all duration-150"
                                   title="Edit purchase"
                                 >
                                   <RiEditLine className="h-4 w-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteItem(item)}
-                                  className="text-red-400 hover:text-red-300"
+                                  className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-md transition-all duration-150"
                                   title="Delete purchase"
                                 >
                                   <RiDeleteBin6Line className="h-4 w-4" />
@@ -672,6 +730,33 @@ export default function Purchases() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Table Footer with Summary */}
+                  <div className="px-6 py-3 border-t border-gray-700 bg-gray-750">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="text-gray-400">
+                        Showing {purchaseItems.length} purchases
+                      </div>
+                      <div className="flex items-center space-x-6">
+                        <div className="text-gray-300">
+                          Average: <span className="font-medium text-white">
+                            {formatCurrency(
+                              purchaseItems.length > 0 
+                                ? purchaseItems.reduce((sum, item) => 
+                                    sum + ((item.quantity || 0) * (item.unitPrice || 0)), 0
+                                  ) / purchaseItems.length
+                                : 0
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-gray-300">
+                          VAT Items: <span className="font-medium text-white">
+                            {purchaseItems.filter(item => item.vatPercentage > 0).length}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
