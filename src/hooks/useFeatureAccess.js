@@ -103,10 +103,10 @@ export const useFeatureAccess = () => {
     } catch (error) {
       console.error('❌ Error fetching subscription:', error);
       
-      // Set fallback to free plan
+      // Set fallback to free plan with 3 receipt scans
       const freePlanLimits = {
         purchaseItems: 100,
-        receiptScans: 1,
+        receiptScans: 3, // Updated from 1 to 3
         excelImports: 1,
         taxExports: false,
         features: ['purchaseTracking']
@@ -248,7 +248,7 @@ export const useFeatureAccess = () => {
     switch (feature) {
       case 'receiptScanner':
         if (currentPlan === 'free') {
-          return usage.receiptScans < (planLimits?.receiptScans || 1);
+          return usage.receiptScans < (planLimits?.receiptScans || 3); // Updated from 1 to 3
         }
         return true;
 
@@ -301,7 +301,7 @@ export const useFeatureAccess = () => {
       return { allowed: true, limit: -1, remaining: Infinity };
     }
     
-    const limit = planLimits?.receiptScans || 1;
+    const limit = planLimits?.receiptScans || 3; // Updated from 1 to 3
     const used = usage.receiptScans;
     const allowed = used < limit;
     const remaining = Math.max(0, limit - used);

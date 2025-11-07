@@ -57,13 +57,13 @@ export default function Landing() {
           <div className="flex items-center space-x-4">
             <Link
               to="/login"
-              className="text-gray-300 hover:text-white transition-colors"
+              className="text-gray-300 hover:text-white transition-colors flex items-center justify-center"
             >
               Sign In
             </Link>
             <Link
               to="/register"
-              className="bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-md transition-colors"
+              className="bg-primary-600 hover:bg-primary-700 px-4 py-2 rounded-md transition-colors flex items-center justify-center"
             >
               Get Started
             </Link>
@@ -92,14 +92,13 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/register"
-                className="inline-flex items-center px-8 py-4 bg-primary-600 hover:bg-primary-700 rounded-lg text-lg font-semibold transition-all transform hover:scale-105"
+                className="inline-flex items-center justify-center px-8 py-4 bg-primary-600 hover:bg-primary-700 rounded-lg text-lg font-semibold transition-all transform hover:scale-105"
               >
                 Get Started
-                <RiArrowRightLine className="ml-2" />
               </Link>
               <Link
                 to="/login"
-                className="inline-flex items-center px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-lg text-lg font-semibold transition-colors"
+                className="inline-flex items-center justify-center px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-lg text-lg font-semibold transition-colors"
               >
                 Sign In
               </Link>
@@ -234,7 +233,7 @@ export default function Landing() {
                       </li>
                       <li className="flex items-center">
                         <RiCheckLine className="text-primary-500 mr-2 flex-shrink-0" />
-                        1 receipt scan
+                        3 receipt scans
                       </li>
                       <li className="flex items-center">
                         <RiCheckLine className="text-primary-500 mr-2 flex-shrink-0" />
@@ -244,7 +243,7 @@ export default function Landing() {
                   </div>
                   <Link
                     to="/register"
-                    className="inline-flex items-center px-4 py-2 border border-gray-500 hover:border-gray-400 rounded-lg font-semibold transition-colors w-full justify-center text-sm"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-500 hover:border-gray-400 rounded-lg font-semibold transition-colors w-full text-sm"
                   >
                     Get Started
                   </Link>
@@ -284,10 +283,9 @@ export default function Landing() {
                   </div>
                   <Link
                     to="/register"
-                    className="inline-flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-all transform hover:scale-105 w-full justify-center text-sm"
+                    className="inline-flex items-center justify-center px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg font-semibold transition-all transform hover:scale-105 w-full text-sm"
                   >
                     Get Started
-                    <RiArrowRightLine className="ml-2" />
                   </Link>
                 </div>
               </div>
@@ -319,14 +317,13 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/register"
-                className="inline-flex items-center px-8 py-4 bg-primary-600 hover:bg-primary-700 rounded-lg text-lg font-semibold transition-all transform hover:scale-105"
+                className="inline-flex items-center justify-center px-8 py-4 bg-primary-600 hover:bg-primary-700 rounded-lg text-lg font-semibold transition-all transform hover:scale-105"
               >
                 Get Started
-                <RiArrowRightLine className="ml-2" />
               </Link>
               <Link
                 to="/login"
-                className="inline-flex items-center px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-lg text-lg font-semibold transition-colors"
+                className="inline-flex items-center justify-center px-8 py-4 border border-gray-600 hover:border-gray-500 rounded-lg text-lg font-semibold transition-colors"
               >
                 Sign In
               </Link>

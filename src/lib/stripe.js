@@ -72,14 +72,14 @@ export const SUBSCRIPTION_PLANS = {
     features: [
       'Up to 100 manual inventory entries',
       'Basic dashboard',
-      '1 receipt scan per month',
+      '3 receipt scans per month',
       '1 Excel import per month',
       'Manual item entry',
       'Basic reporting'
     ],
     limits: {
       inventoryItems: 100, // STRICT LIMIT: 100 manual entries maximum
-      receiptScans: 1, // 1 receipt scan per month
+      receiptScans: 3, // 3 receipt scans per month
       excelImport: 1, // 1 Excel import per month
       teamMembers: 1,
       features: ['basic_dashboard', 'manual_entry', 'receipt_scanner_limited', 'excel_importer_limited']
