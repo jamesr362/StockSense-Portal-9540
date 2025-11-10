@@ -6,6 +6,7 @@ import {getUserByEmail,updateUserLastLogin} from '../services/db';
 import {validateEmail,verifyPassword,checkRateLimit,recordFailedAttempt,clearFailedAttempts,logSecurityEvent,sanitizeInput} from '../utils/security';
 import {RiAlertLine,RiEyeLine,RiEyeOffLine,RiArrowLeftLine} from 'react-icons/ri';
 import {supabase} from '../lib/supabase';
+import { secureLog } from '../utils/secureLogging';
 
 export default function Login() {
   const [email,setEmail]=useState('');
@@ -25,10 +26,8 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // Sanitize inputs
       const sanitizedEmail=sanitizeInput(email.toLowerCase().trim());
 
-      // Validate email format
       if (!validateEmail(sanitizedEmail)) {
         setError('Please enter a valid email address');
         logSecurityEvent('INVALID_EMAIL_FORMAT',{email: sanitizedEmail});
@@ -36,7 +35,6 @@ export default function Login() {
         return;
       }
 
-      // Check rate limiting
       const rateCheck=checkRateLimit(sanitizedEmail);
       if (!rateCheck.allowed) {
         setRateLimited(true);
@@ -47,24 +45,7 @@ export default function Login() {
         return;
       }
 
-      console.log('===Login Attempt===');
-      console.log('Email:',sanitizedEmail);
-      console.log('Password provided:',!!password);
-      console.log('Attempting to get user from database...');
-
-      // Get user from database first (our primary source of truth)
       const user=await getUserByEmail(sanitizedEmail);
-      console.log('User found in database:',user ? 'YES' : 'NO');
-
-      if (user) {
-        console.log('User details:',{
-          email: user.email,
-          businessName: user.businessName,
-          role: user.role,
-          hasPassword: !!user.password,
-          hasSalt: !!user.salt
-        });
-      }
 
       if (!user) {
         recordFailedAttempt(sanitizedEmail);
@@ -74,30 +55,15 @@ export default function Login() {
         return;
       }
 
-      // Verify password
       let passwordValid=false;
-      console.log('Verifying password...');
-      console.log('Password provided:',password);
-      console.log('Stored password exists:',!!user.password);
-      console.log('Salt exists:',!!user.salt);
 
-      // Special handling for platform admin - use plain text comparison
       if (user.email === 'platformadmin@trackio.com' && user.role === 'platformadmin') {
-        console.log('Platform admin login - using direct password comparison');
         passwordValid = user.password === password;
-        console.log('Platform admin password match:', passwordValid);
       } else if (user.salt) {
-        // New hashed password system
-        console.log('Using hashed password verification');
         passwordValid=verifyPassword(password,user.password,user.salt);
       } else {
-        // Legacy plain text passwords (for backward compatibility)
-        console.log('Using plain text password verification');
-        console.log('Password match:',user.password===password);
         passwordValid=user.password===password;
       }
-
-      console.log('Password valid:',passwordValid);
 
       if (!passwordValid) {
         recordFailedAttempt(sanitizedEmail);
@@ -107,9 +73,6 @@ export default function Login() {
         return;
       }
 
-      console.log('Password verification successful!');
-
-      // Try to sign in with Supabase Auth (if available) - but don't fail login if this fails
       if (supabase && user.email !== 'platformadmin@trackio.com') {
         try {
           const {data: authData,error: authError}=await supabase.auth.signInWithPassword({
@@ -118,33 +81,23 @@ export default function Login() {
           });
 
           if (authError) {
-            console.log('Supabase auth login failed:',authError.message);
-            // Continue with local login - don't fail here
+            secureLog.info('Supabase auth login failed:', authError.message);
           } else {
-            console.log('Supabase auth login successful');
+            secureLog.info('Supabase auth login successful');
           }
         } catch (err) {
-          console.log('Error during Supabase login:',err);
-          // Continue with local login
+          secureLog.info('Error during Supabase login:', err);
         }
       }
 
-      // Clear failed attempts on successful login
       clearFailedAttempts(sanitizedEmail);
-
-      // Update last login
       await updateUserLastLogin(sanitizedEmail);
 
-      // Create user session
       const userData={
         email: user.email,
         businessName: user.businessName,
         role: user.role
       };
-
-      console.log('===Login Success===');
-      console.log('Logging in user with role:',userData.role);
-      console.log('Redirecting based on role...');
 
       logSecurityEvent('SUCCESSFUL_LOGIN',{
         email: sanitizedEmail,
@@ -152,23 +105,18 @@ export default function Login() {
         businessName: user.businessName
       });
 
-      // Login and wait for state to update
       await login(userData);
 
-      // Navigate based on role
       if (user.role==='platformadmin') {
-        console.log('Redirecting to platform admin...');
         navigate('/platform-admin',{replace: true});
       } else if (user.role==='admin') {
-        console.log('Redirecting to admin...');
         navigate('/admin',{replace: true});
       } else {
-        console.log('Redirecting to dashboard...');
         navigate('/dashboard',{replace: true});
       }
 
     } catch (error) {
-      console.error('Login error:',error);
+      secureLog.error('Login error:', error);
       setError('An error occurred during login. Please try again.');
       logSecurityEvent('LOGIN_ERROR',{
         email: sanitizeInput(email),
@@ -197,7 +145,6 @@ export default function Login() {
         animate={{opacity: 1,y: 0}}
         className="max-w-md w-full space-y-8"
       >
-        {/* Back Button */}
         <div className="flex justify-start">
           <Link
             to="/"

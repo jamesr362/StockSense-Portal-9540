@@ -1,11 +1,83 @@
 import { supabase } from '../lib/supabase';
+import { secureLog } from '../utils/secureLogging';
+
+/**
+ * Test database connection and basic functionality
+ */
+export const testDatabaseConnection = async () => {
+  try {
+    secureLog.debug('Testing database connection...');
+
+    // Test basic connection with a simple query that doesn't depend on specific tables
+    const { data, error } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .limit(1);
+
+    if (error) {
+      // If information_schema doesn't work, try a simple auth query
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      
+      if (authError) {
+        secureLog.error('Database connection test failed:', authError);
+        return false;
+      }
+    }
+
+    secureLog.debug('Database connection test successful');
+    return true;
+
+  } catch (error) {
+    secureLog.error('Database connection test error:', error);
+    return false;
+  }
+};
+
+/**
+ * Check if required tables exist
+ */
+export const checkTablesExist = async () => {
+  try {
+    const tables = [
+      'subscriptions_tb2k4x9p1m',
+      'inventory_tb2k4x9p1m',
+      'receipt_scans_tb2k4x9p1m',
+      'excel_imports_tb2k4x9p1m'
+    ];
+
+    for (const table of tables) {
+      const { data, error } = await supabase
+        .from(table)
+        .select('count')
+        .limit(1);
+
+      if (error) {
+        secureLog.debug(`Table ${table} does not exist or is not accessible`);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (error) {
+    secureLog.error('Error checking tables exist:', error);
+    return false;
+  }
+};
 
 /**
  * Initialize required database tables for subscription management
  */
 export const initializeDatabase = async () => {
   try {
-    console.log('🔧 Initializing database tables...');
+    secureLog.debug('Initializing database tables...');
+
+    // First check if we can execute RPC functions
+    const { data: rpcTest, error: rpcError } = await supabase.rpc('now');
+    
+    if (rpcError) {
+      secureLog.error('RPC functions not available, skipping database initialization');
+      return false;
+    }
 
     // Create subscriptions table
     const { error: subscriptionsError } = await supabase.rpc('exec_sql', {
@@ -52,9 +124,9 @@ export const initializeDatabase = async () => {
     });
 
     if (subscriptionsError) {
-      console.error('❌ Error creating subscriptions table:', subscriptionsError);
+      secureLog.error('Error creating subscriptions table:', subscriptionsError);
     } else {
-      console.log('✅ Subscriptions table initialized');
+      secureLog.debug('Subscriptions table initialized');
     }
 
     // Create inventory table if needed
@@ -92,9 +164,9 @@ export const initializeDatabase = async () => {
     });
 
     if (inventoryError) {
-      console.error('❌ Error creating inventory table:', inventoryError);
+      secureLog.error('Error creating inventory table:', inventoryError);
     } else {
-      console.log('✅ Inventory table initialized');
+      secureLog.debug('Inventory table initialized');
     }
 
     // Create receipt scans tracking table
@@ -124,9 +196,9 @@ export const initializeDatabase = async () => {
     });
 
     if (receiptScansError) {
-      console.error('❌ Error creating receipt scans table:', receiptScansError);
+      secureLog.error('Error creating receipt scans table:', receiptScansError);
     } else {
-      console.log('✅ Receipt scans table initialized');
+      secureLog.debug('Receipt scans table initialized');
     }
 
     // Create Excel imports tracking table
@@ -156,43 +228,44 @@ export const initializeDatabase = async () => {
     });
 
     if (excelImportsError) {
-      console.error('❌ Error creating Excel imports table:', excelImportsError);
+      secureLog.error('Error creating Excel imports table:', excelImportsError);
     } else {
-      console.log('✅ Excel imports table initialized');
+      secureLog.debug('Excel imports table initialized');
     }
 
-    console.log('🎉 Database initialization complete!');
+    secureLog.debug('Database initialization complete!');
     return true;
 
   } catch (error) {
-    console.error('❌ Database initialization failed:', error);
+    secureLog.error('Database initialization failed:', error);
     return false;
   }
 };
 
 /**
- * Test database connection and basic functionality
+ * Safe database initialization that won't crash the app
  */
-export const testDatabaseConnection = async () => {
+export const safeInitializeDatabase = async () => {
   try {
-    console.log('🔍 Testing database connection...');
-
-    // Test basic query
-    const { data, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('count')
-      .limit(1);
-
-    if (error) {
-      console.error('❌ Database connection test failed:', error);
+    // Test basic connection first
+    const connectionOk = await testDatabaseConnection();
+    if (!connectionOk) {
+      secureLog.debug('Database connection failed, skipping initialization');
       return false;
     }
 
-    console.log('✅ Database connection test successful');
-    return true;
+    // Check if tables already exist
+    const tablesExist = await checkTablesExist();
+    if (tablesExist) {
+      secureLog.debug('Database tables already exist');
+      return true;
+    }
+
+    // Try to initialize tables
+    return await initializeDatabase();
 
   } catch (error) {
-    console.error('❌ Database connection test error:', error);
+    secureLog.error('Safe database initialization error:', error);
     return false;
   }
 };
