@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { RiLockLine, RiArrowRightLine, RiStarLine } from 'react-icons/ri';
+import { RiLockLine, RiArrowRightLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
@@ -86,7 +86,6 @@ export default function FeatureGate({
           {/* Professional Plan Benefits */}
           <div className="bg-gradient-to-r from-primary-600/20 to-blue-600/20 rounded-lg p-6 mb-8 border border-primary-500/30">
             <div className="flex items-center justify-center mb-4">
-              <RiStarLine className="h-6 w-6 text-yellow-400 mr-2" />
               <h4 className="text-xl font-semibold text-white">Professional Plan Benefits</h4>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
@@ -116,7 +115,6 @@ export default function FeatureGate({
               to="/pricing"
               className="inline-flex items-center px-8 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold"
             >
-              <RiStarLine className="h-5 w-5 mr-2" />
               Upgrade to Professional
               <RiArrowRightLine className="h-5 w-5 ml-2" />
             </Link>

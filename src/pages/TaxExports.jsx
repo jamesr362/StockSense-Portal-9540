@@ -1,6 +1,6 @@
 import {motion} from 'framer-motion';
 import {useState,useEffect} from 'react';
-import {RiCalculatorLine,RiDownloadLine,RiFileTextLine,RiCalendarLine,RiMoneyDollarCircleLine,RiHistoryLine,RiEyeLine,RiDeleteBin6Line,RiAlertLine,RiLockLine,RiStarLine,RiArrowRightLine,RiRefund2Line,RiInformationLine,RiCheckLine} from 'react-icons/ri';
+import {RiCalculatorLine,RiDownloadLine,RiFileTextLine,RiCalendarLine,RiMoneyDollarCircleLine,RiHistoryLine,RiEyeLine,RiDeleteBin6Line,RiAlertLine,RiLockLine,RiArrowRightLine,RiRefund2Line,RiInformationLine,RiCheckLine} from 'react-icons/ri';
 import TaxExportModal from '../components/TaxExportModal';
 import {getPurchaseItems} from '../services/db';
 import {useAuth} from '../context/AuthContext';
@@ -234,7 +234,6 @@ export default function TaxExports() {
               {/* Professional Plan Benefits */}
               <div className="bg-gradient-to-r from-primary-600/20 to-blue-600/20 rounded-lg p-6 mb-8 border border-primary-500/30">
                 <div className="flex items-center justify-center mb-4">
-                  <RiStarLine className="h-6 w-6 text-yellow-400 mr-2" />
                   <h4 className="text-xl font-semibold text-white">Professional Plan Benefits</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
@@ -267,7 +266,6 @@ export default function TaxExports() {
                   to="/pricing"
                   className="inline-flex items-center px-8 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-semibold"
                 >
-                  <RiStarLine className="h-5 w-5 mr-2" />
                   Upgrade to Professional
                   <RiArrowRightLine className="h-5 w-5 ml-2" />
                 </Link>
@@ -361,7 +359,6 @@ export default function TaxExports() {
         {/* Professional Plan Badge */}
         <div className="mb-6 bg-gradient-to-r from-green-600/20 to-primary-600/20 rounded-lg p-4 border border-green-500/30">
           <div className="flex items-center">
-            <RiStarLine className="h-5 w-5 text-green-400 mr-2" />
             <div>
               <h3 className="text-green-400 font-medium">Professional Feature Active</h3>
               <p className="text-gray-300 text-sm">Calculate VAT reclaims from your purchase tracking data</p>

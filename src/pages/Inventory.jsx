@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
-import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiShoppingBag3Line, RiScanLine, RiLockLine, RiStarLine, RiArrowRightLine, RiPercentLine } from 'react-icons/ri';
+import { RiAddLine, RiSearchLine, RiEditLine, RiDeleteBin6Line, RiCalendarLine, RiShoppingBag3Line, RiScanLine, RiLockLine, RiArrowRightLine, RiPercentLine } from 'react-icons/ri';
 import { Link } from 'react-router-dom';
 
 import AddItemModal from '../components/AddItemModal';
@@ -267,7 +267,7 @@ export default function Purchases() {
   // Check if user is approaching or at limit
   const limitCheck = canAddInventoryItem(purchaseItems.length);
   const isAtLimit = !limitCheck.allowed;
-  const isNearLimit = limitCheck.allowed && limitCheck.limit !== -1 && limitCheck.remaining <= 10;
+  const isNearLimit = limitCheck.allowed && limitCheck.limit !== -1 && limitCheck.remaining <= 2;
 
   return (
     <div className="h-full overflow-hidden">
@@ -285,7 +285,7 @@ export default function Purchases() {
               Track your purchases with VAT configuration for tax reporting
               {currentPlan === 'free' && (
                 <span className="ml-2 text-yellow-400">
-                  ({purchaseItems.length}/100 purchases tracked)
+                  ({purchaseItems.length}/10 purchases tracked)
                 </span>
               )}
             </p>
@@ -343,8 +343,8 @@ export default function Purchases() {
                 <div>
                   <h3 className={`font-medium ${isAtLimit ? 'text-red-300' : 'text-yellow-300'}`}>
                     {isAtLimit 
-                      ? 'Free Plan Limit Reached (100/100)' 
-                      : `Approaching Free Plan Limit (${purchaseItems.length}/100)`
+                      ? 'Free Plan Limit Reached (10/10)' 
+                      : `Approaching Free Plan Limit (${purchaseItems.length}/10)`
                     }
                   </h3>
                   <p className="text-gray-300 text-sm mt-1">
@@ -359,7 +359,6 @@ export default function Purchases() {
                 to="/pricing"
                 className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
               >
-                <RiStarLine className="h-4 w-4 mr-2" />
                 Upgrade Now
                 <RiArrowRightLine className="h-4 w-4 ml-2" />
               </Link>
@@ -369,9 +368,9 @@ export default function Purchases() {
                 <div className="w-full bg-gray-600 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all duration-300 ${
-                      purchaseItems.length >= 90 ? 'bg-red-500' : 'bg-yellow-500'
+                      purchaseItems.length >= 9 ? 'bg-red-500' : 'bg-yellow-500'
                     }`}
-                    style={{ width: `${(purchaseItems.length / 100) * 100}%` }}
+                    style={{ width: `${(purchaseItems.length / 10) * 100}%` }}
                   />
                 </div>
               </div>
@@ -433,7 +432,7 @@ export default function Purchases() {
                 {searchTerm 
                   ? 'Try adjusting your search terms' 
                   : currentPlan === 'free' && isAtLimit
-                    ? 'You\'ve reached the 100 purchase limit for the Free plan. Upgrade to track more purchases.'
+                    ? 'You\'ve reached the 10 purchase limit for the Free plan. Upgrade to track more purchases.'
                     : 'Start tracking your purchases to manage your expenses and VAT'
                 }
               </p>
@@ -462,7 +461,6 @@ export default function Purchases() {
                   to="/pricing"
                   className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                 >
-                  <RiStarLine className="h-5 w-5 mr-2" />
                   Upgrade to Professional
                   <RiArrowRightLine className="h-5 w-5 ml-2" />
                 </Link>

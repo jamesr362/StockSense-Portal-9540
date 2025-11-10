@@ -7,7 +7,6 @@ import {
   RiCalculatorLine, 
   RiCloseLine, 
   RiLockLine, 
-  RiStarLine,
   RiArrowRightLine,
   RiMoneyPoundCircleLine,
   RiCalendarLine,
@@ -34,12 +33,16 @@ export default function Dashboard() {
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
 
   const { user } = useAuth();
-  const { subscription, currentPlan, canUseFeature, loading: featureLoading } = useFeatureAccess();
+  const { subscription, currentPlan, canUseFeature, loading: featureLoading, canAddPurchaseItem } = useFeatureAccess();
 
   // Use refs to prevent unnecessary re-renders
   const dataLoadedRef = useRef(false);
   const lastUserEmailRef = useRef(null);
   const loadingTimeoutRef = useRef(null);
+
+  // Get current plan limits
+  const purchaseLimitInfo = canAddPurchaseItem(purchaseCount);
+  const purchaseLimit = purchaseLimitInfo.limit === -1 ? 'Unlimited' : purchaseLimitInfo.limit;
 
   // Simplified formatters
   const formatCurrency = useCallback((value) => {
@@ -291,7 +294,9 @@ export default function Dashboard() {
               <p className="text-sm text-gray-500 mt-1">
                 {currentPlan === 'professional'
                   ? 'Unlimited purchases • All features unlocked'
-                  : `${purchaseCount}/100 purchases tracked • ${100 - purchaseCount} remaining`
+                  : purchaseLimit === 10
+                    ? `${purchaseCount}/10 purchases tracked • ${10 - purchaseCount} remaining`
+                    : `${purchaseCount}/${purchaseLimit} purchases tracked • ${purchaseLimit - purchaseCount} remaining`
                 }
               </p>
             </div>
@@ -315,7 +320,6 @@ export default function Dashboard() {
                   to="/pricing"
                   className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-primary-600 to-blue-600 text-white rounded-lg hover:from-primary-700 hover:to-blue-700 transition-all"
                 >
-                  <RiStarLine className="h-4 w-4 mr-2" />
                   Upgrade
                 </Link>
               )}
@@ -324,14 +328,14 @@ export default function Dashboard() {
         </div>
 
         {/* Free Plan Usage Warning */}
-        {currentPlan === 'free' && purchaseCount >= 80 && (
+        {currentPlan === 'free' && purchaseCount >= 8 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className={`mb-6 rounded-lg p-4 border ${
-              purchaseCount >= 100 
+              purchaseCount >= 10 
                 ? 'bg-red-900/20 border-red-700' 
-                : purchaseCount >= 95 
+                : purchaseCount >= 9 
                   ? 'bg-red-900/20 border-red-700' 
                   : 'bg-yellow-900/20 border-yellow-700'
             }`}
@@ -339,19 +343,19 @@ export default function Dashboard() {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <RiAlertLine className={`h-5 w-5 mr-2 ${
-                  purchaseCount >= 100 ? 'text-red-400' : 'text-yellow-400'
+                  purchaseCount >= 10 ? 'text-red-400' : 'text-yellow-400'
                 }`} />
                 <div>
                   <h3 className={`font-medium ${
-                    purchaseCount >= 100 ? 'text-red-300' : 'text-yellow-300'
+                    purchaseCount >= 10 ? 'text-red-300' : 'text-yellow-300'
                   }`}>
-                    {purchaseCount >= 100 
-                      ? 'Free Plan Limit Reached (100/100)' 
-                      : `Approaching Limit: ${purchaseCount}/100 purchases`
+                    {purchaseCount >= 10 
+                      ? 'Free Plan Limit Reached (10/10)' 
+                      : `Approaching Limit: ${purchaseCount}/10 purchases`
                     }
                   </h3>
                   <p className="text-gray-300 text-sm mt-1">
-                    {purchaseCount >= 100 
+                    {purchaseCount >= 10 
                       ? 'Upgrade to Professional for unlimited purchase tracking and premium features.'
                       : 'You\'re approaching your Free plan limit. Upgrade for unlimited tracking.'
                     }
@@ -369,9 +373,9 @@ export default function Dashboard() {
               <div className="w-full bg-gray-600 rounded-full h-2">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    purchaseCount >= 100 ? 'bg-red-500' : 'bg-yellow-500'
+                    purchaseCount >= 10 ? 'bg-red-500' : 'bg-yellow-500'
                   }`}
-                  style={{ width: `${Math.min((purchaseCount / 100) * 100, 100)}%` }}
+                  style={{ width: `${Math.min((purchaseCount / 10) * 100, 100)}%` }}
                 />
               </div>
             </div>
@@ -420,17 +424,16 @@ export default function Dashboard() {
             <RiShoppingBag3Line className="mx-auto h-16 w-16 text-gray-500 mb-4" />
             <h3 className="text-xl font-semibold text-white mb-2">No purchases tracked yet</h3>
             <p className="text-gray-400 mb-6">
-              {currentPlan === 'free' && purchaseCount >= 100
-                ? 'You\'ve reached the 100 purchase limit for the Free plan. Upgrade to track more purchases.'
+              {currentPlan === 'free' && purchaseCount >= 10
+                ? 'You\'ve reached the 10 purchase limit for the Free plan. Upgrade to track more purchases.'
                 : 'Start tracking your purchases to see your dashboard statistics and insights.'
               }
             </p>
-            {currentPlan === 'free' && purchaseCount >= 100 ? (
+            {currentPlan === 'free' && purchaseCount >= 10 ? (
               <Link
                 to="/pricing"
                 className="inline-flex items-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
               >
-                <RiStarLine className="h-5 w-5 mr-2" />
                 Upgrade to Professional
               </Link>
             ) : (
@@ -558,17 +561,17 @@ export default function Dashboard() {
               {currentPlan === 'free' && (
                 <div className="mt-3 pt-3 border-t border-gray-700">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500">{purchaseCount}/100 tracked</span>
-                    {purchaseCount >= 100 && (
+                    <span className="text-gray-500">{purchaseCount}/10 tracked</span>
+                    {purchaseCount >= 10 && (
                       <span className="text-red-400 font-medium">Limit reached</span>
                     )}
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-1 mt-2">
                     <div
                       className={`h-1 rounded-full transition-all ${
-                        purchaseCount >= 100 ? 'bg-red-500' : 'bg-blue-500'
+                        purchaseCount >= 10 ? 'bg-red-500' : 'bg-blue-500'
                       }`}
-                      style={{ width: `${Math.min((purchaseCount / 100) * 100, 100)}%` }}
+                      style={{ width: `${Math.min((purchaseCount / 10) * 100, 100)}%` }}
                     />
                   </div>
                 </div>

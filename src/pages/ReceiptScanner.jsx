@@ -22,6 +22,7 @@ const ReceiptScannerPage = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [selectedReceiptsForExport, setSelectedReceiptsForExport] = useState(new Set());
   const [showExportOptions, setShowExportOptions] = useState(false);
+  const [showAccuracyWarning, setShowAccuracyWarning] = useState(false); // New state for warning visibility
   const { user } = useAuth();
   const { canScanReceipt, usage, currentPlan, incrementUsage } = useFeatureAccess();
 
@@ -205,6 +206,12 @@ const ReceiptScannerPage = () => {
     }));
     
     setScannedItems(prev => [...validItems, ...prev]);
+    
+    // ✅ CRITICAL FIX: Show accuracy warning every time new items are scanned and keep it visible
+    if (validItems.length > 0) {
+      setShowAccuracyWarning(true);
+      // ✅ REMOVED: Auto-hide timeout - warning now stays visible until manually dismissed
+    }
     
     // Show feedback
     if (failedItems.length === 0) {
@@ -509,12 +516,12 @@ const ReceiptScannerPage = () => {
             Receipt Scanner
             {!isProfessional && (
               <span className="ml-2 px-2 py-1 bg-yellow-600 text-yellow-100 text-xs rounded-full">
-                Free: {scanLimitInfo.remaining || 0}/{scanLimitInfo.limit || 1} left
+                Free: {scanLimitInfo.remaining || 0} left
               </span>
             )}
             {isProfessional && (
               <span className="ml-2 px-2 py-1 bg-green-600 text-green-100 text-xs rounded-full">
-                Pro: Unlimited
+                Professional: Unlimited
               </span>
             )}
           </h1>
@@ -523,7 +530,7 @@ const ReceiptScannerPage = () => {
             Our enhanced OCR technology extracts item names, quantities, and prices automatically with right-side price detection.
             {!isProfessional && (
               <span className="block mt-1 text-yellow-400 font-medium">
-                Free plan: {scanLimitInfo.limit || 1} scan per month • Professional: Unlimited scans
+                Free plan: {scanLimitInfo.limit || 1} scan{(scanLimitInfo.limit || 1) > 1 ? 's' : ''} per month • Professional: Unlimited scans
               </span>
             )}
           </p>
@@ -709,20 +716,27 @@ const ReceiptScannerPage = () => {
               </h2>
             </div>
             
-            {/* Accuracy Warning - Only show when items are present */}
-            {scannedItems.length > 0 && (
+            {/* ✅ FIXED: Show accuracy warning when flag is true - removed emoji - now stays visible always */}
+            {showAccuracyWarning && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
                 className="mx-4 sm:mx-6 mt-4 p-3 sm:p-4 rounded-lg border bg-amber-900/30 border-amber-700"
               >
                 <div className="flex items-start">
                   <SafeIcon icon={FiAlertTriangle} className="h-5 w-5 text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h3 className="text-amber-200 font-medium mb-1 text-sm sm:text-base">⚠️ Please Verify Information</h3>
+                  <div className="flex-1">
+                    <h3 className="text-amber-200 font-medium mb-1 text-sm sm:text-base">Please Verify Information</h3>
                     <p className="text-amber-300 text-xs sm:text-sm">
-                      Receipt scanning is not always completely accurate. Please check that all item names, quantities, and prices are correct before submitting to your inventory.
+                      Receipt scanning is not always completely accurate. Please check that all item names, quantities, and prices are correct before adding to your inventory.
                     </p>
+                    <button
+                      onClick={() => setShowAccuracyWarning(false)}
+                      className="mt-2 text-amber-200 hover:text-amber-100 text-xs underline"
+                    >
+                      Dismiss this warning
+                    </button>
                   </div>
                 </div>
               </motion.div>

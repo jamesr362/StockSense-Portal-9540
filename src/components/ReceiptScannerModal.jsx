@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { FiUpload, FiX, FiSave, FiTrash2, FiPlus, FiCrop, FiRotateCw, FiCamera, FiMove, FiMaximize2 } from 'react-icons/fi';
+import { FiUpload, FiX, FiSave, FiTrash2, FiPlus, FiCrop, FiRotateCw, FiCamera, FiMove, FiMaximize2, FiAlertTriangle } from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import receiptStorage from '../services/receiptStorage';
 import { useAuth } from '../context/AuthContext';
+import { motion } from 'framer-motion';
 
 const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }) => {
   const [image, setImage] = useState(null);
@@ -22,6 +23,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
   const [ocrText, setOcrText] = useState('');
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [showMobileInstructions, setShowMobileInstructions] = useState(false);
+  const [showAccuracyWarning, setShowAccuracyWarning] = useState(false); // ✅ Add warning state
   
   // VAT configuration state
   const [vatIncluded, setVatIncluded] = useState(true);
@@ -69,6 +71,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setShowMobileInstructions(false);
     setVatIncluded(true);
     setVatPercentage(20);
+    setShowAccuracyWarning(false); // ✅ Reset warning
   };
 
   const handleClose = () => {
@@ -239,6 +242,7 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
     setError('');
     setProgress(10);
     setStatus('Loading OCR engine...');
+    setShowAccuracyWarning(false); // ✅ Reset warning before scan
 
     try {
       const Tesseract = await import('tesseract.js');
@@ -265,7 +269,14 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
       
       setItems(extractedItems);
       setProgress(100);
-      setStatus(extractedItems.length > 0 ? 'Items found!' : 'No items found');
+      
+      // ✅ CRITICAL FIX: Show accuracy warning immediately when items are found
+      if (extractedItems.length > 0) {
+        setShowAccuracyWarning(true);
+        setStatus(`${extractedItems.length} items found! Please verify accuracy.`);
+      } else {
+        setStatus('No items found');
+      }
 
     } catch (err) {
       console.error('OCR Error:', err);
@@ -274,7 +285,9 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
       setIsScanning(false);
       setTimeout(() => {
         setProgress(0);
-        setStatus('');
+        if (!showAccuracyWarning) {
+          setStatus('');
+        }
       }, 2000);
     }
   };
@@ -955,6 +968,32 @@ const ReceiptScannerModal = ({ isOpen, onClose, onItemsScanned, onReceiptSaved }
                   </div>
                   {progress > 0 && <p className="text-xs sm:text-sm text-gray-400">{progress}% complete</p>}
                 </div>
+              )}
+
+              {/* ✅ FIXED: Show accuracy warning in modal when items are found - removed emoji */}
+              {showAccuracyWarning && items.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="p-3 sm:p-4 rounded-lg border bg-amber-900/30 border-amber-700"
+                >
+                  <div className="flex items-start">
+                    <SafeIcon icon={FiAlertTriangle} className="h-5 w-5 text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="text-amber-200 font-medium mb-1 text-sm sm:text-base">Please Verify Information</h3>
+                      <p className="text-amber-300 text-xs sm:text-sm">
+                        Receipt scanning is not always completely accurate. Please check that all item names, quantities, and prices are correct before saving to your inventory.
+                      </p>
+                      <button
+                        onClick={() => setShowAccuracyWarning(false)}
+                        className="mt-2 text-amber-200 hover:text-amber-100 text-xs underline"
+                      >
+                        Dismiss this warning
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
               )}
 
               {/* VAT Configuration - Only show when items are found */}

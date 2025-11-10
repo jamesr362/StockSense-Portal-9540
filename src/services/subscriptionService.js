@@ -74,7 +74,8 @@ export const getUserPlanLimits = async (userEmail) => {
  * Get free plan limits
  */
 export const getFreePlanLimits = () => ({
-  inventoryItems: 100,
+  inventoryItems: 10, // Updated from 100 to 10
+  purchaseItems: 10, // Updated from 100 to 10
   receiptScans: 3, // Updated from 1 to 3
   excelImports: 1,
   taxExports: false,
@@ -86,6 +87,7 @@ export const getFreePlanLimits = () => ({
  */
 export const getProfessionalPlanLimits = () => ({
   inventoryItems: -1, // unlimited
+  purchaseItems: -1,  // unlimited
   receiptScans: -1,   // unlimited
   excelImports: -1,   // unlimited
   taxExports: true,

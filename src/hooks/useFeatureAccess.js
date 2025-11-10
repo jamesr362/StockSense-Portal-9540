@@ -103,9 +103,9 @@ export const useFeatureAccess = () => {
     } catch (error) {
       console.error('❌ Error fetching subscription:', error);
       
-      // Set fallback to free plan with 3 receipt scans
+      // Set fallback to free plan with updated limits
       const freePlanLimits = {
-        purchaseItems: 100,
+        purchaseItems: 10, // Updated from 100 to 10
         receiptScans: 3, // Updated from 1 to 3
         excelImports: 1,
         taxExports: false,
@@ -278,7 +278,7 @@ export const useFeatureAccess = () => {
       return { allowed: true, limit: -1, remaining: Infinity };
     }
     
-    const limit = planLimits?.purchaseItems || 100;
+    const limit = planLimits?.purchaseItems || 10; // Updated from 100 to 10
     const allowed = count < limit;
     const remaining = Math.max(0, limit - count);
     
