@@ -702,18 +702,30 @@ const ReceiptScannerPage = () => {
             </div>
           </div>
 
-          {/* Recently Scanned Items */}
+          {/* Recently Scanned Items - Enhanced Mobile Layout */}
           <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700">
             <div className="p-4 sm:p-6 border-b border-gray-700">
-              <h2 className="text-lg sm:text-xl font-semibold text-white flex items-center">
-                <SafeIcon icon={FiFileText} className="mr-2 sm:mr-3 text-blue-400" />
-                Recently Scanned Items
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h2 className="text-lg sm:text-xl font-semibold text-white flex items-center">
+                  <SafeIcon icon={FiFileText} className="mr-2 sm:mr-3 text-blue-400 flex-shrink-0" />
+                  <span className="truncate">Recently Scanned Items</span>
+                  {scannedItems.length > 0 && (
+                    <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full flex-shrink-0">
+                      {scannedItems.length}
+                    </span>
+                  )}
+                </h2>
                 {scannedItems.length > 0 && (
-                  <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
-                    {scannedItems.length}
-                  </span>
+                  <button
+                    onClick={() => setScannedItems([])}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white rounded-lg transition-colors text-xs sm:text-sm"
+                  >
+                    <SafeIcon icon={FiTrash2} className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">Clear History</span>
+                    <span className="sm:hidden">Clear</span>
+                  </button>
                 )}
-              </h2>
+              </div>
             </div>
             
             {/* ✅ FIXED: Show accuracy warning when flag is true - removed emoji - now stays visible always */}
@@ -744,49 +756,110 @@ const ReceiptScannerPage = () => {
             
             <div className="p-4 sm:p-6">
               {scannedItems.length > 0 ? (
-                <div className="space-y-3 sm:space-y-4 max-h-96 overflow-y-auto">
+                <div className="space-y-3 max-h-96 overflow-y-auto">
                   {scannedItems.slice(0, 20).map((item, index) => (
                     <motion.div
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="flex justify-between items-center bg-gray-700/50 p-3 sm:p-4 rounded-lg border border-gray-600"
+                      className="bg-gray-700/50 p-3 sm:p-4 rounded-lg border border-gray-600"
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white text-sm sm:text-base truncate">{item.name}</p>
-                        <div className="flex flex-col sm:flex-row sm:items-center text-xs sm:text-sm text-gray-400 mt-1">
-                          <span>Qty: {item.quantity}</span>
-                          <span className="hidden sm:inline mx-2">•</span>
-                          <span>Added to inventory</span>
-                          <span className="hidden sm:inline mx-2">•</span>
-                          <span className="truncate">{item.category || 'Scanned Items'}</span>
-                          {/* Show VAT info if configured */}
-                          {item.vatPercentage > 0 && (
-                            <>
-                              <span className="hidden sm:inline mx-2">•</span>
-                              <span className="text-green-400">
-                                VAT {item.vatPercentage}% {item.vatIncluded ? 'inc' : 'exc'}
+                      {/* Mobile Layout - Stacked */}
+                      <div className="block sm:hidden">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0 mr-3">
+                            <p className="font-medium text-white text-sm truncate mb-1">{item.name}</p>
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                              <span className="flex items-center">
+                                <SafeIcon icon={FiPackage} className="h-3 w-3 mr-1" />
+                                Qty: {item.quantity}
                               </span>
-                            </>
-                          )}
+                              <span>•</span>
+                              <span className="text-green-400 truncate">{item.category || 'Scanned Items'}</span>
+                            </div>
+                            {/* VAT info on mobile */}
+                            {item.vatPercentage > 0 && (
+                              <div className="mt-1">
+                                <span className="inline-block bg-green-900/30 text-green-400 text-xs px-2 py-0.5 rounded">
+                                  VAT {item.vatPercentage}% {item.vatIncluded ? 'inc' : 'exc'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-bold text-blue-400 text-sm">
+                              £{Number(item.unitPrice || item.price || 0).toFixed(2)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {item.quantity > 1 ? 'per item' : 'total'}
+                            </p>
+                            {item.vatIncluded && (
+                              <p className="text-xs text-green-500">VAT inc.</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pt-2 border-t border-gray-600">
+                          <span className="text-xs text-gray-500">Added to inventory</span>
+                          <span className="text-xs text-gray-500">
+                            {item.quantity > 1 && `Total: £${(Number(item.unitPrice || item.price || 0) * item.quantity).toFixed(2)}`}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right ml-3 flex-shrink-0">
-                        <p className="font-semibold text-blue-400 text-sm sm:text-base">
-                          £{Number(item.unitPrice || item.price || 0).toFixed(2)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {item.quantity > 1 ? 'per item' : 'total'}
-                          {item.vatIncluded && <span className="block text-green-500">VAT inc.</span>}
-                        </p>
+
+                      {/* Desktop Layout - Horizontal */}
+                      <div className="hidden sm:flex justify-between items-center">
+                        <div className="flex-1 min-w-0 mr-4">
+                          <p className="font-medium text-white text-base truncate mb-1">{item.name}</p>
+                          <div className="flex items-center text-sm text-gray-400 gap-3">
+                            <span className="flex items-center">
+                              <SafeIcon icon={FiPackage} className="h-4 w-4 mr-1" />
+                              Qty: {item.quantity}
+                            </span>
+                            <span>•</span>
+                            <span>Added to inventory</span>
+                            <span>•</span>
+                            <span className="truncate">{item.category || 'Scanned Items'}</span>
+                            {/* VAT info on desktop */}
+                            {item.vatPercentage > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="text-green-400 whitespace-nowrap">
+                                  VAT {item.vatPercentage}% {item.vatIncluded ? 'inc' : 'exc'}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-semibold text-blue-400 text-base">
+                            £{Number(item.unitPrice || item.price || 0).toFixed(2)}
+                          </p>
+                          <div className="text-xs text-gray-500 space-y-0.5">
+                            <p>{item.quantity > 1 ? 'per item' : 'total'}</p>
+                            {item.vatIncluded && <p className="text-green-500">VAT inc.</p>}
+                            {item.quantity > 1 && (
+                              <p className="text-gray-400">
+                                Total: £{(Number(item.unitPrice || item.price || 0) * item.quantity).toFixed(2)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </motion.div>
                   ))}
                   {scannedItems.length > 20 && (
-                    <p className="text-center text-gray-400 text-sm py-4">
-                      ... and {scannedItems.length - 20} more items
-                    </p>
+                    <div className="text-center py-4 border-t border-gray-600">
+                      <p className="text-gray-400 text-sm mb-2">
+                        ... and {scannedItems.length - 20} more items
+                      </p>
+                      <button
+                        onClick={() => setScannedItems(scannedItems.slice(0, 20))}
+                        className="text-blue-400 hover:text-blue-300 text-xs underline"
+                      >
+                        Show only recent 20 items
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : (

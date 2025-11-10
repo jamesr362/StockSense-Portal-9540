@@ -6,8 +6,7 @@ import {
   RiFileExcelLine, 
   RiCalculatorLine,
   RiCheckLine,
-  RiArrowRightLine,
-  RiStarLine
+  RiArrowRightLine
 } from 'react-icons/ri';
 
 export default function Landing() {
@@ -229,7 +228,7 @@ export default function Landing() {
                     <ul className="text-left space-y-2 text-gray-300 text-sm">
                       <li className="flex items-center">
                         <RiCheckLine className="text-primary-500 mr-2 flex-shrink-0" />
-                        100 purchases
+                        10 purchases
                       </li>
                       <li className="flex items-center">
                         <RiCheckLine className="text-primary-500 mr-2 flex-shrink-0" />
