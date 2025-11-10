@@ -29,14 +29,14 @@ export default function Landing() {
     {
       icon: RiCalculatorLine,
       title: 'VAT Calculations',
-      description: 'Automatically calculate VAT refunds and generate tax reports for your business.'
+      description: 'Automatically calculate VAT reclaims and generate tax reports for your business.'
     }
   ];
 
   const benefits = [
     'Save hours on manual data entry',
     'Never lose a receipt again',
-    'Maximize your VAT refunds',
+    'Maximize your VAT reclaims',
     'Real-time spending insights',
     'Secure cloud storage',
     'Works on any device'
@@ -86,7 +86,7 @@ export default function Landing() {
               Purchase Management
             </h1>
             <p className="text-xl sm:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
-              Track purchases, scan receipts, and calculate VAT refunds. Everything you need in one simple app.
+              Track purchases, scan receipts, and calculate VAT reclaims. Everything you need in one simple app.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
