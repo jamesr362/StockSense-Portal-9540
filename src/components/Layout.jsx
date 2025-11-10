@@ -21,14 +21,18 @@ export default function Layout() {
         onMobileMenuClose={handleMobileMenuClose}
       />
       
+      {/* Main content area with proper desktop spacing */}
       <div className="lg:pl-72 flex flex-col min-h-screen">
         <Header 
           onMobileMenuToggle={handleMobileMenuToggle}
           isMobileMenuOpen={isMobileMenuOpen}
         />
         
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+        {/* Main content with consistent padding across all pages */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 max-w-full overflow-hidden">
+          <div className="max-w-7xl mx-auto h-full">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
