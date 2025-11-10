@@ -27,13 +27,14 @@ export const handler = async (event) => {
 
     if (cancelAtPeriodEnd) {
       // Cancel at period end - customer keeps access until billing period ends
+      // This is the SAFEST option - no immediate charge but prevents future billing
       result = await stripe.subscriptions.update(subscriptionId, {
         cancel_at_period_end: true,
       });
       
-      console.log('✅ Subscription set to cancel at period end');
+      console.log('✅ Subscription set to cancel at period end - NO FUTURE CHARGES');
     } else {
-      // Cancel immediately
+      // Cancel immediately - use with caution as this ends access immediately
       result = await stripe.subscriptions.cancel(subscriptionId);
       
       console.log('✅ Subscription cancelled immediately');

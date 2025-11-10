@@ -32,7 +32,33 @@ const mockStripeServices = {
     team_members: 3,
     receipt_scans: 85
   }),
-  cancelSubscription: async () => ({status: 'canceled'}),
+  cancelSubscription: async (subscriptionId) => {
+    // Call the actual Netlify function to cancel in Stripe
+    const response = await fetch('/.netlify/functions/cancel-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriptionId: subscriptionId,
+        cancelAtPeriodEnd: true // This prevents future charges while maintaining access
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to cancel subscription');
+    }
+
+    const result = await response.json();
+    console.log('✅ Subscription cancellation result:', result);
+    
+    return {
+      status: 'canceled',
+      cancel_at_period_end: result.subscription.cancel_at_period_end,
+      current_period_end: result.subscription.current_period_end
+    };
+  },
   updateSubscription: async () => ({status: 'active'}),
   createPortalSession: async () => {
     window.open('https://billing.stripe.com', '_blank');
@@ -79,7 +105,9 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
               amount: getPlanAmountFromId(subscriptionData.plan_id) * 100, // convert to pence
               current_period_end: Math.floor(
                 new Date(subscriptionData.current_period_end || Date.now() + 30*24*60*60*1000).getTime() / 1000
-              )
+              ),
+              cancel_at_period_end: subscriptionData.cancel_at_period_end || false,
+              canceled_at: subscriptionData.canceled_at
             });
             setLoading(false);
             return;
@@ -124,39 +152,51 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
 
     try {
       setActionLoading(true);
+      setError(null);
 
-      // Try to update in Supabase first
+      console.log('🔄 Starting subscription cancellation process...');
+
+      // Call the actual cancellation service (which will contact Stripe)
+      const cancelResult = await mockStripeServices.cancelSubscription(subscription.id);
+      
+      console.log('✅ Stripe cancellation successful:', cancelResult);
+
+      // Update in Supabase to reflect the cancellation
       if (supabase) {
         try {
           const {error} = await supabase
             .from('subscriptions_tb2k4x9p1m')
             .update({
-              status: 'canceled',
+              status: cancelResult.status,
+              cancel_at_period_end: cancelResult.cancel_at_period_end,
+              canceled_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             })
             .eq('user_email', customerId);
 
           if (!error) {
-            console.log('Updated subscription status in Supabase');
-            await loadSubscriptionData();
-            onSubscriptionChange?.();
-            setShowCancelConfirm(false);
-            return;
+            console.log('✅ Updated subscription status in Supabase');
           }
         } catch (err) {
-          console.log('Error updating Supabase, falling back to mock:', err);
+          console.log('⚠️ Error updating Supabase (non-critical):', err);
         }
       }
 
-      // Simulate API call with a delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      await mockStripeServices.cancelSubscription(subscription.id);
+      // Reload subscription data to reflect changes
       await loadSubscriptionData();
       onSubscriptionChange?.();
       setShowCancelConfirm(false);
 
+      // Show success message
+      if (cancelResult.cancel_at_period_end) {
+        setError(null);
+        // Could add a success message here
+        console.log('✅ Subscription will not renew - access continues until period end');
+      }
+
     } catch (err) {
-      setError('Failed to cancel subscription. Please try again.');
+      console.error('❌ Cancellation failed:', err);
+      setError(`Failed to cancel subscription: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -217,6 +257,11 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
   const getSubscriptionStatus = () => {
     if (!subscription) return {text: 'No subscription', color: 'text-gray-400'};
 
+    // Handle cancellation states
+    if (subscription.cancel_at_period_end && subscription.status === 'active') {
+      return {text: 'Canceling (Active until end of period)', color: 'text-orange-400'};
+    }
+
     switch (subscription.status) {
       case 'active': return {text: 'Active', color: 'text-green-400'};
       case 'canceled': return {text: 'Canceled', color: 'text-red-400'};
@@ -275,6 +320,26 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
         </motion.div>
       )}
 
+      {/* Cancellation Success Notice */}
+      {subscription?.cancel_at_period_end && subscription?.status === 'active' && (
+        <motion.div
+          initial={{opacity: 0, y: -10}}
+          animate={{opacity: 1, y: 0}}
+          className="p-4 bg-orange-900/50 border border-orange-700 rounded-lg"
+        >
+          <div className="flex items-center">
+            <RiCalendarLine className="h-5 w-5 text-orange-400 mr-2" />
+            <div>
+              <p className="text-orange-200 font-medium">Subscription Cancellation Scheduled</p>
+              <p className="text-orange-300 text-sm">
+                Your subscription will not renew. You'll keep access until {subscription.current_period_end && formatDate(subscription.current_period_end)}.
+                No future charges will occur.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Current Subscription */}
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
@@ -306,7 +371,10 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 </span>
                 <p className="text-gray-400 text-sm">
                   {subscription.current_period_end && (
-                    <>Next billing: {formatDate(subscription.current_period_end)}</>
+                    <>
+                      {subscription.cancel_at_period_end ? 'Access until: ' : 'Next billing: '}
+                      {formatDate(subscription.current_period_end)}
+                    </>
                   )}
                 </p>
               </div>
@@ -419,7 +487,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 Manage Billing
               </button>
 
-              {subscription.status === 'active' && currentPlan.price > 0 && (
+              {subscription.status === 'active' && currentPlan.price > 0 && !subscription.cancel_at_period_end && (
                 <button
                   onClick={() => setShowCancelConfirm(true)}
                   disabled={actionLoading}
@@ -559,9 +627,25 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
             <h3 className="text-lg font-semibold text-white mb-4">
               Cancel Subscription
             </h3>
-            <p className="text-gray-300 mb-6">
-              Are you sure you want to cancel your subscription? You'll lose access to premium features and be downgraded to the Free plan at the end of your current billing period.
-            </p>
+            <div className="mb-6">
+              <p className="text-gray-300 mb-4">
+                Are you sure you want to cancel your subscription? Here's what will happen:
+              </p>
+              <div className="bg-gray-700 rounded-lg p-4 space-y-2">
+                <div className="flex items-center text-green-400 text-sm">
+                  <RiCheckLine className="h-4 w-4 mr-2" />
+                  <span>No future charges will occur</span>
+                </div>
+                <div className="flex items-center text-green-400 text-sm">
+                  <RiCheckLine className="h-4 w-4 mr-2" />
+                  <span>You keep access until your current period ends</span>
+                </div>
+                <div className="flex items-center text-orange-400 text-sm">
+                  <RiAlertLine className="h-4 w-4 mr-2" />
+                  <span>Premium features will be removed after the period ends</span>
+                </div>
+              </div>
+            </div>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelConfirm(false)}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage, FiX, FiDownload, FiArchive, FiCamera } from 'react-icons/fi';
+import { FiUploadCloud, FiFileText, FiCheckCircle, FiImage, FiTrash2, FiEye, FiCalendar, FiPackage, FiX, FiDownload, FiArchive, FiCamera, FiAlertTriangle } from 'react-icons/fi';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import UsageLimitGate from '../components/UsageLimitGate';
 import { useAuth } from '../context/AuthContext';
@@ -708,6 +708,26 @@ const ReceiptScannerPage = () => {
                 )}
               </h2>
             </div>
+            
+            {/* Accuracy Warning - Only show when items are present */}
+            {scannedItems.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mx-4 sm:mx-6 mt-4 p-3 sm:p-4 rounded-lg border bg-amber-900/30 border-amber-700"
+              >
+                <div className="flex items-start">
+                  <SafeIcon icon={FiAlertTriangle} className="h-5 w-5 text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="text-amber-200 font-medium mb-1 text-sm sm:text-base">⚠️ Please Verify Information</h3>
+                    <p className="text-amber-300 text-xs sm:text-sm">
+                      Receipt scanning is not always completely accurate. Please check that all item names, quantities, and prices are correct before submitting to your inventory.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+            
             <div className="p-4 sm:p-6">
               {scannedItems.length > 0 ? (
                 <div className="space-y-3 sm:space-y-4 max-h-96 overflow-y-auto">

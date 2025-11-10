@@ -1,41 +1,29 @@
 import { motion } from 'framer-motion';
 import { 
-  RiBarChartBoxLine, 
   RiShoppingBag3Line, 
   RiAlertLine, 
   RiScanLine, 
   RiFileExcelLine, 
-  RiLineChartLine, 
   RiCalculatorLine, 
   RiCloseLine, 
   RiLockLine, 
   RiStarLine,
   RiArrowRightLine,
-  RiTrendingUpLine,
   RiMoneyPoundCircleLine,
   RiCalendarLine,
   RiPercentLine,
   RiEyeLine,
-  RiShieldCheckLine,
-  RiTimeLine,
-  RiCheckLine,
   RiRefreshLine,
-  RiUserLine,
-  RiGlobalLine,
   RiArrowUpLine,
   RiArrowDownLine,
   RiEqualizerLine
 } from 'react-icons/ri';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { getInventoryItems } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
-import useSubscriptionVerification from '../hooks/useSubscriptionVerification';
 import { Link } from 'react-router-dom';
 import SubscriptionStatus from '../components/SubscriptionStatus';
-import UsageLimitGate from '../components/UsageLimitGate';
-import FeatureGate from '../components/FeatureGate';
-import PaymentVerificationBanner from '../components/PaymentVerificationBanner';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -43,157 +31,27 @@ export default function Dashboard() {
   const [purchaseCount, setPurchaseCount] = useState(0);
   const [error, setError] = useState(null);
   const [recentPurchases, setRecentPurchases] = useState([]);
-  const [monthlyStats, setMonthlyStats] = useState(null);
   const [categoryBreakdown, setCategoryBreakdown] = useState([]);
 
   const { user } = useAuth();
-  const { subscription, usage, currentPlan, canUseFeature, refresh, loading: featureLoading } = useFeatureAccess();
-  const { isVerifying, verificationStatus, dismissVerificationStatus } = useSubscriptionVerification();
+  const { subscription, currentPlan, canUseFeature, loading: featureLoading } = useFeatureAccess();
 
-  useEffect(() => {
-    const loadData = async () => {
-      if (!user?.email) {
-        setIsLoading(false);
-        return;
-      }
+  // Use refs to prevent unnecessary re-renders
+  const dataLoadedRef = useRef(false);
+  const lastUserEmailRef = useRef(null);
+  const loadingTimeoutRef = useRef(null);
 
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Load purchase data with error handling
-        let items = [];
-        try {
-          items = await getInventoryItems(user.email);
-        } catch (purchaseError) {
-          console.error('Error loading purchases:', purchaseError);
-          items = []; // Continue with empty array
-        }
-
-        const totalItems = items.length;
-        const totalValue = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
-        const totalVAT = items.reduce((sum, item) => {
-          if (item.vatPercentage > 0) {
-            const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
-            return sum + (item.vatIncluded ? (itemTotal * item.vatPercentage) / (100 + item.vatPercentage) : (itemTotal * item.vatPercentage) / 100);
-          }
-          return sum;
-        }, 0);
-
-        // Get recent purchases (last 5)
-        const recent = items
-          .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
-          .slice(0, 5);
-
-        // Calculate monthly stats
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        const thisMonthItems = items.filter(item => {
-          const itemDate = new Date(item.dateAdded);
-          return itemDate.getMonth() === currentMonth && itemDate.getFullYear() === currentYear;
-        });
-        const thisMonthValue = thisMonthItems.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
-
-        // Last month comparison
-        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        const lastMonthItems = items.filter(item => {
-          const itemDate = new Date(item.dateAdded);
-          return itemDate.getMonth() === lastMonth && itemDate.getFullYear() === lastMonthYear;
-        });
-        const lastMonthValue = lastMonthItems.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
-
-        // Category breakdown
-        const categories = {};
-        items.forEach(item => {
-          const category = item.category || 'Uncategorized';
-          if (!categories[category]) {
-            categories[category] = { count: 0, value: 0 };
-          }
-          categories[category].count += 1;
-          categories[category].value += (item.quantity || 0) * (item.unitPrice || 0);
-        });
-
-        const categoryArray = Object.entries(categories)
-          .map(([name, data]) => ({ name, ...data }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 5);
-
-        setPurchaseCount(totalItems);
-        setRecentPurchases(recent);
-        setCategoryBreakdown(categoryArray);
-
-        const monthlyGrowth = lastMonthValue > 0 ? ((thisMonthValue - lastMonthValue) / lastMonthValue) * 100 : 0;
-
-        setMonthlyStats({
-          thisMonth: thisMonthValue,
-          lastMonth: lastMonthValue,
-          growth: monthlyGrowth,
-          itemsThisMonth: thisMonthItems.length
-        });
-
-        setStats([
-          {
-            name: 'Total Purchases',
-            value: totalItems.toString(),
-            change: thisMonthItems.length > 0 ? `+${thisMonthItems.length} this month` : 'No new purchases',
-            changeType: thisMonthItems.length > 0 ? 'positive' : 'neutral',
-            icon: RiShoppingBag3Line,
-            color: 'slate'
-          },
-          {
-            name: 'Total Value',
-            value: `£${totalValue.toFixed(2)}`,
-            change: monthlyGrowth !== 0 ? `${monthlyGrowth > 0 ? '+' : ''}${monthlyGrowth.toFixed(1)}% vs last month` : 'No change',
-            changeType: monthlyGrowth > 0 ? 'positive' : monthlyGrowth < 0 ? 'negative' : 'neutral',
-            icon: RiMoneyPoundCircleLine,
-            color: 'emerald'
-          },
-          {
-            name: 'VAT Tracked',
-            value: `£${totalVAT.toFixed(2)}`,
-            change: `${items.filter(item => item.vatPercentage > 0).length} VAT items`,
-            changeType: 'neutral',
-            icon: RiPercentLine,
-            color: 'amber'
-          },
-          {
-            name: 'This Month',
-            value: `£${thisMonthValue.toFixed(2)}`,
-            change: `${thisMonthItems.length} purchases`,
-            changeType: thisMonthItems.length > 0 ? 'positive' : 'neutral',
-            icon: RiCalendarLine,
-            color: 'indigo'
-          }
-        ]);
-      } catch (error) {
-        console.error('Error loading dashboard stats:', error);
-        setError('Failed to load dashboard data. Please try refreshing the page.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [user?.email]);
-
-  // Refresh feature access when verification completes
-  useEffect(() => {
-    if (verificationStatus?.success) {
-      refresh();
-    }
-  }, [verificationStatus, refresh]);
-
-  const formatCurrency = (value) => {
+  // Simplified formatters
+  const formatCurrency = useCallback((value) => {
     return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency: 'GBP',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value || 0);
-  };
+  }, []);
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return 'N/A';
     try {
       return new Date(dateString).toLocaleDateString('en-GB', {
@@ -204,14 +62,180 @@ export default function Dashboard() {
     } catch (error) {
       return 'N/A';
     }
-  };
+  }, []);
 
-  // Show loading state
-  if (isLoading || featureLoading) {
+  const getColorClasses = useMemo(() => {
+    const colors = {
+      lightBlue: 'bg-blue-400/10 text-blue-300 border-blue-400/20',
+      emerald: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
+      blue: 'bg-blue-500/10 text-blue-300 border-blue-500/20',
+      darkBlue: 'bg-blue-600/10 text-blue-300 border-blue-600/20'
+    };
+    return (color) => colors[color] || colors.lightBlue;
+  }, []);
+
+  // Simplified data loading with timeout protection
+  const loadData = useCallback(async (userEmail) => {
+    if (!userEmail || dataLoadedRef.current) return;
+
+    // Set a maximum loading time of 10 seconds
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (isLoading) {
+        console.warn('Dashboard loading timeout - setting fallback data');
+        setIsLoading(false);
+        setError('Dashboard took too long to load. Please try refreshing.');
+      }
+    }, 10000);
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Load purchase data with simplified error handling
+      let items = [];
+      try {
+        const startTime = Date.now();
+        items = await getInventoryItems(userEmail);
+        const loadTime = Date.now() - startTime;
+        console.log(`Loaded ${items.length} items in ${loadTime}ms`);
+      } catch (purchaseError) {
+        console.error('Error loading purchases:', purchaseError);
+        items = [];
+      }
+
+      // Clear timeout since we got data
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
+      const totalItems = items.length;
+      const totalValue = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
+      
+      // Simplified VAT calculation
+      const totalVAT = items.reduce((sum, item) => {
+        if (item.vatPercentage > 0) {
+          const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+          return sum + (itemTotal * item.vatPercentage) / 100;
+        }
+        return sum;
+      }, 0);
+
+      // Get recent purchases (last 5)
+      const recent = items
+        .sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded))
+        .slice(0, 5);
+
+      // Simplified monthly stats
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const thisMonthItems = items.filter(item => {
+        const itemDate = new Date(item.dateAdded);
+        return itemDate.getMonth() === currentMonth && itemDate.getFullYear() === currentYear;
+      });
+      const thisMonthValue = thisMonthItems.reduce((sum, item) => sum + (item.quantity || 0) * (item.unitPrice || 0), 0);
+
+      // Simplified category breakdown
+      const categories = {};
+      items.forEach(item => {
+        const category = item.category || 'Uncategorized';
+        if (!categories[category]) {
+          categories[category] = { count: 0, value: 0 };
+        }
+        categories[category].count += 1;
+        categories[category].value += (item.quantity || 0) * (item.unitPrice || 0);
+      });
+
+      const categoryArray = Object.entries(categories)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5);
+
+      setPurchaseCount(totalItems);
+      setRecentPurchases(recent);
+      setCategoryBreakdown(categoryArray);
+
+      setStats([
+        {
+          name: 'Total Purchases',
+          value: totalItems.toString(),
+          change: thisMonthItems.length > 0 ? `+${thisMonthItems.length} this month` : 'No new purchases',
+          changeType: thisMonthItems.length > 0 ? 'positive' : 'neutral',
+          icon: RiShoppingBag3Line,
+          color: 'lightBlue'
+        },
+        {
+          name: 'Total Value',
+          value: `£${totalValue.toFixed(2)}`,
+          change: `${totalItems} items tracked`,
+          changeType: 'neutral',
+          icon: RiMoneyPoundCircleLine,
+          color: 'emerald'
+        },
+        {
+          name: 'VAT Tracked',
+          value: `£${totalVAT.toFixed(2)}`,
+          change: `${items.filter(item => item.vatPercentage > 0).length} VAT items`,
+          changeType: 'neutral',
+          icon: RiPercentLine,
+          color: 'blue'
+        },
+        {
+          name: 'This Month',
+          value: `£${thisMonthValue.toFixed(2)}`,
+          change: `${thisMonthItems.length} purchases`,
+          changeType: thisMonthItems.length > 0 ? 'positive' : 'neutral',
+          icon: RiCalendarLine,
+          color: 'darkBlue'
+        }
+      ]);
+
+      dataLoadedRef.current = true;
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+      setError('Failed to load dashboard data. Please try refreshing the page.');
+    } finally {
+      setIsLoading(false);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    }
+  }, []);
+
+  // Simplified data loading effect
+  useEffect(() => {
+    if (user?.email && user.email !== lastUserEmailRef.current) {
+      lastUserEmailRef.current = user.email;
+      dataLoadedRef.current = false;
+      loadData(user.email);
+    } else if (!user?.email) {
+      setIsLoading(false);
+      setStats(null);
+      setPurchaseCount(0);
+      setRecentPurchases([]);
+      setCategoryBreakdown([]);
+      dataLoadedRef.current = false;
+      lastUserEmailRef.current = null;
+    }
+  }, [user?.email, loadData]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Show loading state with timeout
+  if (isLoading && !dataLoadedRef.current) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span className="ml-3 text-white">Loading dashboard...</span>
+      <div className="flex flex-col items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-4"></div>
+        <span className="text-white mb-2">Loading dashboard...</span>
+        <span className="text-gray-400 text-sm">This should only take a few seconds</span>
       </div>
     );
   }
@@ -224,39 +248,27 @@ export default function Dashboard() {
         <h3 className="text-lg font-medium text-white mb-2">Error Loading Dashboard</h3>
         <p className="text-gray-400 mb-4">{error}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            setError(null);
+            dataLoadedRef.current = false;
+            if (user?.email) {
+              loadData(user.email);
+            }
+          }}
           className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
         >
-          Refresh Page
+          Try Again
         </button>
       </div>
     );
   }
 
-  const getColorClasses = (color) => {
-    const colors = {
-      slate: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
-      emerald: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
-      amber: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
-      indigo: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
-    };
-    return colors[color] || colors.slate;
-  };
-
   return (
     <div>
-      {/* Payment Verification Banner */}
-      <PaymentVerificationBanner
-        isVerifying={isVerifying}
-        verificationStatus={verificationStatus}
-        onDismiss={dismissVerificationStatus}
-      />
-
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className={isVerifying || verificationStatus ? 'mt-16' : ''}
       >
         {/* Header Section */}
         <div className="mb-8">
@@ -268,8 +280,7 @@ export default function Dashboard() {
                   <SubscriptionStatus subscription={subscription} compact />
                   {currentPlan === 'professional' && (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-primary-600 to-blue-600 text-white">
-                      <RiStarLine className="h-3 w-3 mr-1" />
-                      PRO
+                      PROFESSIONAL
                     </span>
                   )}
                 </div>
@@ -277,19 +288,23 @@ export default function Dashboard() {
               <p className="text-gray-400">
                 Welcome back, <span className="text-white font-medium">{user?.businessName || user?.email}</span>
               </p>
-              {usage && (
-                <p className="text-sm text-gray-500 mt-1">
-                  {currentPlan === 'professional'
-                    ? 'Unlimited purchases • All features unlocked'
-                    : `${purchaseCount}/100 purchases tracked • ${100 - purchaseCount} remaining`
-                  }
-                </p>
-              )}
+              <p className="text-sm text-gray-500 mt-1">
+                {currentPlan === 'professional'
+                  ? 'Unlimited purchases • All features unlocked'
+                  : `${purchaseCount}/100 purchases tracked • ${100 - purchaseCount} remaining`
+                }
+              </p>
             </div>
             
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  setError(null);
+                  dataLoadedRef.current = false;
+                  if (user?.email) {
+                    loadData(user.email);
+                  }
+                }}
                 className="inline-flex items-center px-3 py-2 border border-gray-600 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
               >
                 <RiRefreshLine className="h-4 w-4 mr-2" />
@@ -307,30 +322,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-        {/* Success Message for New Professional Users */}
-        {verificationStatus?.success && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-gradient-to-r from-green-600/20 to-primary-600/20 rounded-lg p-4 border border-green-500/30"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center">
-                <RiStarLine className="h-6 w-6 text-green-400 mr-3" />
-                <div>
-                  <h3 className="text-green-400 font-semibold">🎉 Welcome to Professional!</h3>
-                  <p className="text-gray-300 text-sm mt-1">
-                    Your subscription is now active. All premium features are unlocked and ready to use!
-                  </p>
-                </div>
-              </div>
-              <button onClick={dismissVerificationStatus} className="text-green-400 hover:text-green-300">
-                <RiCloseLine className="h-5 w-5" />
-              </button>
-            </div>
-          </motion.div>
-        )}
 
         {/* Free Plan Usage Warning */}
         {currentPlan === 'free' && purchaseCount >= 80 && (
@@ -525,7 +516,7 @@ export default function Dashboard() {
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-2">
                           <div
-                            className="bg-gradient-to-r from-slate-400 to-slate-500 h-2 rounded-full transition-all duration-500"
+                            className="bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full transition-all duration-500"
                             style={{ width: `${percentage}%` }}
                           />
                         </div>
@@ -545,12 +536,12 @@ export default function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 hover:shadow-xl transition-all hover:border-slate-500/50 group"
+            className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 hover:shadow-xl transition-all hover:border-blue-400/50 group"
           >
             <div className="p-6">
               <div className="flex items-center mb-4">
-                <div className="bg-slate-500/10 border border-slate-500/20 p-3 rounded-lg group-hover:bg-slate-500/20 transition-colors">
-                  <RiShoppingBag3Line className="h-6 w-6 text-slate-300" />
+                <div className="bg-blue-400/10 border border-blue-400/20 p-3 rounded-lg group-hover:bg-blue-400/20 transition-colors">
+                  <RiShoppingBag3Line className="h-6 w-6 text-blue-300" />
                 </div>
                 <h3 className="ml-3 text-lg font-semibold text-white">Manual Entry</h3>
               </div>
@@ -559,7 +550,7 @@ export default function Dashboard() {
               </p>
               <Link
                 to="/purchases"
-                className="inline-flex items-center text-slate-300 hover:text-slate-200 font-medium"
+                className="inline-flex items-center text-blue-300 hover:text-blue-200 font-medium"
               >
                 Manage Purchases
                 <RiArrowRightLine className="ml-1 h-4 w-4" />
@@ -575,7 +566,7 @@ export default function Dashboard() {
                   <div className="w-full bg-gray-700 rounded-full h-1 mt-2">
                     <div
                       className={`h-1 rounded-full transition-all ${
-                        purchaseCount >= 100 ? 'bg-red-500' : 'bg-slate-500'
+                        purchaseCount >= 100 ? 'bg-red-500' : 'bg-blue-500'
                       }`}
                       style={{ width: `${Math.min((purchaseCount / 100) * 100, 100)}%` }}
                     />
@@ -591,17 +582,17 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
             className={`bg-gray-800 rounded-xl shadow-lg border border-gray-700 hover:shadow-xl transition-all group ${
-              canUseFeature('receiptScanner') ? 'hover:border-primary-500/50' : 'opacity-75'
+              canUseFeature('receiptScanner') ? 'hover:border-blue-500/50' : 'opacity-75'
             }`}
           >
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className={`p-3 rounded-lg border transition-colors ${
                   canUseFeature('receiptScanner') 
-                    ? 'bg-primary-500/10 border-primary-500/20 group-hover:bg-primary-500/20' 
+                    ? 'bg-blue-500/10 border-blue-500/20 group-hover:bg-blue-500/20' 
                     : 'bg-gray-700 border-gray-600'
                 }`}>
-                  <RiScanLine className={`h-6 w-6 ${canUseFeature('receiptScanner') ? 'text-primary-300' : 'text-gray-500'}`} />
+                  <RiScanLine className={`h-6 w-6 ${canUseFeature('receiptScanner') ? 'text-blue-300' : 'text-gray-500'}`} />
                 </div>
                 <h3 className="ml-3 text-lg font-semibold text-white">Receipt Scanner</h3>
                 {!canUseFeature('receiptScanner') && (
@@ -614,7 +605,7 @@ export default function Dashboard() {
               {canUseFeature('receiptScanner') ? (
                 <Link
                   to="/receipt-scanner"
-                  className="inline-flex items-center text-primary-300 hover:text-primary-200 font-medium"
+                  className="inline-flex items-center text-blue-300 hover:text-blue-200 font-medium"
                 >
                   Scan Receipt
                   <RiArrowRightLine className="ml-1 h-4 w-4" />
@@ -636,17 +627,17 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7 }}
             className={`bg-gray-800 rounded-xl shadow-lg border border-gray-700 hover:shadow-xl transition-all group ${
-              canUseFeature('excelImporter') ? 'hover:border-emerald-500/50' : 'opacity-75'
+              canUseFeature('excelImporter') ? 'hover:border-blue-600/50' : 'opacity-75'
             }`}
           >
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className={`p-3 rounded-lg border transition-colors ${
                   canUseFeature('excelImporter') 
-                    ? 'bg-emerald-500/10 border-emerald-500/20 group-hover:bg-emerald-500/20' 
+                    ? 'bg-blue-600/10 border-blue-600/20 group-hover:bg-blue-600/20' 
                     : 'bg-gray-700 border-gray-600'
                 }`}>
-                  <RiFileExcelLine className={`h-6 w-6 ${canUseFeature('excelImporter') ? 'text-emerald-300' : 'text-gray-500'}`} />
+                  <RiFileExcelLine className={`h-6 w-6 ${canUseFeature('excelImporter') ? 'text-blue-300' : 'text-gray-500'}`} />
                 </div>
                 <h3 className="ml-3 text-lg font-semibold text-white">Excel Import</h3>
                 {!canUseFeature('excelImporter') && (
@@ -659,7 +650,7 @@ export default function Dashboard() {
               {canUseFeature('excelImporter') ? (
                 <Link
                   to="/excel-importer"
-                  className="inline-flex items-center text-emerald-300 hover:text-emerald-200 font-medium"
+                  className="inline-flex items-center text-blue-300 hover:text-blue-200 font-medium"
                 >
                   Import Data
                   <RiArrowRightLine className="ml-1 h-4 w-4" />
@@ -681,17 +672,17 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 }}
             className={`bg-gray-800 rounded-xl shadow-lg border border-gray-700 hover:shadow-xl transition-all group ${
-              canUseFeature('taxExports') ? 'hover:border-amber-500/50' : 'opacity-75'
+              canUseFeature('taxExports') ? 'hover:border-blue-700/50' : 'opacity-75'
             }`}
           >
             <div className="p-6">
               <div className="flex items-center mb-4">
                 <div className={`p-3 rounded-lg border transition-colors ${
                   canUseFeature('taxExports') 
-                    ? 'bg-amber-500/10 border-amber-500/20 group-hover:bg-amber-500/20' 
+                    ? 'bg-blue-700/10 border-blue-700/20 group-hover:bg-blue-700/20' 
                     : 'bg-gray-700 border-gray-600'
                 }`}>
-                  <RiCalculatorLine className={`h-6 w-6 ${canUseFeature('taxExports') ? 'text-amber-300' : 'text-gray-500'}`} />
+                  <RiCalculatorLine className={`h-6 w-6 ${canUseFeature('taxExports') ? 'text-blue-300' : 'text-gray-500'}`} />
                 </div>
                 <h3 className="ml-3 text-lg font-semibold text-white">Tax Exports</h3>
                 {!canUseFeature('taxExports') && (
@@ -704,7 +695,7 @@ export default function Dashboard() {
               {canUseFeature('taxExports') ? (
                 <Link
                   to="/tax-exports"
-                  className="inline-flex items-center text-amber-300 hover:text-amber-200 font-medium"
+                  className="inline-flex items-center text-blue-300 hover:text-blue-200 font-medium"
                 >
                   Export Reports
                   <RiArrowRightLine className="ml-1 h-4 w-4" />
@@ -733,18 +724,18 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Link
                 to="/purchases"
-                className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-slate-500"
+                className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-blue-400"
               >
-                <RiEyeLine className="h-5 w-5 text-slate-300 mr-3" />
+                <RiEyeLine className="h-5 w-5 text-blue-300 mr-3" />
                 <span className="text-white font-medium">View All Purchases</span>
               </Link>
               
               {canUseFeature('receiptScanner') && (
                 <Link
                   to="/receipt-scanner"
-                  className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-primary-500"
+                  className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-blue-500"
                 >
-                  <RiScanLine className="h-5 w-5 text-primary-300 mr-3" />
+                  <RiScanLine className="h-5 w-5 text-blue-300 mr-3" />
                   <span className="text-white font-medium">Quick Scan</span>
                 </Link>
               )}
@@ -752,18 +743,18 @@ export default function Dashboard() {
               {canUseFeature('taxExports') && (
                 <Link
                   to="/tax-exports"
-                  className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-amber-500"
+                  className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-blue-700"
                 >
-                  <RiCalculatorLine className="h-5 w-5 text-amber-300 mr-3" />
+                  <RiCalculatorLine className="h-5 w-5 text-blue-300 mr-3" />
                   <span className="text-white font-medium">Generate Report</span>
                 </Link>
               )}
               
               <Link
                 to="/billing"
-                className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-indigo-500"
+                className="flex items-center p-3 bg-gray-800 rounded-lg hover:bg-gray-700 transition-colors border border-gray-600 hover:border-blue-600"
               >
-                <RiEqualizerLine className="h-5 w-5 text-indigo-300 mr-3" />
+                <RiEqualizerLine className="h-5 w-5 text-blue-300 mr-3" />
                 <span className="text-white font-medium">Usage & Billing</span>
               </Link>
             </div>
