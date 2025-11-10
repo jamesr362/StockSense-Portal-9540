@@ -10,38 +10,38 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
   const { canUseFeature, currentPlan } = useFeatureAccess();
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: RiDashboardLine },
-    { name: 'Purchase Tracking', href: '/purchases', icon: RiShoppingBag3Line },
+    { name: 'Dashboard', href: '/app/dashboard', icon: RiDashboardLine },
+    { name: 'Purchase Tracking', href: '/app/purchases', icon: RiShoppingBag3Line },
     { 
       name: 'Receipt Scanner', 
-      href: '/receipt-scanner', 
+      href: '/app/receipt-scanner', 
       icon: RiScanLine,
       requiresFeature: 'receiptScanner',
       planRequired: 'Professional'
     },
     { 
       name: 'Excel Importer', 
-      href: '/excel-importer', 
+      href: '/app/excel-importer', 
       icon: RiFileExcelLine,
       requiresFeature: 'excelImporter',
       planRequired: 'Professional'
     },
     { 
       name: 'Tax Exports', 
-      href: '/tax-exports', 
+      href: '/app/tax-exports', 
       icon: RiCalculatorLine,
       requiresFeature: 'taxExports',
       planRequired: 'Professional'
     },
-    { name: 'Support', href: '/support', icon: RiCustomerServiceLine },
-    { name: 'Settings', href: '/settings', icon: RiSettings3Line },
+    { name: 'Support', href: '/app/support', icon: RiCustomerServiceLine },
+    { name: 'Settings', href: '/app/settings', icon: RiSettings3Line },
   ];
 
   // Add admin routes based on user role
   if (user?.role === 'admin') {
     navigation.push({
       name: 'Admin Panel',
-      href: '/admin',
+      href: '/app/admin',
       icon: RiAdminLine,
     });
   }
@@ -49,19 +49,21 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
   if (user?.role === 'platformadmin') {
     navigation.push({
       name: 'Platform Admin',
-      href: '/platform-admin',
+      href: '/app/platform-admin',
       icon: RiGlobalLine,
     });
   }
 
   const isActive = (href) => {
-    if (href === '/dashboard') {
-      return location.pathname === '/' || location.pathname === '/dashboard';
+    // Handle exact matches for nested routes
+    if (href === '/app/dashboard') {
+      return location.pathname === '/app/dashboard' || location.pathname === '/app' || location.pathname === '/app/';
     }
-    if (href === '/purchases') {
-      return location.pathname === '/inventory' || location.pathname === '/purchases';
+    if (href === '/app/purchases') {
+      return location.pathname === '/app/purchases' || location.pathname === '/app/inventory';
     }
-    return location.pathname.startsWith(href);
+    // For other routes, check if current path starts with the href
+    return location.pathname === href || location.pathname.startsWith(href + '/');
   };
 
   const handleNavClick = (href, requiresFeature) => {
@@ -112,23 +114,24 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         {navigation.map((item) => {
           const hasFeatureAccess = !item.requiresFeature || canUseFeature(item.requiresFeature);
+          const itemIsActive = isActive(item.href);
           
           return (
             <Link
               key={item.name}
               to={item.href}
               onClick={() => handleNavClick(item.href, item.requiresFeature)}
-              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                isActive(item.href)
-                  ? 'bg-primary-900 text-primary-100'
+              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                itemIsActive
+                  ? 'bg-primary-900 text-primary-100 border-l-4 border-primary-500'
                   : hasFeatureAccess
-                    ? 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                    : 'text-gray-500 hover:bg-gray-800 hover:text-gray-400'
+                    ? 'text-gray-300 hover:bg-gray-800 hover:text-white border-l-4 border-transparent hover:border-gray-600'
+                    : 'text-gray-500 hover:bg-gray-800 hover:text-gray-400 border-l-4 border-transparent'
               }`}
             >
               <item.icon
-                className={`mr-3 flex-shrink-0 h-5 w-5 ${
-                  isActive(item.href)
+                className={`mr-3 flex-shrink-0 h-5 w-5 transition-colors duration-200 ${
+                  itemIsActive
                     ? 'text-primary-300'
                     : hasFeatureAccess
                       ? 'text-gray-400 group-hover:text-gray-300'
@@ -137,7 +140,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               />
               <span className="flex-1">{item.name}</span>
               {!hasFeatureAccess && item.planRequired && (
-                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-700 text-gray-400 rounded">
+                <span className="ml-2 px-2 py-0.5 text-xs bg-gray-700 text-gray-400 rounded flex-shrink-0">
                   Pro
                 </span>
               )}
@@ -167,7 +170,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
         </div>
         <button
           onClick={logout}
-          className="mt-3 w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors"
+          className="mt-3 w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-white rounded-md transition-colors duration-200"
         >
           Sign out
         </button>
@@ -177,9 +180,9 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <div className="hidden lg:flex lg:w-72 lg:flex-col lg:fixed lg:inset-y-0">
-        <div className="flex flex-col flex-grow bg-gray-900 overflow-y-auto border-r border-gray-800">
+      {/* Desktop sidebar - Fixed positioning with proper z-index */}
+      <div className="hidden lg:flex lg:w-72 lg:flex-col lg:fixed lg:inset-y-0 lg:z-30">
+        <div className="flex flex-col flex-grow bg-gray-900 overflow-y-auto border-r border-gray-800 shadow-xl">
           {sidebarContent}
         </div>
       </div>
@@ -209,7 +212,7 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
               transition={{ type: 'tween', duration: 0.3 }}
               className="fixed inset-y-0 left-0 z-50 w-72 bg-gray-900 lg:hidden"
             >
-              <div className="flex flex-col h-full overflow-y-auto border-r border-gray-800">
+              <div className="flex flex-col h-full overflow-y-auto border-r border-gray-800 shadow-xl">
                 {sidebarContent}
               </div>
             </motion.div>
