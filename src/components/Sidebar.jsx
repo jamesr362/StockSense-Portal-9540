@@ -180,8 +180,8 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
 
   return (
     <>
-      {/* Desktop sidebar - Only content, positioning handled by Layout */}
-      <div className="hidden lg:flex lg:flex-col lg:h-full lg:w-full">
+      {/* Desktop sidebar - Fixed position */}
+      <div className="hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 lg:w-80 lg:z-40">
         {sidebarContent}
       </div>
 

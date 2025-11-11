@@ -14,15 +14,10 @@ export default function Settings() {
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="h-full w-full"
-    >
-      <div className="h-full flex flex-col">
+    <div className="min-h-screen bg-gray-900">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex-shrink-0 mb-8">
+        <div className="mb-8">
           <div className="sm:flex sm:items-center">
             <div className="sm:flex-auto">
               <h1 className="text-2xl font-semibold text-white">Settings</h1>
@@ -34,7 +29,7 @@ export default function Settings() {
         </div>
 
         {/* Tabs */}
-        <div className="flex-shrink-0 mb-8">
+        <div className="mb-8">
           <div className="border-b border-gray-700">
             <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
               {tabs.map((tab) => (
@@ -56,13 +51,13 @@ export default function Settings() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-h-0 w-full">
+        <div className="w-full">
           {activeTab === 'general' && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
-              className="h-full w-full"
+              className="w-full"
             >
               <div className="bg-gray-800 rounded-lg p-6 w-full">
                 <h3 className="text-lg font-medium leading-6 text-white mb-6">
@@ -119,13 +114,13 @@ export default function Settings() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
-              className="h-full w-full"
+              className="w-full"
             >
               <SubscriptionManagement />
             </motion.div>
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
