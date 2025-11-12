@@ -243,84 +243,26 @@ export const getCustomerSubscription = async (customerId) => {
   }
 };
 
-// 🎯 ENHANCED CANCEL SUBSCRIPTION - GUARANTEED STRIPE API CALLS
+// 🎯 CRITICAL FIX: CANCEL SUBSCRIPTION WITH PROPER CUSTOMER ID PASSING
 export const cancelSubscription = async (subscriptionId, customerId = null) => {
   try {
-    logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_INITIATED', { subscriptionId });
+    logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_INITIATED', { subscriptionId, customerId });
     
-    console.log('🎯 ENHANCED CANCELLATION: Starting process...');
-    console.log('📋 Subscription ID:', subscriptionId);
-    console.log('👤 Customer ID:', customerId);
+    console.log('🎯 CRITICAL FIX: Starting enhanced cancellation process...');
+    console.log('📋 Parameters:', {
+      subscriptionId,
+      customerId,
+      subscriptionIdFormat: subscriptionId?.startsWith('sub_') ? 'STRIPE_FORMAT' : 'LOCAL_FORMAT'
+    });
 
-    // Validation: Check if subscription ID looks like a Stripe ID
+    // Validation: Check if subscription ID is provided
     if (!subscriptionId || typeof subscriptionId !== 'string') {
       throw new Error('Invalid subscription ID provided');
     }
 
-    // Step 1: Debug the subscription first to understand what we're working with
-    console.log('🔍 STEP 1: Running debug check...');
-    let debugResult = null;
-    try {
-      debugResult = await debugSubscription(subscriptionId, customerId);
-      console.log('🔍 DEBUG RESULT:', debugResult);
-      
-      // Check if we found any issues
-      if (!debugResult.debug.stripeConnection?.working) {
-        throw new Error('🚨 Stripe connection failed - check API key configuration in Netlify environment variables');
-      }
-
-      // If the subscription ID format is wrong, try to find the correct one
-      if (debugResult.debug.subscriptionIdFormat === 'invalid_format' && 
-          debugResult.debug.customerSubscriptions && 
-          Array.isArray(debugResult.debug.customerSubscriptions) &&
-          debugResult.debug.customerSubscriptions.length > 0) {
-        
-        // Find an active subscription to cancel
-        const activeSubscription = debugResult.debug.customerSubscriptions.find(
-          sub => sub.status === 'active' && !sub.cancel_at_period_end
-        );
-        
-        if (activeSubscription) {
-          console.log('🎯 FOUND ACTIVE SUBSCRIPTION IN STRIPE:', activeSubscription.id);
-          console.log('🔄 SWITCHING TO CORRECT STRIPE SUBSCRIPTION ID');
-          subscriptionId = activeSubscription.id; // Use the correct Stripe subscription ID
-        } else {
-          console.log('⚠️ No active subscriptions found to cancel in Stripe');
-          return {
-            status: 'canceled',
-            cancel_at_period_end: true,
-            current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
-            canceled_at: Math.floor(Date.now() / 1000),
-            stripeVerified: false,
-            message: 'No active subscription found to cancel in Stripe'
-          };
-        }
-      }
-
-      // If subscription not found in Stripe, handle as local-only
-      if (debugResult.debug.stripeSubscription?.found === false && 
-          debugResult.debug.subscriptionIdFormat === 'valid_stripe_format') {
-        console.log('💡 Subscription not found in Stripe - handling as local cancellation');
-        return {
-          status: 'canceled',
-          cancel_at_period_end: true,
-          current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
-          canceled_at: Math.floor(Date.now() / 1000),
-          stripeVerified: false,
-          message: 'Subscription not found in Stripe - processed as local cancellation'
-        };
-      }
-
-    } catch (debugError) {
-      console.log('⚠️ Debug failed, proceeding with original cancellation attempt:', debugError.message);
-    }
-
-    // Step 2: Proceed with actual Stripe API cancellation
-    console.log('🎯 STEP 2: Calling Stripe cancellation API...');
-    console.log('📋 Final subscription ID to cancel:', subscriptionId);
-    console.log('🚀 MAKING REAL STRIPE API CALL VIA NETLIFY FUNCTION...');
+    console.log('🚀 CALLING NETLIFY FUNCTION WITH PROPER PARAMETERS...');
     
-    // 🔥 CRITICAL: Call the REAL Netlify function that will call Stripe API
+    // 🔥 CRITICAL: Call the REAL Netlify function with BOTH subscriptionId AND customerId
     const response = await fetch('/.netlify/functions/cancel-subscription', {
       method: 'POST',
       headers: {
@@ -329,12 +271,13 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
       },
       body: JSON.stringify({
         subscriptionId: subscriptionId,
+        customerId: customerId, // 🎯 CRITICAL: Pass the customer ID here!
         cancelAtPeriodEnd: true // This prevents future charges while maintaining access
       })
     });
 
     console.log('📡 Netlify function response status:', response.status);
-    console.log('📡 Netlify function response headers:', Object.fromEntries(response.headers.entries()));
+    console.log('📡 Netlify function response ok:', response.ok);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -348,7 +291,7 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
       }
       
       // Enhanced error handling with specific solutions
-      if (errorData.message?.includes('STRIPE_SECRET_KEY') || errorData.critical) {
+      if (errorData.message?.includes('STRIPE_SECRET_KEY') || errorData.error?.includes('not configured')) {
         throw new Error('🚨 CRITICAL: Stripe not configured in Netlify. Go to your Netlify dashboard → Site Settings → Environment Variables and add STRIPE_SECRET_KEY with your Stripe secret key.');
       }
       
@@ -356,48 +299,55 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
         throw new Error('🚨 Stripe API authentication failed. Check that your STRIPE_SECRET_KEY in Netlify is correct and valid.');
       }
       
-      throw new Error(errorData.message || `HTTP ${response.status}: ${errorText}`);
+      throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('🎉 REAL STRIPE CANCELLATION RESULT:', result);
+    console.log('🎉 NETLIFY FUNCTION SUCCESS RESULT:', result);
     
     // Enhanced success verification
     if (result.success) {
       if (result.localOnly) {
-        console.log('💡 Local-only cancellation processed (payment link subscription)');
+        console.log('💡 Local-only cancellation processed (no Stripe subscription found)');
+        logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED_LOCAL', { 
+          subscriptionId,
+          customerId,
+          message: result.message
+        });
       } else {
         console.log('🎯 REAL STRIPE API CANCELLATION CONFIRMED!');
-        console.log('📊 Stripe API calls made:', result.apiCallsMade);
         console.log('📊 Stripe verification:', result.verification);
         console.log('✅ This cancellation is now visible in your Stripe dashboard');
-        console.log('🔗 Dashboard note:', result.dashboardNote);
+        
+        logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED', { 
+          subscriptionId,
+          customerId,
+          realStripeSubscriptionId: result.realStripeSubscriptionId,
+          stripeVerified: result.stripeVerified,
+          foundViaCustomerSearch: result.foundViaCustomerSearch
+        });
       }
-      
-      logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED', { 
-        subscriptionId,
-        stripeVerified: !result.localOnly,
-        apiCallsMade: result.apiCallsMade
-      });
       
       return {
         status: result.subscription.cancel_at_period_end ? 'active' : 'canceled',
         cancel_at_period_end: result.subscription.cancel_at_period_end,
         current_period_end: result.subscription.current_period_end,
         canceled_at: result.subscription.canceled_at,
-        stripeVerified: !result.localOnly,
-        message: result.message,
-        dashboardNote: result.dashboardNote,
-        apiCallsMade: result.apiCallsMade
+        stripeVerified: result.stripeVerified,
+        foundViaCustomerSearch: result.foundViaCustomerSearch,
+        originalSubscriptionId: result.originalSubscriptionId,
+        realStripeSubscriptionId: result.realStripeSubscriptionId,
+        message: result.message
       };
     } else {
-      throw new Error(result.message || 'Cancellation failed');
+      throw new Error(result.message || result.error || 'Cancellation failed');
     }
     
   } catch (error) {
-    console.error('❌ REAL cancellation request failed:', error);
+    console.error('❌ CRITICAL: Cancellation request failed:', error);
     logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_FAILED', { 
       subscriptionId, 
+      customerId,
       error: error.message 
     });
     

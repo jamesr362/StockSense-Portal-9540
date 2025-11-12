@@ -51,7 +51,9 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 new Date(subscriptionData.current_period_end || Date.now() + 30*24*60*60*1000).getTime() / 1000
               ),
               cancel_at_period_end: subscriptionData.cancel_at_period_end || false,
-              canceled_at: subscriptionData.canceled_at
+              canceled_at: subscriptionData.canceled_at,
+              // 🎯 CRITICAL: Store the full subscription data for proper ID handling
+              supabaseData: subscriptionData
             });
 
             // Load additional data
@@ -104,7 +106,9 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       setActionLoading(true);
       console.log('🔍 Running subscription debug...');
       
-      const result = await stripeService.debugSubscription(subscription?.id, customerId);
+      // 🎯 FIXED: Pass the correct stripe_subscription_id for debugging
+      const stripeSubscriptionId = subscription?.supabaseData?.stripe_subscription_id || subscription?.id;
+      const result = await stripeService.debugSubscription(stripeSubscriptionId, customerId);
       setDebugInfo(result);
       setShowDebug(true);
       
@@ -126,14 +130,21 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       setSuccess(null);
 
       console.log('🔄 Starting ULTIMATE subscription cancellation process...');
+      
+      // 🎯 CRITICAL FIX: Use the actual stripe_subscription_id from Supabase data
+      const stripeSubscriptionId = subscription?.supabaseData?.stripe_subscription_id || subscription?.id;
+      const stripeCustomerId = subscription?.supabaseData?.stripe_customer_id || customerId;
+      
       console.log('📋 Subscription details:', {
-        id: subscription.id,
-        customerId: customerId,
-        idStartsWithSub: subscription.id?.startsWith('sub_')
+        displayId: subscription.id,
+        actualStripeSubscriptionId: stripeSubscriptionId,
+        stripeCustomerId: stripeCustomerId,
+        hasSupabaseData: !!subscription?.supabaseData,
+        idStartsWithSub: stripeSubscriptionId?.startsWith('sub_')
       });
 
-      // 🎯 ENHANCED: Pass customer ID for better subscription finding
-      const cancelResult = await stripeService.cancelSubscription(subscription.id, customerId);
+      // 🎯 ENHANCED: Pass the actual Stripe subscription ID and customer ID
+      const cancelResult = await stripeService.cancelSubscription(stripeSubscriptionId, stripeCustomerId);
       
       console.log('✅ ULTIMATE Stripe cancellation result:', cancelResult);
 
@@ -197,6 +208,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       logSecurityEvent('SUBSCRIPTION_CANCELLED_SUCCESS', {
         customerId,
         subscriptionId: subscription.id,
+        stripeSubscriptionId: stripeSubscriptionId,
         realSubscriptionId: cancelResult.realStripeSubscriptionId,
         cancelAtPeriodEnd: cancelResult.cancel_at_period_end,
         stripeVerified: cancelResult.stripeVerified,
@@ -218,6 +230,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       logSecurityEvent('SUBSCRIPTION_CANCEL_FAILED', {
         customerId,
         subscriptionId: subscription?.id,
+        stripeSubscriptionId: subscription?.supabaseData?.stripe_subscription_id,
         error: err.message
       });
     } finally {
@@ -232,8 +245,11 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       setActionLoading(true);
       setError(null);
 
+      // 🎯 FIXED: Use the actual stripe_subscription_id for updates
+      const stripeSubscriptionId = subscription?.supabaseData?.stripe_subscription_id || subscription?.id;
+      
       // Call the real update service
-      await stripeService.updateSubscription(subscription.id, newPriceId);
+      await stripeService.updateSubscription(stripeSubscriptionId, newPriceId);
 
       // Try to update in Supabase first
       if (supabase) {
@@ -274,8 +290,8 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
     try {
       setActionLoading(true);
       
-      // Get customer ID from subscription or use the email
-      const stripeCustomerId = subscription?.customer || customerId;
+      // 🎯 FIXED: Get customer ID from Supabase data or use the email
+      const stripeCustomerId = subscription?.supabaseData?.stripe_customer_id || subscription?.customer || customerId;
       
       // Call the real portal service
       await stripeService.createPortalSession(stripeCustomerId);
@@ -461,9 +477,14 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                   {currentPlan?.price === 0 ? 'Free Plan' : `£${currentPlan?.price || 0}/month`}
                 </p>
                 <p className="text-gray-500 text-xs">
-                  Subscription ID: {subscription.id}
+                  Display ID: {subscription.id}
                 </p>
-                {subscription.id && !subscription.id.startsWith('sub_') && (
+                {subscription?.supabaseData?.stripe_subscription_id && (
+                  <p className="text-blue-400 text-xs">
+                    🎯 Stripe ID: {subscription.supabaseData.stripe_subscription_id}
+                  </p>
+                )}
+                {subscription.id && !subscription.id.startsWith('sub_') && !subscription?.supabaseData?.stripe_subscription_id?.startsWith('sub_') && (
                   <p className="text-yellow-400 text-xs">
                     ⚠️ Local subscription - will search for Stripe subscription on cancel
                   </p>
@@ -898,7 +919,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 )}
               </button>
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
     </div>
