@@ -10,7 +10,6 @@ import ReceiptScanner from './pages/ReceiptScanner';
 import ExcelImporter from './pages/ExcelImporter';
 import TaxExports from './pages/TaxExports';
 import Admin from './pages/Admin';
-import PlatformAdmin from './pages/PlatformAdmin';
 import Settings from './pages/Settings';
 import SubscriptionManagement from './pages/SubscriptionManagement';
 import Support from './pages/Support';
@@ -20,7 +19,6 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
-import PlatformAdminRoute from './components/PlatformAdminRoute';
 import StripeProvider from './components/StripeProvider';
 import WebhookListener from './components/WebhookListener';
 
@@ -181,14 +179,6 @@ function AppRoutes() {
               </AdminRoute>
             }
           />
-          <Route
-            path="platform-admin"
-            element={
-              <PlatformAdminRoute>
-                <PlatformAdmin />
-              </PlatformAdminRoute>
-            }
-          />
         </Route>
 
         {/* Root Route - Landing Page */}
@@ -205,7 +195,6 @@ function AppRoutes() {
         <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
         <Route path="/subscription" element={<Navigate to="/app/subscription" replace />} />
         <Route path="/admin" element={<Navigate to="/app/admin" replace />} />
-        <Route path="/platform-admin" element={<Navigate to="/app/platform-admin" replace />} />
         
         {/* Catch all route - redirect to landing */}
         <Route path="*" element={<Navigate to="/" replace />} />

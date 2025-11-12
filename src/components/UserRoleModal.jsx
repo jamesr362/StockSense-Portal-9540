@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiCloseLine, RiUserLine, RiAdminLine, RiGlobalLine } from 'react-icons/ri';
+import { RiCloseLine, RiUserLine, RiAdminLine } from 'react-icons/ri';
 import { useState } from 'react';
 
 export default function UserRoleModal({ isOpen, onClose, onSave, user }) {
@@ -28,9 +28,6 @@ export default function UserRoleModal({ isOpen, onClose, onSave, user }) {
   };
 
   if (!user) return null;
-
-  // Prevent role changes for platform admin accounts
-  const isPlatformAdmin = user.role === 'platformadmin';
 
   return (
     <AnimatePresence>
@@ -69,81 +66,69 @@ export default function UserRoleModal({ isOpen, onClose, onSave, user }) {
                     Change User Role
                   </h3>
 
-                  {isPlatformAdmin ? (
-                    <div className="mt-4 p-3 bg-red-900/20 border border-red-700 rounded-md">
-                      <p className="text-sm text-red-300">
-                        Platform administrator roles cannot be modified for security reasons.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mt-4 p-3 bg-gray-700 rounded-md">
-                        <p className="text-sm text-gray-300">
-                          <strong>User:</strong> {user.businessName}
-                        </p>
-                        <p className="text-sm text-gray-300">
-                          <strong>Email:</strong> {user.email}
-                        </p>
-                      </div>
+                  <div className="mt-4 p-3 bg-gray-700 rounded-md">
+                    <p className="text-sm text-gray-300">
+                      <strong>User:</strong> {user.businessName}
+                    </p>
+                    <p className="text-sm text-gray-300">
+                      <strong>Email:</strong> {user.email}
+                    </p>
+                  </div>
 
-                      <div className="mt-6 space-y-4">
-                        {roles.map((role) => (
-                          <div
-                            key={role.value}
-                            className={`relative rounded-lg border p-4 cursor-pointer transition-colors ${
-                              selectedRole === role.value
-                                ? 'border-primary-500 bg-primary-50/10'
-                                : 'border-gray-600 hover:border-gray-500'
-                            }`}
-                            onClick={() => setSelectedRole(role.value)}
-                          >
-                            <div className="flex items-start">
-                              <div className="flex-shrink-0">
-                                <input
-                                  type="radio"
-                                  name="role"
-                                  value={role.value}
-                                  checked={selectedRole === role.value}
-                                  onChange={() => setSelectedRole(role.value)}
-                                  className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
-                                />
-                              </div>
-                              <div className="ml-3 flex-1">
-                                <div className="flex items-center">
-                                  <role.icon className={`h-5 w-5 mr-2 ${role.color}`} />
-                                  <label className="block text-sm font-medium text-white">
-                                    {role.label}
-                                  </label>
-                                </div>
-                                <p className="text-sm text-gray-400 mt-1">
-                                  {role.description}
-                                </p>
-                              </div>
-                            </div>
+                  <div className="mt-6 space-y-4">
+                    {roles.map((role) => (
+                      <div
+                        key={role.value}
+                        className={`relative rounded-lg border p-4 cursor-pointer transition-colors ${
+                          selectedRole === role.value
+                            ? 'border-primary-500 bg-primary-50/10'
+                            : 'border-gray-600 hover:border-gray-500'
+                        }`}
+                        onClick={() => setSelectedRole(role.value)}
+                      >
+                        <div className="flex items-start">
+                          <div className="flex-shrink-0">
+                            <input
+                              type="radio"
+                              name="role"
+                              value={role.value}
+                              checked={selectedRole === role.value}
+                              onChange={() => setSelectedRole(role.value)}
+                              className="h-4 w-4 text-primary-600 border-gray-300 focus:ring-primary-500"
+                            />
                           </div>
-                        ))}
+                          <div className="ml-3 flex-1">
+                            <div className="flex items-center">
+                              <role.icon className={`h-5 w-5 mr-2 ${role.color}`} />
+                              <label className="block text-sm font-medium text-white">
+                                {role.label}
+                              </label>
+                            </div>
+                            <p className="text-sm text-gray-400 mt-1">
+                              {role.description}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </>
-                  )}
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                {!isPlatformAdmin && (
-                  <button
-                    type="button"
-                    className="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
-                    onClick={handleSave}
-                  >
-                    Save Changes
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={handleSave}
+                >
+                  Save Changes
+                </button>
                 <button
                   type="button"
                   className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-600 bg-gray-700 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
                   onClick={onClose}
                 >
-                  {isPlatformAdmin ? 'Close' : 'Cancel'}
+                  Cancel
                 </button>
               </div>
             </motion.div>

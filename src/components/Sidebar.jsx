@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { RiDashboardLine, RiShoppingBag3Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiGlobalLine, RiSettings3Line, RiCustomerServiceLine, RiTeamLine } from 'react-icons/ri';
+import { RiDashboardLine, RiShoppingBag3Line, RiScanLine, RiFileExcelLine, RiCalculatorLine, RiAdminLine, RiSettings3Line, RiCustomerServiceLine } from 'react-icons/ri';
 import { useAuth } from '../context/AuthContext';
 import useFeatureAccess from '../hooks/useFeatureAccess';
 
@@ -43,14 +43,6 @@ export default function Sidebar({ isMobileMenuOpen, onMobileMenuClose }) {
       name: 'Admin Panel',
       href: '/admin',
       icon: RiAdminLine,
-    });
-  }
-
-  if (user?.role === 'platformadmin') {
-    navigation.push({
-      name: 'Platform Admin',
-      href: '/platform-admin',
-      icon: RiGlobalLine,
     });
   }
 

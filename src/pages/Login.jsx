@@ -81,12 +81,7 @@ export default function Login() {
       console.log('Stored password exists:',!!user.password);
       console.log('Salt exists:',!!user.salt);
 
-      // Special handling for platform admin - use plain text comparison
-      if (user.email === 'platformadmin@trackio.com' && user.role === 'platformadmin') {
-        console.log('Platform admin login - using direct password comparison');
-        passwordValid = user.password === password;
-        console.log('Platform admin password match:', passwordValid);
-      } else if (user.salt) {
+      if (user.salt) {
         // New hashed password system
         console.log('Using hashed password verification');
         passwordValid=verifyPassword(password,user.password,user.salt);
@@ -110,7 +105,7 @@ export default function Login() {
       console.log('Password verification successful!');
 
       // Try to sign in with Supabase Auth (if available) - but don't fail login if this fails
-      if (supabase && user.email !== 'platformadmin@trackio.com') {
+      if (supabase) {
         try {
           const {data: authData,error: authError}=await supabase.auth.signInWithPassword({
             email: sanitizedEmail,
@@ -156,10 +151,7 @@ export default function Login() {
       await login(userData);
 
       // Navigate based on role
-      if (user.role==='platformadmin') {
-        console.log('Redirecting to platform admin...');
-        navigate('/platform-admin',{replace: true});
-      } else if (user.role==='admin') {
+      if (user.role==='admin') {
         console.log('Redirecting to admin...');
         navigate('/admin',{replace: true});
       } else {

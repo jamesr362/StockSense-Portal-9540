@@ -134,9 +134,7 @@ export default function Register() {
       await login(loginData);
 
       // Navigate based on role
-      if (newUser.role === 'platformadmin') {
-        navigate('/platform-admin', {replace: true});
-      } else if (newUser.role === 'admin') {
+      if (newUser.role === 'admin') {
         navigate('/admin', {replace: true});
       } else {
         navigate('/dashboard', {replace: true});

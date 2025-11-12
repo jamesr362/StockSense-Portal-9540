@@ -63,100 +63,12 @@ async function initDB() {
     });
 
     console.log('Database initialized successfully');
-    
-    // Create default platform admin if it doesn't exist
-    await createDefaultPlatformAdmin();
-    
     return dbInstance;
   } catch (error) {
     console.error('Error initializing database:', error);
     throw error;
   }
 }
-
-const createDefaultPlatformAdmin = async () => {
-  try {
-    const platformAdminEmail = 'platformadmin@trackio.com';
-    
-    console.log('Creating/checking platform admin account...');
-
-    // Try Supabase first
-    if (supabaseAvailable()) {
-      try {
-        console.log('Checking for platform admin in Supabase...');
-        const existingAdmin = await getUserByEmailSupabase(platformAdminEmail);
-        
-        if (!existingAdmin) {
-          console.log('Creating platform admin in Supabase...');
-          await createUserSupabase({
-            email: platformAdminEmail,
-            password: 'admin123', // Plain text password for platform admin
-            businessName: 'Trackio Platform'
-          });
-          console.log('✅ Created default platform admin account in Supabase');
-        } else {
-          console.log('✅ Platform admin already exists in Supabase');
-          // Ensure the password is correct
-          console.log('Updating platform admin password to ensure it is correct...');
-          const { supabase } = await import('../lib/supabase');
-          if (supabase) {
-            try {
-              const { error: updateError } = await supabase
-                .from('users_tb2k4x9p1m')
-                .update({
-                  password: 'admin123',
-                  business_name: 'Trackio Platform',
-                  role: 'platformadmin'
-                })
-                .eq('email', platformAdminEmail);
-
-              if (!updateError) {
-                console.log('✅ Updated platform admin credentials');
-              }
-            } catch (updateErr) {
-              console.log('Could not update platform admin in Supabase:', updateErr);
-            }
-          }
-        }
-        return;
-      } catch (error) {
-        console.log('Supabase not available, falling back to IndexedDB:', error.message);
-      }
-    }
-
-    // Fallback to IndexedDB
-    const db = await dbInstance;
-    const tx = db.transaction(USERS_STORE, 'readwrite');
-    const store = tx.objectStore(USERS_STORE);
-    
-    const existingAdmin = await store.get(platformAdminEmail);
-    
-    if (!existingAdmin) {
-      const platformAdmin = {
-        email: platformAdminEmail,
-        password: 'admin123', // Plain text password for platform admin
-        businessName: 'Trackio Platform',
-        role: 'platformadmin',
-        createdAt: new Date().toISOString(),
-        lastLogin: null
-      };
-      
-      await store.add(platformAdmin);
-      console.log('✅ Created default platform admin account in IndexedDB');
-    } else {
-      // Update existing admin to ensure correct password and role
-      existingAdmin.password = 'admin123';
-      existingAdmin.role = 'platformadmin';
-      existingAdmin.businessName = 'Trackio Platform';
-      await store.put(existingAdmin);
-      console.log('✅ Updated existing platform admin account');
-    }
-    
-    await tx.done;
-  } catch (error) {
-    console.error('Error creating default platform admin:', error);
-  }
-};
 
 // Hybrid functions that try Supabase first, then fallback to IndexedDB
 export const getAllUsers = async () => {
@@ -282,9 +194,7 @@ export const createUser = async (userData) => {
 
     // Determine user role based on email
     let role = 'user';
-    if (email === 'platformadmin@trackio.com') {
-      role = 'platformadmin';
-    } else if (email.endsWith('@admin')) {
+    if (email.endsWith('@admin')) {
       role = 'admin';
     }
 
@@ -324,11 +234,6 @@ export const deleteUser = async (email) => {
 
   // Fallback to IndexedDB
   try {
-    // Prevent deletion of platform admin
-    if (email.toLowerCase() === 'platformadmin@trackio.com') {
-      throw new Error('Platform admin account cannot be deleted');
-    }
-
     const db = await initDB();
     
     // Start transactions for both stores
@@ -374,11 +279,6 @@ export const updateUserRole = async (email, newRole) => {
 
   // Fallback to IndexedDB
   try {
-    // Prevent role changes for platform admin
-    if (email.toLowerCase() === 'platformadmin@trackio.com') {
-      throw new Error('Platform admin role cannot be changed');
-    }
-
     const db = await initDB();
     const tx = db.transaction(USERS_STORE, 'readwrite');
     const store = tx.objectStore(USERS_STORE);
@@ -391,11 +291,6 @@ export const updateUserRole = async (email, newRole) => {
     // STRICT ADMIN CONTROL - Only @admin emails can be admins
     if (newRole === 'admin' && !email.toLowerCase().endsWith('@admin')) {
       throw new Error('Only users with @admin email addresses can be granted administrator privileges');
-    }
-
-    // Prevent setting platformadmin role
-    if (newRole === 'platformadmin') {
-      throw new Error('Platform admin role cannot be assigned');
     }
 
     user.role = newRole;
@@ -637,7 +532,7 @@ export const updateInventoryItem = updatePurchaseItem;
 export const deleteInventoryItem = deletePurchaseItem;
 export const searchInventoryItems = searchPurchaseItems;
 
-// Platform admin specific functions
+// Admin specific functions
 export const getPlatformStats = async () => {
   try {
     // Try Supabase first
@@ -668,7 +563,6 @@ export const getPlatformStats = async () => {
       totalUsers: allUsers.length,
       totalAdmins: allUsers.filter(u => u.role === 'admin').length,
       totalRegularUsers: allUsers.filter(u => u.role === 'user').length,
-      totalPlatformAdmins: allUsers.filter(u => u.role === 'platformadmin').length,
       totalPurchaseItems: allPurchaseItems.length,
       recentUsers: allUsers
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
