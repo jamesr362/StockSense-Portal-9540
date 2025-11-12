@@ -2,10 +2,8 @@ import { getStripeConfig } from '../lib/stripe';
 import { logSecurityEvent } from '../utils/security';
 import { getStripeConfigSupabase, updateStripeConfigSupabase } from './supabaseDb';
 
-// Get the current Stripe configuration
 export const getStripeConfiguration = async () => {
   try {
-    // Try to get from Supabase first
     const supabaseConfig = await getStripeConfigSupabase();
     if (supabaseConfig) {
       return {
@@ -17,21 +15,17 @@ export const getStripeConfiguration = async () => {
       };
     }
     
-    // Fallback to local config
     return getStripeConfig();
   } catch (error) {
     console.error('Error getting Stripe configuration:', error);
-    // Fallback to local config
     return getStripeConfig();
   }
 };
 
-// Update Stripe configuration
 export const updateStripeConfiguration = async (config) => {
   try {
     logSecurityEvent('STRIPE_CONFIG_UPDATE_INITIATED', { testMode: config.testMode });
     
-    // Try to update in Supabase
     const result = await updateStripeConfigSupabase(config);
     
     logSecurityEvent('STRIPE_CONFIG_UPDATED', { 
@@ -47,47 +41,12 @@ export const updateStripeConfiguration = async (config) => {
   }
 };
 
-// Debug subscription - ENHANCED FUNCTION
-export const debugSubscription = async (subscriptionId, customerId) => {
-  try {
-    console.log('🔍 DEBUG: Starting subscription debug...');
-    
-    const response = await fetch('/.netlify/functions/debug-subscription', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        subscriptionId: subscriptionId,
-        customerId: customerId
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Debug failed');
-    }
-
-    const result = await response.json();
-    console.log('🔍 DEBUG RESULT:', result);
-    
-    return result;
-  } catch (error) {
-    console.error('❌ Debug error:', error);
-    throw error;
-  }
-};
-
-// Test Stripe connection - REAL API CALL
 export const testStripeConnection = async (config) => {
   try {
     logSecurityEvent('STRIPE_CONNECTION_TEST_INITIATED', { 
       testMode: config?.testMode,
     });
     
-    console.log('🔄 Testing Stripe connection via Netlify function...');
-    
-    // Call the REAL Netlify function to test connection
     const response = await fetch('/.netlify/functions/test-stripe-connection', {
       method: 'POST',
       headers: {
@@ -98,12 +57,10 @@ export const testStripeConnection = async (config) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('❌ Stripe connection test failed:', errorData);
       throw new Error(errorData.message || 'Connection test failed');
     }
 
     const result = await response.json();
-    console.log('✅ Stripe connection test successful:', result);
     
     logSecurityEvent('STRIPE_CONNECTION_TEST_SUCCESS', { 
       testMode: config?.testMode 
@@ -111,20 +68,16 @@ export const testStripeConnection = async (config) => {
     
     return result;
   } catch (error) {
-    console.error('❌ Stripe connection test error:', error);
+    console.error('Stripe connection test error:', error);
     logSecurityEvent('STRIPE_CONNECTION_TEST_ERROR', { error: error.message });
     throw error;
   }
 };
 
-// Create checkout session - REAL API CALL
 export const createCheckoutSession = async (priceId, customerId = null, metadata = {}) => {
   try {
     logSecurityEvent('STRIPE_CHECKOUT_INITIATED', { priceId, customerId });
 
-    console.log('🔄 Creating Stripe checkout session via Netlify function...');
-
-    // Call the REAL Netlify function to create checkout session
     const response = await fetch('/.netlify/functions/create-checkout-session', {
       method: 'POST',
       headers: {
@@ -144,28 +97,21 @@ export const createCheckoutSession = async (priceId, customerId = null, metadata
 
     const { url } = await response.json();
     
-    // Redirect to Stripe checkout
     window.location.href = url;
     
     logSecurityEvent('STRIPE_CHECKOUT_SUCCESS', { priceId });
   } catch (error) {
-    console.error('❌ Stripe checkout error:', error);
+    console.error('Stripe checkout error:', error);
     logSecurityEvent('STRIPE_CHECKOUT_FAILED', { error: error.message });
     
-    // Fallback: redirect to pricing page
-    console.log('⚠️ Falling back to pricing page...');
     window.location.href = '/pricing';
   }
 };
 
-// Create customer portal session - REAL API CALL
 export const createPortalSession = async (customerId) => {
   try {
     logSecurityEvent('STRIPE_PORTAL_INITIATED', { customerId });
     
-    console.log('🔄 Creating Stripe portal session via Netlify function...');
-    
-    // Call REAL Netlify function to create portal session
     const response = await fetch('/.netlify/functions/create-portal-session', {
       method: 'POST',
       headers: {
@@ -181,26 +127,19 @@ export const createPortalSession = async (customerId) => {
 
     const { url } = await response.json();
     
-    // Open portal in new tab
     window.open(url, '_blank');
     
     logSecurityEvent('STRIPE_PORTAL_SUCCESS', { customerId });
   } catch (error) {
-    console.error('❌ Stripe portal error:', error);
+    console.error('Stripe portal error:', error);
     logSecurityEvent('STRIPE_PORTAL_FAILED', { error: error.message });
     
-    // Fallback: Open Stripe documentation
-    console.log('⚠️ Falling back to Stripe documentation...');
     window.open('https://stripe.com/docs/billing/subscriptions/customer-portal', '_blank');
   }
 };
 
-// Get customer subscription details - REAL API CALL
 export const getCustomerSubscription = async (customerId) => {
   try {
-    console.log('🔄 Fetching customer subscription from Stripe via Netlify function...');
-    
-    // Call REAL Netlify function to get subscription
     const response = await fetch('/.netlify/functions/get-customer-subscription', {
       method: 'POST',
       headers: {
@@ -211,58 +150,41 @@ export const getCustomerSubscription = async (customerId) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.log('⚠️ API call failed, using fallback data:', errorData.message);
       
-      // Fallback: Return mock data for demo
       return {
         id: 'sub_demo123',
         status: 'active',
         price_id: 'price_professional_monthly',
-        amount: 999, // £9.99 in pence
-        current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days from now
+        amount: 999,
+        current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
         invoice_pdf: null
       };
     }
 
     const result = await response.json();
-    console.log('✅ Got subscription data from Stripe:', result.subscription);
     return result.subscription;
   } catch (error) {
-    console.error('❌ Get subscription error:', error);
+    console.error('Get subscription error:', error);
     
-    // Fallback: Return mock data for demo
-    console.log('⚠️ Using fallback subscription data...');
     return {
       id: 'sub_demo123',
       status: 'active',
       price_id: 'price_professional_monthly',
-      amount: 999, // £9.99 in pence
-      current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 days from now
+      amount: 999,
+      current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60),
       invoice_pdf: null
     };
   }
 };
 
-// 🎯 CRITICAL FIX: CANCEL SUBSCRIPTION WITH PROPER CUSTOMER ID PASSING
 export const cancelSubscription = async (subscriptionId, customerId = null) => {
   try {
     logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_INITIATED', { subscriptionId, customerId });
     
-    console.log('🎯 CRITICAL FIX: Starting enhanced cancellation process...');
-    console.log('📋 Parameters:', {
-      subscriptionId,
-      customerId,
-      subscriptionIdFormat: subscriptionId?.startsWith('sub_') ? 'STRIPE_FORMAT' : 'LOCAL_FORMAT'
-    });
-
-    // Validation: Check if subscription ID is provided
     if (!subscriptionId || typeof subscriptionId !== 'string') {
       throw new Error('Invalid subscription ID provided');
     }
 
-    console.log('🚀 CALLING NETLIFY FUNCTION WITH PROPER PARAMETERS...');
-    
-    // 🔥 CRITICAL: Call the REAL Netlify function with BOTH subscriptionId AND customerId
     const response = await fetch('/.netlify/functions/cancel-subscription', {
       method: 'POST',
       headers: {
@@ -271,17 +193,13 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
       },
       body: JSON.stringify({
         subscriptionId: subscriptionId,
-        customerId: customerId, // 🎯 CRITICAL: Pass the customer ID here!
-        cancelAtPeriodEnd: true // This prevents future charges while maintaining access
+        customerId: customerId,
+        cancelAtPeriodEnd: true
       })
     });
 
-    console.log('📡 Netlify function response status:', response.status);
-    console.log('📡 Netlify function response ok:', response.ok);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Netlify function error response:', errorText);
       
       let errorData;
       try {
@@ -290,35 +208,27 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
         errorData = { message: errorText };
       }
       
-      // Enhanced error handling with specific solutions
       if (errorData.message?.includes('STRIPE_SECRET_KEY') || errorData.error?.includes('not configured')) {
-        throw new Error('🚨 CRITICAL: Stripe not configured in Netlify. Go to your Netlify dashboard → Site Settings → Environment Variables and add STRIPE_SECRET_KEY with your Stripe secret key.');
+        throw new Error('Stripe not configured in Netlify. Add STRIPE_SECRET_KEY environment variable.');
       }
       
       if (errorData.type === 'StripeAuthenticationError') {
-        throw new Error('🚨 Stripe API authentication failed. Check that your STRIPE_SECRET_KEY in Netlify is correct and valid.');
+        throw new Error('Stripe API authentication failed. Check your STRIPE_SECRET_KEY.');
       }
       
       throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('🎉 NETLIFY FUNCTION SUCCESS RESULT:', result);
     
-    // Enhanced success verification
     if (result.success) {
       if (result.localOnly) {
-        console.log('💡 Local-only cancellation processed (no Stripe subscription found)');
         logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED_LOCAL', { 
           subscriptionId,
           customerId,
           message: result.message
         });
       } else {
-        console.log('🎯 REAL STRIPE API CANCELLATION CONFIRMED!');
-        console.log('📊 Stripe verification:', result.verification);
-        console.log('✅ This cancellation is now visible in your Stripe dashboard');
-        
         logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED', { 
           subscriptionId,
           customerId,
@@ -344,36 +254,31 @@ export const cancelSubscription = async (subscriptionId, customerId = null) => {
     }
     
   } catch (error) {
-    console.error('❌ CRITICAL: Cancellation request failed:', error);
+    console.error('Cancellation request failed:', error);
     logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_FAILED', { 
       subscriptionId, 
       customerId,
       error: error.message 
     });
     
-    // Provide helpful error messages
     if (error.message.includes('STRIPE_SECRET_KEY') || error.message.includes('not configured')) {
-      throw new Error('🚨 Stripe not configured: Go to Netlify dashboard → Site Settings → Environment Variables and add STRIPE_SECRET_KEY');
+      throw new Error('Stripe not configured: Add STRIPE_SECRET_KEY to Netlify environment variables');
     } else if (error.message.includes('Authentication') || error.message.includes('authentication')) {
-      throw new Error('🚨 Stripe authentication failed: Check your API key in Netlify settings is correct');
+      throw new Error('Stripe authentication failed: Check your API key in Netlify settings');
     } else if (error.message.includes('not found')) {
-      throw new Error('🚨 Subscription not found in Stripe: The subscription may have already been cancelled or deleted');
+      throw new Error('Subscription not found in Stripe: May have already been cancelled');
     } else if (error.message.includes('network') || error.message.includes('fetch')) {
-      throw new Error('🚨 Network error: Unable to reach Netlify function. Check your internet connection and try again');
+      throw new Error('Network error: Unable to reach Netlify function');
     }
     
-    throw new Error(`Failed to cancel subscription in Stripe: ${error.message}`);
+    throw new Error(`Failed to cancel subscription: ${error.message}`);
   }
 };
 
-// Update subscription - REAL API CALL
 export const updateSubscription = async (subscriptionId, priceId) => {
   try {
     logSecurityEvent('STRIPE_SUBSCRIPTION_UPDATE_INITIATED', { subscriptionId, priceId });
     
-    console.log('🔄 Updating subscription in Stripe via Netlify function...');
-    
-    // Call REAL Netlify function to update subscription
     const response = await fetch('/.netlify/functions/update-subscription', {
       method: 'POST',
       headers: {
@@ -391,27 +296,20 @@ export const updateSubscription = async (subscriptionId, priceId) => {
     }
 
     const result = await response.json();
-    console.log('✅ Subscription updated in Stripe:', result);
     
     logSecurityEvent('STRIPE_SUBSCRIPTION_UPDATED', { subscriptionId, priceId });
     
     return result;
   } catch (error) {
-    console.error('❌ Update subscription error:', error);
+    console.error('Update subscription error:', error);
     logSecurityEvent('STRIPE_SUBSCRIPTION_UPDATE_FAILED', { error: error.message });
     
-    // For demo purposes, return mock success
-    console.log('⚠️ Using fallback update result...');
     return { status: 'active' };
   }
 };
 
-// Get payment methods - REAL API CALL
 export const getPaymentMethods = async (customerId) => {
   try {
-    console.log('🔄 Fetching payment methods from Stripe via Netlify function...');
-    
-    // Call REAL Netlify function to get payment methods
     const response = await fetch('/.netlify/functions/get-payment-methods', {
       method: 'POST',
       headers: {
@@ -422,9 +320,7 @@ export const getPaymentMethods = async (customerId) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.log('⚠️ API call failed, using fallback data:', errorData.message);
       
-      // Fallback: Return mock data for demo
       return [
         {
           id: 'pm_demo123',
@@ -440,13 +336,10 @@ export const getPaymentMethods = async (customerId) => {
     }
 
     const result = await response.json();
-    console.log('✅ Got payment methods from Stripe:', result.paymentMethods);
     return result.paymentMethods;
   } catch (error) {
-    console.error('❌ Get payment methods error:', error);
+    console.error('Get payment methods error:', error);
     
-    // Fallback: Return mock data for demo
-    console.log('⚠️ Using fallback payment methods...');
     return [
       {
         id: 'pm_demo123',
@@ -462,12 +355,8 @@ export const getPaymentMethods = async (customerId) => {
   }
 };
 
-// Get usage-based billing data - REAL API CALL
 export const getUsageData = async (subscriptionId) => {
   try {
-    console.log('🔄 Fetching usage data from Stripe via Netlify function...');
-    
-    // Call REAL Netlify function to get usage data
     const response = await fetch('/.netlify/functions/get-usage-data', {
       method: 'POST',
       headers: {
@@ -478,9 +367,7 @@ export const getUsageData = async (subscriptionId) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      console.log('⚠️ API call failed, using fallback data:', errorData.message);
       
-      // Fallback: Return mock data for demo
       return {
         inventory_items: 150,
         team_members: 3,
@@ -489,13 +376,10 @@ export const getUsageData = async (subscriptionId) => {
     }
 
     const result = await response.json();
-    console.log('✅ Got usage data from Stripe:', result.usage);
     return result.usage;
   } catch (error) {
-    console.error('❌ Get usage data error:', error);
+    console.error('Get usage data error:', error);
     
-    // Fallback: Return mock data for demo
-    console.log('⚠️ Using fallback usage data...');
     return {
       inventory_items: 150,
       team_members: 3,
