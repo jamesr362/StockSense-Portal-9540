@@ -78,8 +78,8 @@ export const getFreePlanLimits = () => ({
   purchaseItems: 10, // Updated from 100 to 10
   receiptScans: 3, // Updated from 1 to 3
   excelImports: 1,
-  taxExports: false,
-  features: ['inventory', 'dashboard', 'settings']
+  taxExports: 1, // Updated from false to 1
+  features: ['inventory', 'dashboard', 'settings', 'taxExports']
 });
 
 /**
@@ -90,7 +90,7 @@ export const getProfessionalPlanLimits = () => ({
   purchaseItems: -1,  // unlimited
   receiptScans: -1,   // unlimited
   excelImports: -1,   // unlimited
-  taxExports: true,
+  taxExports: -1,     // unlimited (changed from true to -1 for consistency)
   features: ['inventory', 'dashboard', 'settings', 'receiptScanner', 'excelImporter', 'taxExports']
 });
 

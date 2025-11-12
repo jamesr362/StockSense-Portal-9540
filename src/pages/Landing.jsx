@@ -311,7 +311,7 @@ export default function Landing() {
               Your Purchase Management?
             </h2>
             <p className="text-xl text-gray-300 mb-8">
-              Join businesses using Trackio to streamline their purchase tracking.
+              Join businesses and sole traders using Trackio to streamline their purchase tracking.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link

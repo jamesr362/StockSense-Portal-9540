@@ -14,7 +14,8 @@ export const useFeatureAccess = () => {
   const [usage, setUsage] = useState({
     purchaseItems: 0,
     receiptScans: 0,
-    excelImports: 0
+    excelImports: 0,
+    taxExports: 0
   });
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(Date.now());
@@ -108,8 +109,8 @@ export const useFeatureAccess = () => {
         purchaseItems: 10, // Updated from 100 to 10
         receiptScans: 3, // Updated from 1 to 3
         excelImports: 1,
-        taxExports: false,
-        features: ['purchaseTracking']
+        taxExports: 1, // Updated from false to 1
+        features: ['purchaseTracking', 'taxExports']
       };
       
       setSubscription(null);
@@ -137,7 +138,7 @@ export const useFeatureAccess = () => {
   // Fetch usage statistics
   const fetchUsage = useCallback(async () => {
     if (!user?.email) {
-      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0, taxExports: 0 });
       return;
     }
 
@@ -148,11 +149,13 @@ export const useFeatureAccess = () => {
       const purchaseCount = await getCurrentPurchaseCount();
       const monthlyScans = await getCurrentMonthScans();
       const monthlyImports = await getCurrentMonthImports();
+      const monthlyTaxExports = await getCurrentMonthTaxExports();
 
       const usageData = {
         purchaseItems: purchaseCount,
         receiptScans: monthlyScans,
         excelImports: monthlyImports,
+        taxExports: monthlyTaxExports,
         lastUpdated: Date.now()
       };
 
@@ -161,7 +164,7 @@ export const useFeatureAccess = () => {
 
     } catch (error) {
       console.error('❌ Error fetching usage:', error);
-      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0, taxExports: 0 });
     }
   }, [user?.email]);
 
@@ -215,6 +218,25 @@ export const useFeatureAccess = () => {
     }
   };
 
+  const getCurrentMonthTaxExports = async () => {
+    try {
+      const stored = localStorage.getItem(`taxExportHistory_${user.email}`);
+      if (!stored) return 0;
+      
+      const history = JSON.parse(stored);
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      
+      return history.filter(exp => 
+        new Date(exp.timestamp) >= startOfMonth
+      ).length;
+    } catch (error) {
+      console.error('Error getting tax export count:', error);
+      return 0;
+    }
+  };
+
   // Get current plan ID
   const getCurrentPlan = useCallback(() => {
     if (!subscription || subscription.status !== 'active') {
@@ -259,7 +281,10 @@ export const useFeatureAccess = () => {
         return true;
 
       case 'taxExports':
-        return currentPlan === 'professional';
+        if (currentPlan === 'free') {
+          return usage.taxExports < (planLimits?.taxExports || 1); // Allow 1 tax export for free users
+        }
+        return true; // Unlimited for professional
 
       case 'unlimitedPurchases':
         return currentPlan === 'professional';
@@ -337,6 +362,28 @@ export const useFeatureAccess = () => {
     };
   }, [getCurrentPlan, usage.excelImports, planLimits]);
 
+  // Check if user can export tax reports
+  const canExportTax = useCallback(() => {
+    const currentPlan = getCurrentPlan();
+    
+    if (currentPlan === 'professional') {
+      return { allowed: true, limit: -1, remaining: Infinity };
+    }
+    
+    const limit = planLimits?.taxExports || 1;
+    const used = usage.taxExports;
+    const allowed = used < limit;
+    const remaining = Math.max(0, limit - used);
+    
+    return {
+      allowed,
+      limit,
+      used,
+      remaining,
+      reason: allowed ? null : `You have used your ${limit} tax export for this month. Upgrade to Professional for unlimited tax exports.`
+    };
+  }, [getCurrentPlan, usage.taxExports, planLimits]);
+
   // Increment usage counter
   const incrementUsage = useCallback((type) => {
     setUsage(prev => ({
@@ -346,8 +393,13 @@ export const useFeatureAccess = () => {
     
     // Update localStorage for persistence
     if (user?.email) {
-      const key = type === 'receiptScan' ? `scanHistory_${user.email}` : 
-                   type === 'excelImport' ? `importHistory_${user.email}` : null;
+      const keyMap = {
+        receiptScans: `scanHistory_${user.email}`,
+        excelImports: `importHistory_${user.email}`,
+        taxExports: `taxExportHistory_${user.email}`
+      };
+      
+      const key = keyMap[type];
       
       if (key) {
         try {
@@ -379,7 +431,7 @@ export const useFeatureAccess = () => {
     } else {
       setSubscription(null);
       setPlanLimits(null);
-      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0 });
+      setUsage({ purchaseItems: 0, receiptScans: 0, excelImports: 0, taxExports: 0 });
       setLoading(false);
     }
   }, [user?.email, fetchSubscription, fetchUsage]);
@@ -454,6 +506,7 @@ export const useFeatureAccess = () => {
     canAddInventoryItem, // Legacy compatibility
     canScanReceipt,
     canImportExcel,
+    canExportTax,
     incrementUsage,
     refresh
   };

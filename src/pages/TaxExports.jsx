@@ -15,10 +15,11 @@ export default function TaxExports() {
   const [error,setError]=useState('');
   const [vatRegistered,setVatRegistered]=useState(null); // null = not selected, true = VAT registered, false = not VAT registered
   const {user}=useAuth();
-  const {canUseFeature,currentPlan,planInfo}=useFeatureAccess();
+  const {canUseFeature,canExportTax,currentPlan,planInfo,incrementUsage}=useFeatureAccess();
 
-  // Check if user has access to tax exports (Professional plan only)
-  const hasTaxExportAccess=canUseFeature('taxExports') || currentPlan==='professional';
+  // Check if user has access to tax exports
+  const hasTaxExportAccess=canUseFeature('taxExports');
+  const taxExportCheck=canExportTax();
 
   useEffect(()=> {
     if (user?.email && hasTaxExportAccess) {
@@ -142,6 +143,8 @@ export default function TaxExports() {
 
     try {
       localStorage.setItem(`taxExportHistory_${user.email}`,JSON.stringify(newHistory));
+      // Increment usage counter for tax exports
+      incrementUsage('taxExports');
     } catch (error) {
       console.error('Error saving export history:',error);
     }
@@ -185,8 +188,8 @@ export default function TaxExports() {
     }
   };
 
-  // If user doesn't have access to tax exports,show upgrade prompt
-  if (!hasTaxExportAccess) {
+  // If user doesn't have access to tax exports, show upgrade prompt (only for professional-only features)
+  if (!hasTaxExportAccess && currentPlan === 'free' && !taxExportCheck.allowed) {
     return (
       <div>
         <motion.div
@@ -204,19 +207,19 @@ export default function TaxExports() {
             </div>
           </div>
 
-          {/* Professional Plan Required */}
+          {/* Free Plan Limit Reached */}
           <div className="bg-gray-800 rounded-lg p-8 border border-gray-700">
             <div className="text-center">
-              <div className="w-16 h-16 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
-                <RiLockLine className="h-8 w-8 text-gray-400" />
+              <div className="w-16 h-16 bg-yellow-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <RiLockLine className="h-8 w-8 text-yellow-400" />
               </div>
 
               <h3 className="text-2xl font-bold text-white mb-4">
-                Professional Feature
+                Tax Export Limit Reached
               </h3>
 
               <p className="text-gray-300 mb-6 max-w-2xl mx-auto">
-                VAT calculation features are available exclusively with the Professional plan. Calculate VAT reclaims from your purchase tracking data for VAT registered businesses.
+                You've used your {taxExportCheck.limit} tax export for this month. Upgrade to Professional for unlimited tax exports and advanced VAT calculation features.
               </p>
 
               {/* Current Plan Info */}
@@ -225,9 +228,13 @@ export default function TaxExports() {
                   <span className="text-gray-400">Current Plan:</span>
                   <span className="text-white font-medium">{planInfo.name}</span>
                 </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-400">Tax Exports Used:</span>
+                  <span className="text-yellow-400 font-medium">{taxExportCheck.used} / {taxExportCheck.limit}</span>
+                </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Required Plan:</span>
-                  <span className="text-primary-400 font-medium">Professional</span>
+                  <span className="text-gray-400">Resets:</span>
+                  <span className="text-gray-300">Next month</span>
                 </div>
               </div>
 
@@ -240,7 +247,8 @@ export default function TaxExports() {
                   <div>
                     <h5 className="text-white font-medium mb-2">VAT Calculation Features:</h5>
                     <ul className="text-gray-300 text-sm space-y-1">
-                      <li>• VAT reclaim calculations for VAT registered businesses</li>
+                      <li>• <strong>Unlimited</strong> VAT reclaim calculations</li>
+                      <li>• <strong>Unlimited</strong> tax export reports</li>
                       <li>• Professional VAT reports</li>
                       <li>• HMRC-compliant documentation</li>
                       <li>• Multi-format exports (Excel,CSV,PDF)</li>
@@ -344,7 +352,7 @@ export default function TaxExports() {
                 Clear History
               </button>
             )}
-            {vatRegistered === true && (
+            {vatRegistered === true && taxExportCheck.allowed && (
               <button
                 onClick={()=> setIsExportModalOpen(true)}
                 className="inline-flex items-center justify-center rounded-md border border-transparent px-4 py-2 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 w-full sm:w-auto bg-green-600 hover:bg-green-700 focus:ring-green-500"
@@ -356,13 +364,28 @@ export default function TaxExports() {
           </div>
         </div>
 
-        {/* Professional Plan Badge */}
+        {/* Plan Status Badge */}
         <div className="mb-6 bg-gradient-to-r from-green-600/20 to-primary-600/20 rounded-lg p-4 border border-green-500/30">
-          <div className="flex items-center">
+          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-green-400 font-medium">Professional Feature Active</h3>
-              <p className="text-gray-300 text-sm">Calculate VAT reclaims from your purchase tracking data</p>
+              <h3 className="text-green-400 font-medium">
+                {currentPlan === 'professional' ? 'Professional Feature Active' : 'Free Plan - Limited Access'}
+              </h3>
+              <p className="text-gray-300 text-sm">
+                {currentPlan === 'professional' 
+                  ? 'Unlimited VAT calculations and tax exports' 
+                  : `${taxExportCheck.remaining} tax export${taxExportCheck.remaining !== 1 ? 's' : ''} remaining this month`
+                }
+              </p>
             </div>
+            {currentPlan === 'free' && (
+              <Link
+                to="/pricing"
+                className="text-primary-400 hover:text-primary-300 text-sm font-medium underline"
+              >
+                Upgrade for Unlimited
+              </Link>
+            )}
           </div>
         </div>
 
@@ -790,7 +813,7 @@ export default function TaxExports() {
                       : 'VAT reports are only available for VAT registered businesses'
                   }
                 </p>
-                {vatRegistered === true && (
+                {vatRegistered === true && taxExportCheck.allowed && (
                   <button
                     onClick={()=> setIsExportModalOpen(true)}
                     className="inline-flex items-center px-4 py-2 text-white rounded-lg bg-green-600 hover:bg-green-700"
@@ -798,6 +821,19 @@ export default function TaxExports() {
                     <RiRefund2Line className="mr-2 h-4 w-4" />
                     Generate VAT Report
                   </button>
+                )}
+                {vatRegistered === true && !taxExportCheck.allowed && (
+                  <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4 mt-4 max-w-md mx-auto">
+                    <p className="text-yellow-300 text-sm">
+                      You've used your monthly tax export limit. Upgrade to Professional for unlimited exports.
+                    </p>
+                    <Link
+                      to="/pricing"
+                      className="inline-block mt-2 text-primary-400 hover:text-primary-300 text-sm font-medium underline"
+                    >
+                      Upgrade Now
+                    </Link>
+                  </div>
                 )}
               </div>
             ) : (
