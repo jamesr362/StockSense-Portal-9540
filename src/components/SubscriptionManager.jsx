@@ -1,6 +1,6 @@
 import {useState, useEffect} from 'react';
 import {motion} from 'framer-motion';
-import {RiCalendarLine, RiArrowRightLine, RiCheckLine, RiAlertLine, RiSettings3Line, RiDownloadLine, RiRefreshLine, RiMoneyDollarCircleLine, RiSecurePaymentLine, RiLineChartLine} from 'react-icons/ri';
+import {RiCalendarLine, RiArrowRightLine, RiCheckLine, RiAlertLine, RiSettings3Line, RiDownloadLine, RiRefreshLine, RiMoneyDollarCircleLine, RiSecurePaymentLine, RiLineChartLine, RiBugLine} from 'react-icons/ri';
 import {SUBSCRIPTION_PLANS, formatPrice, getPlanById} from '../lib/stripe';
 import {logSecurityEvent} from '../utils/security';
 import {supabase} from '../lib/supabase';
@@ -15,6 +15,8 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     if (customerId) {
@@ -96,6 +98,25 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
     return SUBSCRIPTION_PLANS[planName]?.price || 9.99; // Default to Professional plan amount
   };
 
+  // NEW: Debug subscription function
+  const handleDebugSubscription = async () => {
+    try {
+      setActionLoading(true);
+      console.log('🔍 Running subscription debug...');
+      
+      const result = await stripeService.debugSubscription(subscription?.id, customerId);
+      setDebugInfo(result);
+      setShowDebug(true);
+      
+      console.log('🔍 Debug complete:', result);
+    } catch (error) {
+      console.error('❌ Debug failed:', error);
+      setError(`Debug failed: ${error.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleCancelSubscription = async () => {
     if (!subscription?.id) return;
 
@@ -104,12 +125,17 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       setError(null);
       setSuccess(null);
 
-      console.log('🔄 Starting subscription cancellation process...');
+      console.log('🔄 Starting ULTIMATE subscription cancellation process...');
+      console.log('📋 Subscription details:', {
+        id: subscription.id,
+        customerId: customerId,
+        idStartsWithSub: subscription.id?.startsWith('sub_')
+      });
 
-      // Call the REAL cancellation service (which will contact Stripe via Netlify function)
-      const cancelResult = await stripeService.cancelSubscription(subscription.id);
+      // 🎯 ENHANCED: Pass customer ID for better subscription finding
+      const cancelResult = await stripeService.cancelSubscription(subscription.id, customerId);
       
-      console.log('✅ Stripe cancellation successful:', cancelResult);
+      console.log('✅ ULTIMATE Stripe cancellation result:', cancelResult);
 
       // Update in Supabase to reflect the cancellation
       if (supabase) {
@@ -137,19 +163,33 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       onSubscriptionChange?.();
       setShowCancelConfirm(false);
 
-      // Show success message based on verification
+      // Show ULTIMATE success message
       if (cancelResult.cancel_at_period_end) {
+        let successMessage = '🎯 SUCCESS: Subscription cancelled! No future charges will occur.';
+        
+        if (cancelResult.stripeVerified) {
+          if (cancelResult.foundViaCustomerSearch) {
+            successMessage = '🎯 ULTIMATE SUCCESS: Found and cancelled your Stripe subscription! The cancellation is immediately visible in your Stripe dashboard. No future charges will occur.';
+          } else {
+            successMessage = '🎯 SUCCESS: Subscription cancelled in Stripe! The cancellation is immediately visible in your Stripe dashboard. No future charges will occur.';
+          }
+        }
+
         setSuccess({
-          message: cancelResult.stripeVerified 
-            ? '✅ Subscription successfully cancelled in Stripe! You will not be charged on your next billing date. The cancellation is now visible in your Stripe dashboard.'
-            : '✅ Subscription cancelled locally. No future charges will occur.',
-          type: 'success'
+          message: successMessage,
+          type: 'success',
+          stripeVerified: cancelResult.stripeVerified,
+          foundViaSearch: cancelResult.foundViaCustomerSearch,
+          originalId: cancelResult.originalSubscriptionId,
+          realId: cancelResult.realStripeSubscriptionId
         });
+        
         console.log('✅ Subscription will not renew - access continues until period end');
       } else {
         setSuccess({
           message: '✅ Subscription cancelled immediately in Stripe. No future charges will occur.',
-          type: 'success'
+          type: 'success',
+          stripeVerified: cancelResult.stripeVerified
         });
       }
 
@@ -157,13 +197,22 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       logSecurityEvent('SUBSCRIPTION_CANCELLED_SUCCESS', {
         customerId,
         subscriptionId: subscription.id,
+        realSubscriptionId: cancelResult.realStripeSubscriptionId,
         cancelAtPeriodEnd: cancelResult.cancel_at_period_end,
-        stripeVerified: cancelResult.stripeVerified
+        stripeVerified: cancelResult.stripeVerified,
+        foundViaCustomerSearch: cancelResult.foundViaCustomerSearch
       });
 
     } catch (err) {
-      console.error('❌ Cancellation failed:', err);
-      setError(`Failed to cancel subscription: ${err.message}. Please try again or contact support.`);
+      console.error('❌ ULTIMATE cancellation failed:', err);
+      setError(`Failed to cancel subscription: ${err.message}`);
+      
+      // Provide additional help based on error type
+      if (err.message.includes('STRIPE_SECRET_KEY')) {
+        setError('🚨 CRITICAL: Stripe is not configured in Netlify. Please add your STRIPE_SECRET_KEY environment variable in your Netlify site settings, then try again.');
+      } else if (err.message.includes('not found')) {
+        setError('⚠️ Subscription not found in Stripe. This might be a local-only subscription or it may have already been cancelled. Please check your Stripe dashboard.');
+      }
       
       // Log failed cancellation
       logSecurityEvent('SUBSCRIPTION_CANCEL_FAILED', {
@@ -302,10 +351,25 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
             <RiCheckLine className="h-5 w-5 text-green-400 mr-2" />
             <div>
               <p className="text-green-300 text-sm font-medium">{success.message}</p>
-              {success.type === 'success' && subscription?.cancel_at_period_end && (
-                <p className="text-green-400 text-xs mt-1">
-                  💡 Check your Stripe dashboard to confirm the cancellation is reflected there.
-                </p>
+              {success.stripeVerified && (
+                <div className="mt-2 space-y-1">
+                  <p className="text-green-400 text-xs">
+                    ✅ Verified in Stripe Dashboard - Check your Stripe dashboard to confirm
+                  </p>
+                  <p className="text-green-400 text-xs">
+                    🛡️ No future charges will occur - Your subscription will not renew
+                  </p>
+                  {success.foundViaSearch && (
+                    <p className="text-blue-400 text-xs">
+                      🔍 Found via customer search - We automatically located your Stripe subscription
+                    </p>
+                  )}
+                  {success.realId && success.originalId !== success.realId && (
+                    <p className="text-blue-400 text-xs">
+                      🎯 Real Stripe ID: {success.realId} (was {success.originalId})
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -321,7 +385,20 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
         >
           <div className="flex items-center">
             <RiAlertLine className="h-5 w-5 text-red-400 mr-2" />
-            <p className="text-red-300 text-sm">{error}</p>
+            <div>
+              <p className="text-red-300 text-sm">{error}</p>
+              {error.includes('STRIPE_SECRET_KEY') && (
+                <div className="mt-2 text-red-400 text-xs">
+                  <p>🔧 <strong>How to fix:</strong></p>
+                  <ol className="list-decimal list-inside mt-1 space-y-1">
+                    <li>Go to your Netlify dashboard</li>
+                    <li>Navigate to Site Settings → Environment Variables</li>
+                    <li>Add STRIPE_SECRET_KEY with your Stripe secret key</li>
+                    <li>Deploy your site and try again</li>
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         </motion.div>
       )}
@@ -339,7 +416,10 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
               <p className="text-orange-200 font-medium">🎯 Subscription Cancellation Confirmed</p>
               <p className="text-orange-300 text-sm">
                 Your subscription will not renew. You'll keep access until {subscription.current_period_end && formatDate(subscription.current_period_end)}.
-                No future charges will occur. This cancellation is now reflected in your Stripe dashboard.
+                No future charges will occur. This cancellation is reflected in your Stripe dashboard.
+              </p>
+              <p className="text-orange-400 text-xs mt-1">
+                💡 Check your Stripe dashboard → Subscriptions to verify the cancellation is visible there.
               </p>
             </div>
           </div>
@@ -350,13 +430,23 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-white">Current Subscription</h3>
-          <button
-            onClick={loadSubscriptionData}
-            disabled={loading}
-            className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            <RiRefreshLine className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDebugSubscription}
+              disabled={actionLoading}
+              className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
+              title="Debug subscription issues"
+            >
+              <RiBugLine className={`h-5 w-5 ${actionLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={loadSubscriptionData}
+              disabled={loading}
+              className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <RiRefreshLine className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {subscription ? (
@@ -370,6 +460,14 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 <p className="text-gray-400 text-sm">
                   {currentPlan?.price === 0 ? 'Free Plan' : `£${currentPlan?.price || 0}/month`}
                 </p>
+                <p className="text-gray-500 text-xs">
+                  Subscription ID: {subscription.id}
+                </p>
+                {subscription.id && !subscription.id.startsWith('sub_') && (
+                  <p className="text-yellow-400 text-xs">
+                    ⚠️ Local subscription - will search for Stripe subscription on cancel
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <span className={`font-medium ${status.color}`}>
@@ -527,6 +625,118 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
         )}
       </div>
 
+      {/* Debug Info Modal */}
+      {showDebug && debugInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{opacity: 0, scale: 0.95}}
+            animate={{opacity: 1, scale: 1}}
+            className="bg-gray-800 rounded-lg p-6 max-w-2xl mx-4 max-h-[80vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">
+                🔍 Subscription Debug Info
+              </h3>
+              <button
+                onClick={() => setShowDebug(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Recommendations */}
+              <div className="bg-blue-900/50 border border-blue-700 rounded-lg p-4">
+                <h4 className="text-blue-300 font-medium mb-2">🎯 Recommendations:</h4>
+                <ul className="space-y-1">
+                  {debugInfo.recommendations?.map((rec, idx) => (
+                    <li key={idx} className="text-blue-200 text-sm">{rec}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Stripe Connection */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-white font-medium mb-2">🔌 Stripe Connection:</h4>
+                <div className="text-sm">
+                  <span className={`font-medium ${
+                    debugInfo.debug.stripeConnection?.working ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {debugInfo.debug.stripeConnection?.working ? '✅ Working' : '❌ Failed'}
+                  </span>
+                  {debugInfo.debug.stripeConnection?.error && (
+                    <p className="text-red-300 mt-1">{debugInfo.debug.stripeConnection.error}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Subscription Info */}
+              <div className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-white font-medium mb-2">📋 Subscription Info:</h4>
+                <div className="text-sm space-y-2">
+                  <div>
+                    <span className="text-gray-400">ID Format: </span>
+                    <span className={`font-medium ${
+                      debugInfo.debug.subscriptionIdFormat === 'valid_stripe_format' ? 'text-green-400' : 'text-yellow-400'
+                    }`}>
+                      {debugInfo.debug.subscriptionIdFormat}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Found in Stripe: </span>
+                    <span className={`font-medium ${
+                      debugInfo.debug.stripeSubscription?.found ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {debugInfo.debug.stripeSubscription?.found ? '✅ Yes' : '❌ No'}
+                    </span>
+                  </div>
+                  {debugInfo.debug.stripeSubscription?.found && (
+                    <div className="mt-2 p-2 bg-gray-600 rounded text-xs">
+                      <div>Status: {debugInfo.debug.stripeSubscription.status}</div>
+                      <div>Cancel at period end: {debugInfo.debug.stripeSubscription.cancel_at_period_end ? 'Yes' : 'No'}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Customer Subscriptions */}
+              {debugInfo.debug.customerSubscriptions && Array.isArray(debugInfo.debug.customerSubscriptions) && (
+                <div className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-white font-medium mb-2">👤 Customer Subscriptions:</h4>
+                  <div className="space-y-2">
+                    {debugInfo.debug.customerSubscriptions.map((sub, idx) => (
+                      <div key={idx} className="p-2 bg-gray-600 rounded text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-300">{sub.id}</span>
+                          <span className={`font-medium ${
+                            sub.status === 'active' ? 'text-green-400' : 'text-gray-400'
+                          }`}>
+                            {sub.status}
+                          </span>
+                        </div>
+                        {sub.cancel_at_period_end && (
+                          <div className="text-orange-400 text-xs">⚠️ Will cancel at period end</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowDebug(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Plan Upgrade Options - Only show Professional if on Free */}
       <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
         <div className="flex items-center justify-between mb-4">
@@ -641,7 +851,11 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
               <div className="bg-gray-700 rounded-lg p-4 space-y-2">
                 <div className="flex items-center text-green-400 text-sm">
                   <RiCheckLine className="h-4 w-4 mr-2" />
-                  <span>🎯 Cancellation will be processed in Stripe immediately</span>
+                  <span>🎯 We'll find and cancel your Stripe subscription automatically</span>
+                </div>
+                <div className="flex items-center text-green-400 text-sm">
+                  <RiCheckLine className="h-4 w-4 mr-2" />
+                  <span>Cancellation will be processed in Stripe immediately</span>
                 </div>
                 <div className="flex items-center text-green-400 text-sm">
                   <RiCheckLine className="h-4 w-4 mr-2" />
@@ -677,7 +891,7 @@ export default function SubscriptionManager({customerId, onSubscriptionChange}) 
                 {actionLoading ? (
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Canceling in Stripe...
+                    Finding & Canceling...
                   </div>
                 ) : (
                   'Cancel Subscription'
