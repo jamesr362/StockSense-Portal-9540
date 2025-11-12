@@ -261,7 +261,7 @@ export default function AddItemModal({ isOpen, onClose, onAdd }) {
                       <div className="flex items-center">
                         <RiAlertLine className="h-4 w-4 text-blue-400 mr-2" />
                         <p className="text-blue-300 text-sm">
-                          Free Plan: Limited to 100 inventory items total
+                          Free Plan: Limited to 10 inventory items total
                         </p>
                       </div>
                     </div>

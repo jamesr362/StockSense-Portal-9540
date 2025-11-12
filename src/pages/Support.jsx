@@ -48,7 +48,7 @@ export default function Support() {
         },
         {
           q: 'What\'s the difference between Free and Professional plans?',
-          a: 'The Free plan includes basic inventory management for up to 100 items. The Professional plan (£9.99/month) includes unlimited items, receipt scanning, Excel imports, VAT refund calculations, and priority support.'
+          a: 'The Free plan includes basic inventory management for up to 100 items. The Professional plan (£9.99/month) includes unlimited items, receipt scanning, Excel imports, VAT reclaim calculations, and priority support.'
         },
         {
           q: 'How do I upgrade to Professional?',
@@ -68,8 +68,8 @@ export default function Support() {
           a: 'Yes! With the Professional plan, you can import inventory data from Excel files. The system supports standard formats and will guide you through the mapping process.'
         },
         {
-          q: 'How are VAT refunds calculated?',
-          a: 'The system calculates VAT refunds from VAT-inclusive purchase prices using the formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate). This helps you claim back VAT from HMRC if you\'re VAT registered.'
+          q: 'How are VAT reclaims calculated?',
+          a: 'The system calculates VAT reclaims from VAT-inclusive purchase prices using the formula: VAT Amount = (Purchase Price × VAT Rate) ÷ (100 + VAT Rate). This helps you claim back VAT from HMRC if you\'re VAT registered.'
         }
       ]
     },
