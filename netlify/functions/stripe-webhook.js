@@ -32,12 +32,12 @@ export const handler = async (event) => {
     switch (eventType) {
       case 'checkout.session.completed':
         if (data.mode === 'subscription') {
-          await handleSubscriptionCreation(data);
+          await handleCheckoutSessionCompleted(data);
         }
         break;
         
       case 'customer.subscription.created':
-        await handleSubscriptionCreation(data);
+        await handleSubscriptionCreated(data);
         break;
         
       case 'customer.subscription.updated':
@@ -73,28 +73,35 @@ export const handler = async (event) => {
   }
 };
 
-async function handleSubscriptionCreation(session) {
-  console.log('🔄 Handling subscription creation:', session.id);
+async function handleCheckoutSessionCompleted(session) {
+  console.log('🔄 Handling checkout session completed:', session.id);
   
   try {
-    const { client_reference_id: userId, customer: customerId, subscription: subscriptionId } = session;
+    // Get the actual subscription ID from the session
+    const subscriptionId = session.subscription;
+    const customerId = session.customer;
+    
+    if (!subscriptionId || !customerId) {
+      console.error('Missing subscription or customer ID in session:', session.id);
+      return;
+    }
+
+    // Retrieve the actual subscription object from Stripe
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    const { id: priceId } = subscription.items.data[0].price;
-
-    // Get customer email
     const customer = await stripe.customers.retrieve(customerId);
-    const userEmail = customer.email;
-
-    if (!userEmail) {
+    
+    if (!customer.email) {
       console.error('No email found for customer:', customerId);
       return;
     }
 
+    console.log('✅ Retrieved subscription:', subscription.id, 'for customer:', customer.email);
+
     const subscriptionData = {
-      user_email: userEmail.toLowerCase(),
+      user_email: customer.email.toLowerCase(),
       stripe_customer_id: customerId,
-      stripe_subscription_id: subscriptionId,
-      plan_id: priceId,
+      stripe_subscription_id: subscription.id, // This is the real sub_xxx ID
+      plan_id: subscription.items.data[0].price.id,
       status: subscription.status,
       current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
       current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
@@ -116,10 +123,60 @@ async function handleSubscriptionCreation(session) {
       throw upsertError;
     }
 
-    console.log(`✅ Subscription created/updated for user ${userEmail}`);
+    console.log(`✅ Subscription created/updated for user ${customer.email}`);
+    console.log(`📋 Stripe Customer ID: ${customerId}`);
+    console.log(`📋 Stripe Subscription ID: ${subscription.id}`);
     
   } catch (error) {
-    console.error('Error in handleSubscriptionCreation:', error);
+    console.error('Error in handleCheckoutSessionCompleted:', error);
+    throw error;
+  }
+}
+
+async function handleSubscriptionCreated(subscription) {
+  console.log('🔄 Handling subscription created:', subscription.id);
+  
+  try {
+    // Get customer details
+    const customer = await stripe.customers.retrieve(subscription.customer);
+    
+    if (!customer.email) {
+      console.error('No email found for customer:', subscription.customer);
+      return;
+    }
+
+    const subscriptionData = {
+      user_email: customer.email.toLowerCase(),
+      stripe_customer_id: subscription.customer,
+      stripe_subscription_id: subscription.id, // This is already the correct sub_xxx ID
+      plan_id: subscription.items.data[0].price.id,
+      status: subscription.status,
+      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      cancel_at_period_end: subscription.cancel_at_period_end,
+      canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Insert or update subscription
+    const { error: upsertError } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .upsert(subscriptionData, {
+        onConflict: 'user_email'
+      });
+
+    if (upsertError) {
+      console.error('Error upserting subscription:', upsertError);
+      throw upsertError;
+    }
+
+    console.log(`✅ Subscription created for user ${customer.email}`);
+    console.log(`📋 Stripe Customer ID: ${subscription.customer}`);
+    console.log(`📋 Stripe Subscription ID: ${subscription.id}`);
+    
+  } catch (error) {
+    console.error('Error in handleSubscriptionCreated:', error);
     throw error;
   }
 }

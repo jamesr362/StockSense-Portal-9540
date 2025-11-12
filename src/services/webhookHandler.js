@@ -59,7 +59,7 @@ export const processWebhookEvent = async (event) => {
 };
 
 /**
- * Handle successful checkout session completion with robust database operations
+ * Handle successful checkout session completion with CORRECT Stripe ID extraction
  */
 const handleCheckoutSessionCompleted = async (session) => {
   try {
@@ -70,13 +70,35 @@ const handleCheckoutSessionCompleted = async (session) => {
                          session.client_reference_id ||
                          session.metadata?.customer_email;
     
-    const subscriptionId = session.subscription;
+    // CRITICAL FIX: Get the actual subscription ID, not the session ID
+    const subscriptionId = session.subscription; // This should be sub_xxx, not cs_xxx
+    const customerId = session.customer; // This should be cus_xxx
     
     if (!customerEmail) {
       throw new Error('No customer email found in checkout session');
     }
 
+    if (!subscriptionId) {
+      console.warn('⚠️ No subscription ID in checkout session - this might be a one-time payment');
+      return { status: 'ignored', message: 'No subscription in session' };
+    }
+
+    if (!customerId) {
+      throw new Error('No customer ID found in checkout session');
+    }
+
     console.log('👤 Customer email:', customerEmail);
+    console.log('🆔 Customer ID:', customerId);
+    console.log('📋 Subscription ID:', subscriptionId);
+
+    // Verify we have the correct IDs
+    if (!customerId.startsWith('cus_')) {
+      throw new Error(`Invalid customer ID format: ${customerId} (should start with cus_)`);
+    }
+
+    if (!subscriptionId.startsWith('sub_')) {
+      throw new Error(`Invalid subscription ID format: ${subscriptionId} (should start with sub_)`);
+    }
 
     // Extract plan information with better fallback logic
     let planId = 'professional'; // Default
@@ -90,12 +112,12 @@ const handleCheckoutSessionCompleted = async (session) => {
 
     console.log('📋 Plan ID:', planId);
 
-    // Create comprehensive subscription data
+    // Create comprehensive subscription data with CORRECT IDs
     const subscriptionData = {
       user_email: customerEmail.toLowerCase(),
-      stripe_customer_id: session.customer,
-      stripe_subscription_id: subscriptionId,
-      stripe_session_id: session.id,
+      stripe_customer_id: customerId, // CORRECT: cus_xxx
+      stripe_subscription_id: subscriptionId, // CORRECT: sub_xxx
+      stripe_session_id: session.id, // SEPARATE: cs_xxx (for reference only)
       plan_id: `price_${planId}`,
       status: 'active',
       current_period_start: new Date().toISOString(),
@@ -123,6 +145,8 @@ const handleCheckoutSessionCompleted = async (session) => {
 
         console.log('✅ Successfully upserted subscription for:', customerEmail);
         console.log('📊 Subscription data:', data);
+        console.log('🔍 Verification - Customer ID:', customerId, 'starts with cus_:', customerId.startsWith('cus_'));
+        console.log('🔍 Verification - Subscription ID:', subscriptionId, 'starts with sub_:', subscriptionId.startsWith('sub_'));
 
         // Clear feature cache for immediate access
         localStorage.removeItem(`featureCache_${customerEmail}`);
@@ -134,6 +158,7 @@ const handleCheckoutSessionCompleted = async (session) => {
             userEmail: customerEmail, 
             planId, 
             subscriptionId,
+            customerId,
             immediate: true,
             source: 'checkout_completed'
           }
@@ -143,14 +168,17 @@ const handleCheckoutSessionCompleted = async (session) => {
           userEmail: customerEmail,
           planId,
           subscriptionId,
+          customerId,
           sessionId: session.id
         });
 
         return {
           status: 'success',
-          message: 'Checkout session processed successfully',
+          message: 'Checkout session processed successfully with correct IDs',
           userEmail: customerEmail,
           planId,
+          customerId,
+          subscriptionId,
           subscriptionData: data
         };
 
@@ -185,6 +213,8 @@ const handleCheckoutSessionCompleted = async (session) => {
               message: 'Checkout session processed after database initialization',
               userEmail: customerEmail,
               planId,
+              customerId,
+              subscriptionId,
               subscriptionData: data
             };
           }
@@ -204,7 +234,9 @@ const handleCheckoutSessionCompleted = async (session) => {
         status: 'success',
         message: 'Checkout session processed (local storage)',
         userEmail: customerEmail,
-        planId
+        planId,
+        customerId,
+        subscriptionId
       };
     }
 
@@ -219,11 +251,21 @@ const handleCheckoutSessionCompleted = async (session) => {
 };
 
 /**
- * Handle subscription creation
+ * Handle subscription creation with CORRECT ID validation
  */
 const handleSubscriptionCreated = async (subscription) => {
   try {
     console.log('📝 Processing subscription created:', subscription.id);
+
+    // Verify we have a proper subscription ID
+    if (!subscription.id.startsWith('sub_')) {
+      throw new Error(`Invalid subscription ID format: ${subscription.id} (should start with sub_)`);
+    }
+
+    // Verify we have a proper customer ID
+    if (!subscription.customer.startsWith('cus_')) {
+      throw new Error(`Invalid customer ID format: ${subscription.customer} (should start with cus_)`);
+    }
 
     // Try to get customer email from subscription metadata or customer object
     let customerEmail = subscription.metadata?.customer_email;
@@ -243,8 +285,8 @@ const handleSubscriptionCreated = async (subscription) => {
 
     const subscriptionData = {
       user_email: customerEmail.toLowerCase(),
-      stripe_customer_id: subscription.customer,
-      stripe_subscription_id: subscription.id,
+      stripe_customer_id: subscription.customer, // CORRECT: cus_xxx
+      stripe_subscription_id: subscription.id, // CORRECT: sub_xxx
       plan_id: priceId || `price_${planId}`,
       status: subscription.status,
       current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
@@ -253,6 +295,9 @@ const handleSubscriptionCreated = async (subscription) => {
       canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
       updated_at: new Date().toISOString()
     };
+
+    console.log('🔍 Verification - Customer ID:', subscription.customer, 'starts with cus_:', subscription.customer.startsWith('cus_'));
+    console.log('🔍 Verification - Subscription ID:', subscription.id, 'starts with sub_:', subscription.id.startsWith('sub_'));
 
     if (supabase) {
       const { error } = await supabase
@@ -273,6 +318,7 @@ const handleSubscriptionCreated = async (subscription) => {
           userEmail: customerEmail, 
           planId, 
           subscriptionId: subscription.id,
+          customerId: subscription.customer,
           source: 'subscription_created'
         }
       }));
@@ -281,15 +327,18 @@ const handleSubscriptionCreated = async (subscription) => {
     logSecurityEvent('SUBSCRIPTION_CREATED', {
       userEmail: customerEmail,
       subscriptionId: subscription.id,
+      customerId: subscription.customer,
       planId
     });
 
     console.log('✅ Subscription created successfully for:', customerEmail);
     return { 
       status: 'success', 
-      message: 'Subscription created successfully',
+      message: 'Subscription created successfully with correct IDs',
       userEmail: customerEmail,
-      planId
+      planId,
+      customerId: subscription.customer,
+      subscriptionId: subscription.id
     };
   } catch (error) {
     console.error('❌ Error handling subscription created:', error);
