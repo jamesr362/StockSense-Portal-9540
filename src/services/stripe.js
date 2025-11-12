@@ -47,6 +47,45 @@ export const updateStripeConfiguration = async (config) => {
   }
 };
 
+// Test Stripe connection - REAL API CALL
+export const testStripeConnection = async (config) => {
+  try {
+    logSecurityEvent('STRIPE_CONNECTION_TEST_INITIATED', { 
+      testMode: config?.testMode,
+    });
+    
+    console.log('🔄 Testing Stripe connection via Netlify function...');
+    
+    // Call the REAL Netlify function to test connection
+    const response = await fetch('/.netlify/functions/test-stripe-connection', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config || {})
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('❌ Stripe connection test failed:', errorData);
+      throw new Error(errorData.message || 'Connection test failed');
+    }
+
+    const result = await response.json();
+    console.log('✅ Stripe connection test successful:', result);
+    
+    logSecurityEvent('STRIPE_CONNECTION_TEST_SUCCESS', { 
+      testMode: config?.testMode 
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Stripe connection test error:', error);
+    logSecurityEvent('STRIPE_CONNECTION_TEST_ERROR', { error: error.message });
+    throw error;
+  }
+};
+
 // Create checkout session - REAL API CALL
 export const createCheckoutSession = async (priceId, customerId = null, metadata = {}) => {
   try {
@@ -173,12 +212,13 @@ export const getCustomerSubscription = async (customerId) => {
   }
 };
 
-// Cancel subscription - REAL API CALL TO STRIPE
+// Cancel subscription - 🎯 REAL API CALL TO STRIPE
 export const cancelSubscription = async (subscriptionId) => {
   try {
     logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_INITIATED', { subscriptionId });
     
-    console.log('🔄 Calling REAL Netlify function to cancel subscription in Stripe:', subscriptionId);
+    console.log('🎯 CALLING REAL NETLIFY FUNCTION TO CANCEL SUBSCRIPTION IN STRIPE');
+    console.log('📋 Subscription ID:', subscriptionId);
     
     // Call the REAL Netlify function that will call Stripe API
     const response = await fetch('/.netlify/functions/cancel-subscription', {
@@ -205,19 +245,25 @@ export const cancelSubscription = async (subscriptionId) => {
         errorData = { message: errorText };
       }
       
+      // Enhanced error handling with specific solutions
+      if (errorData.message?.includes('STRIPE_SECRET_KEY')) {
+        throw new Error('🚨 CRITICAL: Stripe not configured in Netlify. Add STRIPE_SECRET_KEY environment variable to your Netlify site settings.');
+      }
+      
       throw new Error(errorData.message || `HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('✅ REAL Stripe cancellation result:', result);
+    console.log('🎉 REAL STRIPE CANCELLATION RESULT:', result);
     
     // Enhanced success verification
     if (result.success) {
       if (result.localOnly) {
         console.log('💡 Local-only cancellation processed (payment link subscription)');
       } else {
-        console.log('🎯 REAL Stripe API cancellation confirmed!');
+        console.log('🎯 REAL STRIPE API CANCELLATION CONFIRMED!');
         console.log('📊 Stripe verification:', result.verification);
+        console.log('✅ This cancellation is now visible in your Stripe dashboard');
       }
       
       logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELLED', { 
@@ -243,6 +289,16 @@ export const cancelSubscription = async (subscriptionId) => {
       subscriptionId, 
       error: error.message 
     });
+    
+    // Provide helpful error messages
+    if (error.message.includes('STRIPE_SECRET_KEY')) {
+      throw new Error('🚨 Stripe not configured: Add your Stripe secret key to Netlify environment variables');
+    } else if (error.message.includes('Authentication')) {
+      throw new Error('🚨 Stripe authentication failed: Check your API key in Netlify settings');
+    } else if (error.message.includes('not found')) {
+      throw new Error('🚨 Subscription not found in Stripe: The subscription may have already been cancelled');
+    }
+    
     throw new Error(`Failed to cancel subscription in Stripe: ${error.message}`);
   }
 };
@@ -382,47 +438,5 @@ export const getUsageData = async (subscriptionId) => {
       team_members: 3,
       receipt_scans: 85
     };
-  }
-};
-
-// Test Stripe connection - REAL API CALL
-export const testStripeConnection = async (config) => {
-  try {
-    logSecurityEvent('STRIPE_CONNECTION_TEST_INITIATED', { 
-      testMode: config.testMode,
-    });
-    
-    console.log('🔄 Testing Stripe connection via Netlify function...');
-    
-    // Call REAL Netlify function to test connection
-    const response = await fetch('/.netlify/functions/test-stripe-connection', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(config)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Connection test failed');
-    }
-
-    const result = await response.json();
-    console.log('✅ Stripe connection test successful:', result);
-    
-    logSecurityEvent('STRIPE_CONNECTION_TEST_SUCCESS', { 
-      testMode: config.testMode 
-    });
-    
-    return result;
-  } catch (error) {
-    console.error('❌ Stripe connection test error:', error);
-    logSecurityEvent('STRIPE_CONNECTION_TEST_ERROR', { error: error.message });
-    
-    // For demo purposes, return mock success after delay
-    console.log('⚠️ Using fallback connection test...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return { success: true, message: 'Demo connection test passed' };
   }
 };
