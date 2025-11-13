@@ -5,6 +5,19 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Force redirect all traffic to custom domain
+[[redirects]]
+  from = "https://gotrackio.netlify.app/*"
+  to = "https://gotrackio.co.uk/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://gotrackio.co.uk/*"
+  to = "https://gotrackio.co.uk/:splat"
+  status = 301
+  force = true
+
 [[redirects]]
   from = "/api/webhooks/stripe"
   to = "/.netlify/functions/stripe-webhook"
