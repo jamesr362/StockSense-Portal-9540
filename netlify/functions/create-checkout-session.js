@@ -41,17 +41,9 @@ export const handler = async (event) => {
       };
     }
 
-    // Use your custom domain instead of process.env.URL
+    // FIXED: Use custom domain instead of Netlify URL
     const baseUrl = 'https://gotrackio.co.uk';
     
-    console.log('🔄 Creating checkout session:', {
-      priceId,
-      customerId,
-      userEmail,
-      planName,
-      baseUrl
-    });
-
     const sessionConfig = {
       payment_method_types: ['card'],
       line_items: [
@@ -79,12 +71,6 @@ export const handler = async (event) => {
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
-    console.log('✅ Checkout session created:', {
-      sessionId: session.id,
-      successUrl: session.success_url,
-      cancelUrl: session.cancel_url
-    });
-
     return {
       statusCode: 200,
       headers: {
@@ -100,7 +86,7 @@ export const handler = async (event) => {
     };
 
   } catch (error) {
-    console.error('❌ Error creating checkout session:', error);
+    console.error('Error creating checkout session:', error);
     
     return {
       statusCode: 500,
