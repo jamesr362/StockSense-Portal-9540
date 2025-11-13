@@ -1,27 +1,58 @@
-```javascript
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const handler = async (event) => {
+  // Handle CORS preflight
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+      },
+      body: ''
+    };
+  }
+
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      body: 'Method Not Allowed',
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ error: 'Method Not Allowed' })
     };
   }
 
   try {
-    const { priceId, customerId } = JSON.parse(event.body);
+    const { priceId, customerId, userEmail, planName } = JSON.parse(event.body);
 
     if (!priceId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'Missing priceId' }),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ error: 'Missing priceId' })
       };
     }
 
-    const session = await stripe.checkout.sessions.create({
+    // Use your custom domain instead of process.env.URL
+    const baseUrl = 'https://gotrackio.co.uk';
+    
+    console.log('🔄 Creating checkout session:', {
+      priceId,
+      customerId,
+      userEmail,
+      planName,
+      baseUrl
+    });
+
+    const sessionConfig = {
       payment_method_types: ['card'],
       line_items: [
         {
@@ -30,21 +61,57 @@ export const handler = async (event) => {
         },
       ],
       mode: 'subscription',
-      customer: customerId,
-      success_url: `${process.env.URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.URL}/billing`,
+      success_url: `${baseUrl}/#/payment-success?payment_status=success&plan=${planName || 'unknown'}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/#/billing`,
+      metadata: {
+        user_email: userEmail,
+        plan_name: planName
+      }
+    };
+
+    // Only add customer if provided
+    if (customerId) {
+      sessionConfig.customer = customerId;
+    } else if (userEmail) {
+      // If no customer ID but we have email, let Stripe create a new customer
+      sessionConfig.customer_email = userEmail;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
+
+    console.log('✅ Checkout session created:', {
+      sessionId: session.id,
+      successUrl: session.success_url,
+      cancelUrl: session.cancel_url
     });
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ id: session.id }),
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        id: session.id,
+        url: session.url,
+        success_url: session.success_url,
+        cancel_url: session.cancel_url
+      })
     };
+
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    console.error('❌ Error creating checkout session:', error);
+    
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Internal Server Error' }),
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        error: 'Internal Server Error',
+        message: error.message
+      })
     };
   }
 };
-```
