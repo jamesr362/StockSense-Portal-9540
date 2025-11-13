@@ -41,8 +41,8 @@ export const handler = async (event) => {
       };
     }
 
-    // FIXED: Use custom domain instead of Netlify URL
-    const baseUrl = 'https://gotrackio.co.uk';
+    // CORRECTED: Using custom domain gotrackio.co.uk (not Netlify URL)
+    const CUSTOM_DOMAIN = 'https://gotrackio.co.uk';
     
     const sessionConfig = {
       payment_method_types: ['card'],
@@ -53,8 +53,8 @@ export const handler = async (event) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${baseUrl}/#/payment-success?payment_status=success&plan=${planName || 'unknown'}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/#/billing`,
+      success_url: `${CUSTOM_DOMAIN}/#/payment-success?payment_status=success&plan=${planName || 'unknown'}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${CUSTOM_DOMAIN}/#/billing`,
       metadata: {
         user_email: userEmail,
         plan_name: planName
@@ -68,6 +68,11 @@ export const handler = async (event) => {
       // If no customer ID but we have email, let Stripe create a new customer
       sessionConfig.customer_email = userEmail;
     }
+
+    console.log('Creating checkout session with URLs:', {
+      success_url: sessionConfig.success_url,
+      cancel_url: sessionConfig.cancel_url
+    });
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
