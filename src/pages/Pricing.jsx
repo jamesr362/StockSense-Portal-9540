@@ -172,7 +172,7 @@ export default function Pricing() {
               Choose Your Plan
             </h1>
             <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-6">
-              Start your inventory management journey with a plan that fits your business needs
+              Streamline your purchase management with a plan that scales with your business
             </p>
           </motion.div>
 
@@ -221,7 +221,7 @@ export default function Pricing() {
                   plan.id===currentPlanId
                     ? 'Current Plan'
                     : plan.price===0
-                    ? 'Get Started Free'
+                    ? 'Get Started'
                     : 'Get Started'
                 }
               />

@@ -101,41 +101,28 @@ function determineUserRole(email) {
   return 'user';
 }
 
-// ENHANCED: Create a default subscription for new users with CORRECT ID format
+// Create a default subscription for new users - START WITH FREE PLAN
 export const createDefaultSubscription = async (userEmail) => {
   if (!supabaseAvailable()) {
     return;
   }
 
   try {
-    console.log('Creating default FREE subscription for:', userEmail);
-
-    // Generate REALISTIC fake IDs that follow Stripe format (for demo/development)
-    const fakeCustomerId = `cus_demo_${Math.random().toString(36).substring(2, 15)}`;
-    const fakeSubscriptionId = `sub_demo_${Math.random().toString(36).substring(2, 15)}`;
+    console.log('Creating default subscription for:', userEmail);
 
     const subscriptionData = {
       user_email: userEmail,
-      stripe_customer_id: fakeCustomerId, // CORRECT FORMAT: cus_xxx
-      stripe_subscription_id: fakeSubscriptionId, // CORRECT FORMAT: sub_xxx
-      stripe_session_id: null, // No session for default subscription
-      plan_id: 'free', // CORRECT: Use 'free' not 'price_free'
-      stripe_price_id: null, // No Stripe price for free plan
+      stripe_customer_id: `cus_${Math.random().toString(36).substring(2, 15)}`,
+      stripe_subscription_id: `sub_${Math.random().toString(36).substring(2, 15)}`,
+      plan_id: 'price_free', // Start with Free plan
       status: 'active',
       current_period_start: new Date().toISOString(),
-      current_period_end: new Date(Date.now() + 365*24*60*60*1000).toISOString(), // 1 year for free plan
+      current_period_end: new Date(Date.now() + 30*24*60*60*1000).toISOString(), // 30 days from now
       cancel_at_period_end: false,
       canceled_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-
-    console.log('💾 Creating default subscription with correct IDs:', {
-      customerId: subscriptionData.stripe_customer_id,
-      subscriptionId: subscriptionData.stripe_subscription_id,
-      planId: subscriptionData.plan_id,
-      status: subscriptionData.status
-    });
 
     const {error} = await supabase
       .from('subscriptions_tb2k4x9p1m')
@@ -144,9 +131,7 @@ export const createDefaultSubscription = async (userEmail) => {
     if (error) {
       console.error('Error creating default subscription:', error);
     } else {
-      console.log('✅ Default FREE subscription created successfully');
-      console.log('🔍 Verification - Customer ID format:', fakeCustomerId.startsWith('cus_'));
-      console.log('🔍 Verification - Subscription ID format:', fakeSubscriptionId.startsWith('sub_'));
+      console.log('Default subscription created successfully');
     }
   } catch (error) {
     console.error('Error creating default subscription:', error);
@@ -546,15 +531,13 @@ export const updateInventoryItemSupabase = updatePurchaseItemSupabase;
 export const deleteInventoryItemSupabase = deletePurchaseItemSupabase;
 export const searchInventoryItemsSupabase = searchPurchaseItemsSupabase;
 
-// ENHANCED: Subscription operations with better plan mapping
+// Subscription operations
 export const getUserSubscriptionSupabase = async (userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');
   }
 
   try {
-    console.log('🔍 Getting subscription for user:', userEmail);
-
     const {data, error} = await supabase
       .from('subscriptions_tb2k4x9p1m')
       .select('*')
@@ -563,27 +546,16 @@ export const getUserSubscriptionSupabase = async (userEmail) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        console.log('ℹ️ No subscription found for user:', userEmail);
         return null;
       }
       throw error;
     }
 
-    console.log('✅ Subscription found:', {
-      planId: data.plan_id,
-      status: data.status,
-      customerId: data.stripe_customer_id,
-      subscriptionId: data.stripe_subscription_id
-    });
-
-    // ENHANCED: Return properly formatted subscription data
     return {
       id: data.id,
       stripeCustomerId: data.stripe_customer_id,
       stripeSubscriptionId: data.stripe_subscription_id,
-      stripeSessionId: data.stripe_session_id,
-      planId: data.plan_id, // This should be 'professional' or 'free'
-      stripePriceId: data.stripe_price_id,
+      planId: data.plan_id,
       status: data.status,
       currentPeriodStart: data.current_period_start,
       currentPeriodEnd: data.current_period_end,
@@ -629,7 +601,7 @@ export const getPlatformStatsSupabase = async () => {
       // Don't throw, just set to empty array
     }
 
-    // ENHANCED: Get subscriptions with plan breakdown
+    // Get subscriptions
     const {data: subscriptions, error: subscriptionsError} = await supabase
       .from('subscriptions_tb2k4x9p1m')
       .select('*');
@@ -639,25 +611,13 @@ export const getPlatformStatsSupabase = async () => {
       // Don't throw, just set to empty array
     }
 
-    // ENHANCED: Count subscriptions by plan
-    const subscriptionStats = {
-      total: subscriptions?.length || 0,
-      active: subscriptions?.filter(s => s.status === 'active').length || 0,
-      professional: subscriptions?.filter(s => s.plan_id === 'professional' && s.status === 'active').length || 0,
-      free: subscriptions?.filter(s => s.plan_id === 'free' || !s.plan_id).length || 0,
-      canceled: subscriptions?.filter(s => s.status === 'canceled').length || 0
-    };
-
     const stats = {
       totalUsers: users?.length || 0,
       totalAdmins: users?.filter(u => u.role === 'admin').length || 0,
       totalRegularUsers: users?.filter(u => u.role === 'user').length || 0,
       totalPlatformAdmins: users?.filter(u => u.role === 'platformadmin').length || 0,
       totalPurchaseItems: purchaseItems?.length || 0,
-      totalActiveSubscriptions: subscriptionStats.active,
-      totalProfessionalSubscriptions: subscriptionStats.professional,
-      totalFreeSubscriptions: subscriptionStats.free,
-      subscriptionStats: subscriptionStats,
+      totalActiveSubscriptions: subscriptions?.filter(s => s.status === 'active').length || 0,
       recentUsers: (users || [])
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         .slice(0, 5)
@@ -674,8 +634,7 @@ export const getPlatformStatsSupabase = async () => {
       recentUsers: stats.recentUsers.length,
       totalAdmins: stats.totalAdmins,
       totalRegularUsers: stats.totalRegularUsers,
-      totalPurchaseItems: stats.totalPurchaseItems,
-      subscriptionStats: stats.subscriptionStats
+      totalPurchaseItems: stats.totalPurchaseItems
     });
 
     return stats;
