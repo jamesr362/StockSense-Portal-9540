@@ -1,235 +1,111 @@
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export const handler = async (event) => {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
-  }
-
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
       },
-      body: JSON.stringify({
-        success: false,
-        error: 'Method not allowed'
-      })
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
+  }
+
+  // Handle preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+      body: '',
     };
   }
 
   try {
-    // Check if Stripe is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return {
-        statusCode: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          success: false,
-          error: 'Stripe not configured: STRIPE_SECRET_KEY environment variable is missing'
-        })
-      };
-    }
-
-    const { subscriptionId, customerId, cancelAtPeriodEnd = true } = JSON.parse(event.body);
-
-    console.log('🔄 Processing cancellation request:', {
-      subscriptionId,
-      customerId,
-      cancelAtPeriodEnd
-    });
+    const { subscriptionId } = JSON.parse(event.body);
 
     if (!subscriptionId) {
       return {
         statusCode: 400,
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          success: false,
-          error: 'Missing subscription ID'
-        })
+        body: JSON.stringify({ error: 'Subscription ID is required' }),
       };
     }
 
-    let targetSubscriptionId = subscriptionId;
-    let foundViaCustomerSearch = false;
-    let originalSubscriptionId = subscriptionId;
+    console.log('🚫 Canceling subscription:', subscriptionId);
 
-    // If the subscription ID doesn't look like a real Stripe subscription ID, try to find it
-    if (!subscriptionId.startsWith('sub_')) {
-      console.log('⚠️ Invalid subscription ID format:', subscriptionId);
-      
-      if (customerId) {
-        console.log('🔍 Searching for subscription via customer ID:', customerId);
-        
-        try {
-          // Try to find the subscription through the customer
-          const subscriptions = await stripe.subscriptions.list({
-            customer: customerId,
-            status: 'active',
-            limit: 10
-          });
-
-          if (subscriptions.data.length > 0) {
-            targetSubscriptionId = subscriptions.data[0].id;
-            foundViaCustomerSearch = true;
-            console.log('✅ Found subscription via customer search:', targetSubscriptionId);
-          } else {
-            console.log('❌ No active subscriptions found for customer:', customerId);
-            return {
-              statusCode: 404,
-              headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                success: false,
-                error: 'No active subscription found for this customer'
-              })
-            };
-          }
-        } catch (customerError) {
-          console.error('❌ Error searching customer subscriptions:', customerError);
-          return {
-            statusCode: 400,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              success: false,
-              error: `Invalid subscription ID format and customer lookup failed: ${customerError.message}`
-            })
-          };
-        }
-      } else {
-        return {
-          statusCode: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            success: false,
-            error: `Invalid subscription ID format: ${subscriptionId} (should start with sub_)`
-          })
-        };
-      }
-    }
-
-    console.log('🎯 Attempting to cancel subscription:', targetSubscriptionId);
-
-    // Cancel the subscription in Stripe
-    const updatedSubscription = await stripe.subscriptions.update(targetSubscriptionId, {
-      cancel_at_period_end: cancelAtPeriodEnd
+    // Cancel the subscription with Stripe
+    const canceledSubscription = await stripe.subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
     });
 
-    console.log('✅ Successfully cancelled subscription in Stripe:', {
-      id: updatedSubscription.id,
-      status: updatedSubscription.status,
-      cancel_at_period_end: updatedSubscription.cancel_at_period_end,
-      canceled_at: updatedSubscription.canceled_at,
-      current_period_end: updatedSubscription.current_period_end
-    });
+    console.log('✅ Subscription canceled with Stripe:', canceledSubscription.id);
+    console.log('📋 Cancel at period end:', canceledSubscription.cancel_at_period_end);
+    console.log('📅 Current period end:', new Date(canceledSubscription.current_period_end * 1000));
 
-    // If immediate cancellation was requested, also cancel immediately
-    if (!cancelAtPeriodEnd) {
-      console.log('🔄 Cancelling subscription immediately...');
-      const cancelledSubscription = await stripe.subscriptions.cancel(targetSubscriptionId);
-      
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          success: true,
-          message: 'Subscription cancelled immediately',
-          subscription: cancelledSubscription,
-          stripeVerified: true,
-          foundViaCustomerSearch,
-          originalSubscriptionId,
-          realStripeSubscriptionId: targetSubscriptionId
-        })
-      };
+    // Update subscription in Supabase using stripe_subscription_id
+    const { error: updateError } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .update({
+        cancel_at_period_end: true,
+        status: canceledSubscription.status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('stripe_subscription_id', subscriptionId);
+
+    if (updateError) {
+      console.error('Error updating subscription in Supabase:', updateError);
+      // Don't fail the request - Stripe cancellation succeeded
+    } else {
+      console.log('✅ Subscription updated in Supabase');
     }
 
-    // Return success response
     return {
       statusCode: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         success: true,
-        message: cancelAtPeriodEnd 
-          ? 'Subscription will be cancelled at the end of the current billing period'
-          : 'Subscription cancelled immediately',
-        subscription: updatedSubscription,
-        stripeVerified: true,
-        foundViaCustomerSearch,
-        originalSubscriptionId,
-        realStripeSubscriptionId: targetSubscriptionId
-      })
+        subscription: {
+          id: canceledSubscription.id,
+          status: canceledSubscription.status,
+          cancel_at_period_end: canceledSubscription.cancel_at_period_end,
+          current_period_end: canceledSubscription.current_period_end,
+        },
+      }),
     };
 
   } catch (error) {
-    console.error('❌ Cancellation error:', error);
-
-    // Handle specific Stripe errors
-    let errorMessage = error.message;
-    let statusCode = 500;
-
-    if (error.type === 'StripeInvalidRequestError') {
-      if (error.message.includes('No such subscription')) {
-        errorMessage = 'Subscription not found in Stripe. It may have already been cancelled.';
-        statusCode = 404;
-      } else {
-        errorMessage = `Invalid request: ${error.message}`;
-        statusCode = 400;
-      }
-    } else if (error.type === 'StripeAuthenticationError') {
-      errorMessage = 'Stripe authentication failed. Check your STRIPE_SECRET_KEY.';
-      statusCode = 401;
-    } else if (error.type === 'StripePermissionError') {
-      errorMessage = 'Insufficient permissions for this Stripe operation.';
-      statusCode = 403;
-    } else if (error.type === 'StripeRateLimitError') {
-      errorMessage = 'Too many requests to Stripe. Please try again later.';
-      statusCode = 429;
-    }
+    console.error('❌ Error canceling subscription:', error);
 
     return {
-      statusCode,
+      statusCode: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        success: false,
-        error: errorMessage,
-        type: error.type || 'UnknownError'
-      })
+        error: 'Failed to cancel subscription',
+        details: error.message,
+      }),
     };
   }
 };

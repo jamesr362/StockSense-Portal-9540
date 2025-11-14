@@ -1,448 +1,311 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import * as RiIcons from 'react-icons/ri';
 import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../context/AuthContext';
-import { SUBSCRIPTION_PLANS, getPlanById } from '../lib/stripe';
+import { SUBSCRIPTION_PLANS } from '../lib/stripe';
+import { 
+  getSubscriptionByStripeId, 
+  refreshSubscriptionData, 
+  clearUserCache,
+  verifySubscriptionUpdate 
+} from '../services/subscriptionService';
 
 const { RiCheckboxCircleFill, RiArrowRightLine, RiHomeLine, RiErrorWarningLine } = RiIcons;
 
-export default function PaymentSuccess() {
+const PaymentSuccess = () => {
   const [searchParams] = useSearchParams();
-  const [isProcessing, setIsProcessing] = useState(true);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [subscriptionStatus, setSubscriptionStatus] = useState('loading');
   const [subscriptionData, setSubscriptionData] = useState(null);
-  const { user, loading: authLoading } = useAuth();
-
-  // SECURE: Fetch subscription status from backend only
-  const fetchSubscriptionStatus = async (retryCount = 0) => {
-    if (!user?.email) {
-      console.log('⚠️ No user email available for subscription check');
-      return null;
-    }
-
-    try {
-      console.log(`🔍 Fetching subscription status (attempt ${retryCount + 1})...`);
-      
-      // Call backend endpoint to get current subscription
-      const response = await fetch('/.netlify/functions/get-customer-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: user.email
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Backend responded with ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('📊 Backend subscription data:', data);
-
-      if (data.subscription) {
-        return {
-          success: true,
-          subscription: data.subscription,
-          customer: data.customer,
-          activated: true
-        };
-      }
-
-      // If no subscription yet, maybe webhook hasn't processed
-      if (retryCount < 6) { // Try for up to 60 seconds
-        console.log(`⏳ No subscription found yet, retrying in 10 seconds... (${retryCount + 1}/6)`);
-        await new Promise(resolve => setTimeout(resolve, 10000));
-        return fetchSubscriptionStatus(retryCount + 1);
-      }
-
-      return {
-        success: false,
-        message: 'Subscription not found after waiting. It may take a few more minutes to activate.',
-        stillProcessing: true
-      };
-
-    } catch (err) {
-      console.error('❌ Error fetching subscription:', err);
-      
-      // Retry on network errors
-      if (retryCount < 3 && (err.name === 'TypeError' || err.message.includes('fetch'))) {
-        console.log(`🔄 Network error, retrying in 5 seconds... (${retryCount + 1}/3)`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        return fetchSubscriptionStatus(retryCount + 1);
-      }
-
-      return {
-        success: false,
-        error: err.message,
-        stillProcessing: retryCount < 3
-      };
-    }
-  };
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const processPaymentReturn = async () => {
+    const verifyPayment = async () => {
+      if (!user?.email) {
+        console.log('No user found, redirecting to login');
+        navigate('/login');
+        return;
+      }
+
       try {
-        console.log('🎉 Payment Success page loaded');
+        console.log('🔍 Verifying payment success...');
         
-        // Wait for auth to be checked
-        if (authLoading) {
-          console.log('⏳ Waiting for auth check...');
-          return;
+        // Get parameters from URL
+        const sessionId = searchParams.get('session_id');
+        const subscriptionId = searchParams.get('subscription_id');
+        
+        console.log('URL Parameters:', { sessionId, subscriptionId });
+
+        // Clear all caches first
+        clearUserCache(user.email);
+
+        let subscription = null;
+        let retryCount = 0;
+        const maxRetries = 10;
+        const retryDelay = 2000; // 2 seconds
+
+        // Retry logic for fetching subscription
+        while (!subscription && retryCount < maxRetries) {
+          console.log(`🔄 Attempt ${retryCount + 1}/${maxRetries} to fetch subscription...`);
+          
+          try {
+            if (subscriptionId) {
+              // Primary method: Use Stripe Subscription ID from URL
+              console.log('🔍 Fetching subscription by Stripe ID:', subscriptionId);
+              subscription = await getSubscriptionByStripeId(subscriptionId);
+            } else {
+              // Fallback: Refresh subscription data by email
+              console.log('🔍 Refreshing subscription data by email:', user.email);
+              const result = await refreshSubscriptionData(user.email);
+              subscription = result?.subscription;
+            }
+
+            if (subscription) {
+              console.log('✅ Subscription found:', subscription);
+              break;
+            } else {
+              console.log(`⏳ No subscription found, retrying in ${retryDelay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+              retryCount++;
+            }
+          } catch (err) {
+            console.error(`❌ Error in attempt ${retryCount + 1}:`, err);
+            retryCount++;
+            if (retryCount < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
+            }
+          }
         }
 
-        // SECURE: Only use URL params for display purposes, not for activation
-        const urlParams = new URLSearchParams(window.location.search);
-        const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
-        
-        // Get display info from URL (informational only)
-        const planId = hashParams.get('plan') || urlParams.get('plan') || 'professional';
-        const sessionId = hashParams.get('session_id') || urlParams.get('session_id');
-        
-        console.log('📋 URL parameters (display only):', { planId, sessionId });
+        if (subscription && subscription.status === 'active') {
+          console.log('✅ Active subscription verified:', subscription);
+          
+          setSubscriptionData(subscription);
+          setSubscriptionStatus('success');
 
-        if (!user?.email) {
-          console.log('👤 User not logged in, showing login prompt');
-          setResult({
-            success: true,
-            planId,
-            sessionId,
-            activated: false,
-            requiresLogin: true
-          });
-          setIsProcessing(false);
-          return;
-        }
+          // Comprehensive cache clearing and event dispatching
+          console.log('🧹 Clearing caches and dispatching events...');
+          
+          // Clear localStorage caches
+          try {
+            Object.keys(localStorage).forEach(key => {
+              if (key.includes('subscription') || key.includes('feature') || key.includes('plan')) {
+                localStorage.removeItem(key);
+              }
+            });
+          } catch (e) {
+            console.warn('Error clearing localStorage:', e);
+          }
 
-        // SECURE: Fetch actual subscription status from backend
-        const subscriptionResult = await fetchSubscriptionStatus();
-        
-        if (subscriptionResult?.success && subscriptionResult.subscription) {
-          console.log('✅ Subscription confirmed by backend');
-          setSubscriptionData(subscriptionResult.subscription);
-          setResult({
-            success: true,
-            planId: subscriptionResult.subscription.price?.lookup_key || planId,
-            sessionId,
-            activated: true,
-            subscription: subscriptionResult.subscription
+          // Dispatch multiple events for different components
+          const eventTypes = [
+            'subscriptionUpdated',
+            'refreshFeatureAccess',
+            'planChanged',
+            'userUpgraded',
+            'paymentSuccessful',
+            'forceSubscriptionSync',
+            'globalDataRefresh'
+          ];
+
+          eventTypes.forEach(eventType => {
+            try {
+              window.dispatchEvent(new CustomEvent(eventType, {
+                detail: {
+                  userEmail: user.email,
+                  subscription: subscription,
+                  planId: subscription.planId,
+                  status: subscription.status,
+                  force: true,
+                  immediate: true,
+                  timestamp: Date.now()
+                }
+              }));
+              console.log(`📡 ${eventType} event dispatched`);
+            } catch (e) {
+              console.warn(`Error dispatching ${eventType}:`, e);
+            }
           });
-        } else if (subscriptionResult?.stillProcessing) {
-          console.log('⏳ Subscription still processing');
-          setResult({
-            success: true,
-            planId,
-            sessionId,
-            activated: false,
-            processing: true,
-            message: subscriptionResult.message || 'Your subscription is being activated...'
-          });
+
+          // Force a final refresh after a short delay
+          setTimeout(() => {
+            refreshSubscriptionData(user.email);
+          }, 1000);
+
         } else {
-          console.log('⚠️ Subscription not found, but payment was successful');
-          setResult({
-            success: true,
-            planId,
-            sessionId,
-            activated: false,
-            message: 'Payment successful! Your subscription will be activated within a few minutes.',
-            fallback: true
-          });
+          console.warn('⚠️ No active subscription found after all retries');
+          setSubscriptionStatus('pending');
+          setError('Subscription verification is still in progress. Please check your account in a few minutes.');
         }
 
       } catch (err) {
-        console.error('❌ Error processing payment success:', err);
-        // Show success anyway since we're on the success page
-        setResult({
-          success: true,
-          planId: searchParams.get('plan') || 'professional',
-          sessionId: searchParams.get('session_id'),
-          activated: false,
-          error: err.message,
-          fallback: true
-        });
-      } finally {
-        setIsProcessing(false);
+        console.error('❌ Error verifying payment:', err);
+        setError(err.message);
+        setSubscriptionStatus('error');
       }
     };
 
-    // Process payment when auth is ready
-    if (!authLoading) {
-      const timer = setTimeout(processPaymentReturn, 500);
-      return () => clearTimeout(timer);
+    verifyPayment();
+  }, [user, searchParams, navigate]);
+
+  const getPlanInfo = () => {
+    if (!subscriptionData?.planId) return SUBSCRIPTION_PLANS.free;
+    
+    // Extract plan from planId (e.g., "price_professional" -> "professional")
+    if (subscriptionData.planId.includes('professional')) {
+      return SUBSCRIPTION_PLANS.professional;
     }
-  }, [searchParams, user, authLoading]);
-
-  // Force navigation using hash (the method that works)
-  const goToDashboard = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('🚀 Going to Dashboard...');
-    window.location.hash = '#/app/dashboard';
-    window.location.reload();
+    return SUBSCRIPTION_PLANS.free;
   };
 
-  const goToLogin = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    console.log('🔑 Going to Login...');
-    window.location.hash = '#/login';
-    window.location.reload();
+  const handleContinue = () => {
+    // Navigate to dashboard with a refresh flag
+    navigate('/dashboard?upgraded=true', { replace: true });
   };
 
-  const planId = searchParams.get('plan') || result?.planId || 'professional';
-  const plan = getPlanById(planId) || SUBSCRIPTION_PLANS.professional;
+  const handleGoHome = () => {
+    navigate('/', { replace: true });
+  };
 
-  // Show loading while auth is being checked
-  if (authLoading || isProcessing) {
+  if (subscriptionStatus === 'loading') {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-6"></div>
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {authLoading ? 'Checking Authentication...' : 'Verifying Your Subscription'}
-          </h2>
-          <p className="text-gray-400">
-            {authLoading ? 'Verifying your account...' : 'Confirming payment with our secure backend...'}
-          </p>
-          <div className="mt-4 text-sm text-gray-500">
-            <p>🔒 Validating subscription status securely</p>
-            <p>⏳ This may take up to 60 seconds</p>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center"
+        >
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Verifying Payment</h2>
+          <p className="text-gray-600">Please wait while we confirm your subscription...</p>
+        </motion.div>
       </div>
     );
   }
 
-  // Show error state
-  if (error && !result) {
+  if (subscriptionStatus === 'error') {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
-            <SafeIcon icon={RiErrorWarningLine} className="h-16 w-16 text-red-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-red-300 mb-2">
-              Verification Issue
-            </h2>
-            <p className="text-red-200 mb-4">{error}</p>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center"
+        >
+          <SafeIcon icon={RiErrorWarningLine} className="text-6xl text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Payment Verification Failed</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="space-y-3">
             <button
-              onClick={goToDashboard}
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg transition-colors font-medium"
+              onClick={() => window.location.reload()}
+              className="w-full bg-red-600 text-white py-3 rounded-lg font-medium hover:bg-red-700 transition-colors"
             >
-              Go to Dashboard
+              Try Again
+            </button>
+            <button
+              onClick={handleGoHome}
+              className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+            >
+              Go Home
             </button>
           </div>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
-  // Main success page
+  if (subscriptionStatus === 'pending') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-white to-orange-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center"
+        >
+          <SafeIcon icon={RiErrorWarningLine} className="text-6xl text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Payment Processing</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <div className="space-y-3">
+            <button
+              onClick={handleContinue}
+              className="w-full bg-yellow-600 text-white py-3 rounded-lg font-medium hover:bg-yellow-700 transition-colors"
+            >
+              Continue to Dashboard
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const planInfo = getPlanInfo();
+
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-2xl w-full"
+        className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center"
       >
-        <div className="text-center mb-8">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring' }}
-            className="inline-flex items-center justify-center w-20 h-20 bg-green-500 rounded-full mb-6"
-          >
-            <SafeIcon icon={RiCheckboxCircleFill} className="h-12 w-12 text-white" />
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="text-4xl font-bold text-white mb-4"
-          >
-            🎉 Payment Successful!
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-xl text-gray-300 mb-8"
-          >
-            Welcome to {plan.name}! {result?.activated ? 'Your subscription is now active.' : 'Your subscription is being activated.'}
-          </motion.p>
-
-          {/* Show status messages */}
-          {result?.requiresLogin && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45 }}
-              className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-4 mb-6"
-            >
-              <p className="text-yellow-200 text-sm">
-                Please log in to complete your subscription setup and access all features.
-              </p>
-            </motion.div>
-          )}
-
-          {result?.processing && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45 }}
-              className="bg-blue-900/50 border border-blue-700 rounded-lg p-4 mb-6"
-            >
-              <div className="flex items-center justify-center mb-2">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400 mr-3"></div>
-                <p className="text-blue-200 text-sm font-medium">Activating your subscription...</p>
-              </div>
-              <p className="text-blue-300 text-xs">
-                {result.message || 'This usually takes 30-60 seconds. Please wait...'}
-              </p>
-            </motion.div>
-          )}
-
-          {result?.fallback && !result?.processing && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45 }}
-              className="bg-blue-900/50 border border-blue-700 rounded-lg p-4 mb-6"
-            >
-              <p className="text-blue-200 text-sm">
-                {result.message || 'Your payment was processed successfully. If you don\'t see your subscription immediately, it will be activated within a few minutes.'}
-              </p>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Plan Summary */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-gray-800 rounded-xl p-6 mb-8"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
         >
-          <h2 className="text-2xl font-bold text-white mb-4 text-center">
-            Subscription Summary
-          </h2>
-          
-          <div className="space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-              <span className="text-gray-300">Plan:</span>
-              <span className="text-white font-semibold">{plan.name}</span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-              <span className="text-gray-300">Price:</span>
-              <span className="text-white font-semibold">
-                {plan.price === 0 ? 'Free' : `£${plan.price}/month`}
-              </span>
-            </div>
-            
-            <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-              <span className="text-gray-300">User:</span>
-              <span className="text-white font-semibold">
-                {user?.email || 'Login required'}
-              </span>
-            </div>
-            
-            <div className="flex justify-between items-center">
-              <span className="text-gray-300">Status:</span>
-              <span className={`font-semibold flex items-center ${
-                result?.activated ? 'text-green-400' : 
-                result?.processing ? 'text-yellow-400' : 'text-blue-400'
-              }`}>
-                {result?.processing && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400 mr-2"></div>
-                )}
-                {result?.activated ? 'Active' : 
-                 result?.processing ? 'Activating...' : 'Pending Activation'}
-              </span>
-            </div>
-
-            {/* Show subscription details if available */}
-            {subscriptionData && (
-              <>
-                <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-                  <span className="text-gray-300">Subscription ID:</span>
-                  <span className="text-gray-400 text-sm font-mono">
-                    {subscriptionData.id?.substring(0, 20)}...
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-300">Next Billing:</span>
-                  <span className="text-gray-300 text-sm">
-                    {subscriptionData.current_period_end ? 
-                      new Date(subscriptionData.current_period_end * 1000).toLocaleDateString() :
-                      'TBD'
-                    }
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
+          <SafeIcon icon={RiCheckboxCircleFill} className="text-6xl text-green-500 mx-auto mb-4" />
         </motion.div>
 
-        {/* Navigation Button */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
         >
-          {result?.requiresLogin ? (
-            <button
-              type="button"
-              onClick={goToLogin}
-              className="inline-flex items-center justify-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-blue-600 hover:bg-blue-700 text-white text-lg"
-            >
-              <SafeIcon icon={RiHomeLine} className="h-6 w-6 mr-3" />
-              Login to Continue
-              <SafeIcon icon={RiArrowRightLine} className="h-6 w-6 ml-3" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={goToDashboard}
-              className="inline-flex items-center justify-center font-semibold py-4 px-8 rounded-lg transition-all shadow-lg hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-gray-900 bg-primary-600 hover:bg-primary-700 text-white text-lg"
-            >
-              <SafeIcon icon={RiHomeLine} className="h-6 w-6 mr-3" />
-              Go to Dashboard
-              <SafeIcon icon={RiArrowRightLine} className="h-6 w-6 ml-3" />
-            </button>
-          )}
-
-          <p className="text-gray-400 text-sm mt-4">
-            {result?.activated ? 
-              'Ready to start using your new subscription features!' :
-              'Your subscription will be ready shortly!'
-            }
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Payment Successful!</h1>
+          <p className="text-gray-600 mb-6">
+            Welcome to {planInfo.name}! Your subscription is now active.
           </p>
-        </motion.div>
 
-        {/* Security Notice */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7 }}
-          className="mt-8 text-center"
-        >
-          <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-            <p className="text-gray-400 text-xs">
-              🔒 Your subscription status is verified securely with our backend systems
-            </p>
-            <p className="text-gray-500 text-xs mt-1">
-              All payment processing is handled by Stripe's secure infrastructure
-            </p>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <h3 className="font-semibold text-green-800 mb-2">What's included:</h3>
+            <ul className="text-sm text-green-700 space-y-1">
+              {planInfo.features.map((feature, index) => (
+                <li key={index} className="flex items-center">
+                  <SafeIcon icon={RiCheckboxCircleFill} className="text-green-500 mr-2 text-xs" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleContinue}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center"
+            >
+              Continue to Dashboard
+              <SafeIcon icon={RiArrowRightLine} className="ml-2" />
+            </button>
+            
+            <button
+              onClick={handleGoHome}
+              className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center justify-center"
+            >
+              <SafeIcon icon={RiHomeLine} className="mr-2" />
+              Go Home
+            </button>
           </div>
         </motion.div>
       </motion.div>
     </div>
   );
-}
+};
+
+export default PaymentSuccess;

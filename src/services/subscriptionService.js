@@ -1,129 +1,138 @@
 import { supabase } from '../lib/supabase';
-import { logSecurityEvent } from '../utils/security';
-import { STRIPE_PLANS } from '../lib/stripe';
+import { SUBSCRIPTION_PLANS } from '../lib/stripe';
 
 /**
- * Get user subscription and plan limits
+ * Subscription Service - Enhanced to use stripe_subscription_id as primary identifier
+ * Handles subscription management and plan limits with improved security
  */
-export const getUserPlanLimits = async (userEmail) => {
+
+// Cache for subscription data (5 minutes)
+const CACHE_DURATION = 5 * 60 * 1000;
+const subscriptionCache = new Map();
+
+// Helper to get cache key
+const getCacheKey = (identifier, type = 'email') => `subscription_${type}_${identifier.toLowerCase()}`;
+
+// Helper to check if cache is valid
+const isCacheValid = (cacheEntry) => {
+  if (!cacheEntry) return false;
+  return Date.now() - cacheEntry.timestamp < CACHE_DURATION;
+};
+
+// Clear cache for user
+export const clearUserCache = (userEmail) => {
+  const emailCacheKey = getCacheKey(userEmail, 'email');
+  subscriptionCache.delete(emailCacheKey);
+  
+  // Also clear any subscription ID based cache
+  const subscription = subscriptionCache.get(emailCacheKey);
+  if (subscription?.data?.stripeSubscriptionId) {
+    const subIdCacheKey = getCacheKey(subscription.data.stripeSubscriptionId, 'subscription_id');
+    subscriptionCache.delete(subIdCacheKey);
+  }
+  
+  // Also clear localStorage cache
   try {
-    if (!userEmail) {
-      return {
-        subscription: null,
-        planLimits: getFreePlanLimits()
-      };
-    }
-
-    console.log('🔍 Getting plan limits for:', userEmail);
-
-    // Try to get subscription from Supabase first
-    let subscription = null;
-    
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('subscriptions_tb2k4x9p1m')
-          .select('*')
-          .eq('user_email', userEmail.toLowerCase())
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error fetching subscription:', error);
-        } else if (data) {
-          subscription = data;
-          console.log('✅ Found subscription:', subscription);
-        }
-      } catch (error) {
-        console.error('Error querying subscription:', error);
-      }
-    }
-
-    // Determine plan limits based on subscription
-    let planLimits;
-    
-    if (subscription && subscription.status === 'active') {
-      // Extract plan type from plan_id
-      if (subscription.plan_id && subscription.plan_id.includes('professional')) {
-        planLimits = getProfessionalPlanLimits();
-      } else {
-        planLimits = getFreePlanLimits();
-      }
-    } else {
-      planLimits = getFreePlanLimits();
-    }
-
-    console.log('📊 Plan limits:', planLimits);
-
-    return {
-      subscription,
-      planLimits
-    };
-
+    localStorage.removeItem(`subscriptionCache_${userEmail}`);
+    localStorage.removeItem(`subscriptionCache_${userEmail}_time`);
   } catch (error) {
-    console.error('❌ Error getting user plan limits:', error);
-    
-    // Fallback to free plan
-    return {
-      subscription: null,
-      planLimits: getFreePlanLimits()
-    };
+    console.warn('Error clearing localStorage cache:', error);
   }
 };
 
-/**
- * Get free plan limits
- */
-export const getFreePlanLimits = () => ({
-  inventoryItems: 10, // Updated from 100 to 10
-  purchaseItems: 10, // Updated from 100 to 10
-  receiptScans: 3, // Updated from 1 to 3
-  excelImports: 1,
-  taxExports: 1, // Updated from false to 1
-  features: ['inventory', 'dashboard', 'settings', 'taxExports']
-});
+// Get subscription by Stripe Subscription ID (primary method)
+export const getSubscriptionByStripeId = async (stripeSubscriptionId) => {
+  if (!stripeSubscriptionId || !supabase) {
+    console.log('No stripe subscription ID or Supabase not available');
+    return null;
+  }
 
-/**
- * Get professional plan limits
- */
-export const getProfessionalPlanLimits = () => ({
-  inventoryItems: -1, // unlimited
-  purchaseItems: -1,  // unlimited
-  receiptScans: -1,   // unlimited
-  excelImports: -1,   // unlimited
-  taxExports: -1,     // unlimited (changed from true to -1 for consistency)
-  features: ['inventory', 'dashboard', 'settings', 'receiptScanner', 'excelImporter', 'taxExports']
-});
+  const cacheKey = getCacheKey(stripeSubscriptionId, 'subscription_id');
+  
+  // Check memory cache first
+  const cached = subscriptionCache.get(cacheKey);
+  if (isCacheValid(cached)) {
+    console.log('📋 Using cached subscription data (by Stripe ID)');
+    return cached.data;
+  }
 
-/**
- * Check if user has reached a specific limit
- */
-export const checkPlanLimit = async (userEmail, limitType, currentUsage) => {
   try {
-    const { planLimits } = await getUserPlanLimits(userEmail);
-    const limit = planLimits[limitType];
+    console.log('🔍 Fetching subscription from Supabase by Stripe ID:', stripeSubscriptionId);
+
+    // Query subscriptions table by stripe_subscription_id
+    const { data, error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .select('*')
+      .eq('stripe_subscription_id', stripeSubscriptionId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log('ℹ️ No subscription found for Stripe ID:', stripeSubscriptionId);
+        return null;
+      }
+      throw error;
+    }
+
+    // Transform Supabase data to our format
+    const subscription = {
+      id: data.id,
+      userEmail: data.user_email,
+      stripeCustomerId: data.stripe_customer_id,
+      stripeSubscriptionId: data.stripe_subscription_id,
+      planId: data.plan_id,
+      status: data.status,
+      currentPeriodStart: data.current_period_start,
+      currentPeriodEnd: data.current_period_end,
+      cancelAtPeriodEnd: data.cancel_at_period_end,
+      canceledAt: data.canceled_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+
+    console.log('✅ Found subscription by Stripe ID:', subscription);
+
+    // Cache the result (both by subscription ID and email)
+    subscriptionCache.set(cacheKey, {
+      data: subscription,
+      timestamp: Date.now()
+    });
     
-    if (limit === -1) return false; // unlimited
-    if (limit === 0) return true;   // not available
-    
-    return currentUsage >= limit;
+    // Also cache by email for backward compatibility
+    const emailCacheKey = getCacheKey(subscription.userEmail, 'email');
+    subscriptionCache.set(emailCacheKey, {
+      data: subscription,
+      timestamp: Date.now()
+    });
+
+    return subscription;
+
   } catch (error) {
-    console.error('Error checking plan limit:', error);
-    return true; // Err on the side of caution
+    console.error('❌ Error fetching subscription by Stripe ID:', error);
+    return null;
   }
 };
 
-/**
- * Get user subscription
- */
+// Get subscription from Supabase with caching (by email - fallback method)
 export const getUserSubscription = async (userEmail) => {
   if (!userEmail || !supabase) {
     console.log('No user email or Supabase not available');
     return null;
   }
 
-  try {
-    console.log('🔍 Fetching subscription for user:', userEmail);
+  const cacheKey = getCacheKey(userEmail, 'email');
+  
+  // Check memory cache first
+  const cached = subscriptionCache.get(cacheKey);
+  if (isCacheValid(cached)) {
+    console.log('📋 Using cached subscription data (by email)');
+    return cached.data;
+  }
 
+  try {
+    console.log('🔍 Fetching subscription from Supabase for:', userEmail);
+
+    // Query subscriptions table by user_email
     const { data, error } = await supabase
       .from('subscriptions_tb2k4x9p1m')
       .select('*')
@@ -132,626 +141,420 @@ export const getUserSubscription = async (userEmail) => {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        console.log('No subscription found for user');
-        return null;
+        // No subscription found - user is on free plan
+        console.log('ℹ️ No subscription found, user is on free plan');
+        const freeSubscription = null;
+        
+        // Cache the null result
+        subscriptionCache.set(cacheKey, {
+          data: freeSubscription,
+          timestamp: Date.now()
+        });
+        
+        return freeSubscription;
       }
-      console.error('Error fetching subscription:', error);
-      return null;
+      throw error;
     }
 
-    console.log('✅ Found subscription:', data);
-    return data;
+    // Transform Supabase data to our format
+    const subscription = {
+      id: data.id,
+      userEmail: data.user_email,
+      stripeCustomerId: data.stripe_customer_id,
+      stripeSubscriptionId: data.stripe_subscription_id,
+      planId: data.plan_id,
+      status: data.status,
+      currentPeriodStart: data.current_period_start,
+      currentPeriodEnd: data.current_period_end,
+      cancelAtPeriodEnd: data.cancel_at_period_end,
+      canceledAt: data.canceled_at,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+
+    console.log('✅ Found subscription by email:', subscription);
+
+    // Cache the result (both by email and subscription ID)
+    subscriptionCache.set(cacheKey, {
+      data: subscription,
+      timestamp: Date.now()
+    });
+    
+    // Also cache by subscription ID for faster lookups
+    const subIdCacheKey = getCacheKey(subscription.stripeSubscriptionId, 'subscription_id');
+    subscriptionCache.set(subIdCacheKey, {
+      data: subscription,
+      timestamp: Date.now()
+    });
+
+    return subscription;
 
   } catch (error) {
-    console.error('❌ Error in getUserSubscription:', error);
+    console.error('❌ Error fetching subscription by email:', error);
     return null;
   }
 };
 
-/**
- * Update user subscription - Main function used by PaymentSuccess
- */
-export const updateUserSubscription = async (userEmail, planId, sessionId = null) => {
-  if (!userEmail || !planId) {
-    throw new Error('User email and plan ID are required');
-  }
-
-  if (!supabase) {
-    throw new Error('Database not available');
-  }
-
+// Get plan limits based on subscription
+export const getUserPlanLimits = async (userEmail) => {
   try {
-    console.log('🔄 Updating user subscription:', { userEmail, planId, sessionId });
+    console.log('🔍 Getting plan limits for:', userEmail);
 
-    // Clean duplicate subscriptions first
-    await cleanupDuplicateSubscriptions(userEmail);
-
-    // **FIXED**: Don't store fake session IDs as subscription IDs
-    const subscriptionData = {
-      user_email: userEmail.toLowerCase(),
-      plan_id: planId.startsWith('price_') ? planId : `price_${planId}`,
-      status: 'active',
-      stripe_customer_id: null,
-      // **CRITICAL FIX**: Only store real Stripe subscription IDs
-      stripe_subscription_id: (sessionId && !sessionId.startsWith('pl_') && !sessionId.startsWith('manual_')) ? sessionId : null,
-      current_period_start: new Date().toISOString(),
-      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-      updated_at: new Date().toISOString()
-    };
-
-    // Create or update subscription
-    const result = await createOrUpdateSubscription(subscriptionData);
+    const subscription = await getUserSubscription(userEmail);
     
-    console.log('✅ Subscription updated successfully:', result);
+    let planId = 'free';
     
-    // Log security event
-    logSecurityEvent('SUBSCRIPTION_UPDATED_VIA_PAYMENT', {
-      userEmail,
-      planId: subscriptionData.plan_id,
-      sessionId,
-      subscriptionId: result.id
-    });
-
-    return result;
-
-  } catch (error) {
-    console.error('❌ Error updating user subscription:', error);
-    throw error;
-  }
-};
-
-/**
- * Clean up duplicate subscriptions for a user
- */
-export const cleanupDuplicateSubscriptions = async (userEmail) => {
-  if (!userEmail || !supabase) {
-    return;
-  }
-
-  try {
-    console.log('🧹 Cleaning up duplicate subscriptions for:', userEmail);
-
-    // Get all subscriptions for the user
-    const { data: subscriptions, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching subscriptions for cleanup:', error);
-      return;
-    }
-
-    if (!subscriptions || subscriptions.length <= 1) {
-      console.log('No duplicate subscriptions found');
-      return;
-    }
-
-    // Keep the most recent subscription, delete the rest
-    const [keepSubscription, ...duplicates] = subscriptions;
-    
-    if (duplicates.length > 0) {
-      console.log(`🗑️ Removing ${duplicates.length} duplicate subscriptions`);
-      
-      const duplicateIds = duplicates.map(sub => sub.id);
-      
-      const { error: deleteError } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .delete()
-        .in('id', duplicateIds);
-
-      if (deleteError) {
-        console.error('Error deleting duplicate subscriptions:', deleteError);
-      } else {
-        console.log('✅ Duplicate subscriptions cleaned up');
-        
-        logSecurityEvent('DUPLICATE_SUBSCRIPTIONS_CLEANED', {
-          userEmail,
-          keptSubscriptionId: keepSubscription.id,
-          deletedCount: duplicates.length,
-          deletedIds: duplicateIds
-        });
+    if (subscription && subscription.status === 'active') {
+      // Extract plan name from plan_id (e.g., "price_professional" -> "professional")
+      if (subscription.planId && subscription.planId.includes('professional')) {
+        planId = 'professional';
+      } else if (subscription.planId && subscription.planId.includes('free')) {
+        planId = 'free';
+      } else if (subscription.planId && !subscription.planId.includes('free')) {
+        // If it's not free and not explicitly professional, assume it's professional
+        planId = 'professional';
       }
     }
 
-  } catch (error) {
-    console.error('❌ Error cleaning up duplicate subscriptions:', error);
-  }
-};
+    console.log('📋 Determined plan:', planId);
 
-/**
- * Create or update subscription
- */
-export const createOrUpdateSubscription = async (subscriptionData) => {
-  if (!supabase) {
-    console.error('Supabase not available');
-    throw new Error('Database not available');
-  }
+    // Get plan configuration from SUBSCRIPTION_PLANS
+    const plan = SUBSCRIPTION_PLANS[planId] || SUBSCRIPTION_PLANS.free;
+    const limits = plan.limits;
 
-  try {
-    console.log('💾 Creating/updating subscription:', subscriptionData);
-
-    const userEmail = subscriptionData.user_email?.toLowerCase();
-    if (!userEmail) {
-      throw new Error('User email is required');
-    }
-
-    // Check for existing subscription
-    const { data: existingData } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail)
-      .limit(1);
-
-    if (existingData && existingData.length > 0) {
-      // Update existing subscription
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .update({
-          ...subscriptionData,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingData[0].id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      console.log('✅ Updated subscription:', data);
-      
-      // Log security event
-      logSecurityEvent('SUBSCRIPTION_UPDATED', {
-        userEmail,
-        subscriptionId: data.id,
-        planId: subscriptionData.plan_id
-      });
-
-      return data;
-    } else {
-      // Create new subscription
-      const { data, error } = await supabase
-        .from('subscriptions_tb2k4x9p1m')
-        .insert([{
-          ...subscriptionData,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      console.log('✅ Created subscription:', data);
-      
-      // Log security event
-      logSecurityEvent('SUBSCRIPTION_CREATED', {
-        userEmail,
-        subscriptionId: data.id,
-        planId: subscriptionData.plan_id
-      });
-
-      return data;
-    }
-
-  } catch (error) {
-    console.error('❌ Error creating/updating subscription:', error);
-    throw error;
-  }
-};
-
-/**
- * **FIXED**: Cancel subscription with proper handling for payment link subscriptions
- */
-export const cancelSubscription = async (userEmail, cancelAtPeriodEnd = true) => {
-  if (!userEmail || !supabase) {
-    throw new Error('User email and database connection required');
-  }
-
-  try {
-    console.log('❌ Starting subscription cancellation for user:', userEmail, { cancelAtPeriodEnd });
-
-    // Get current subscription first
-    const { data: currentSub, error: fetchError } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
-        throw new Error('No subscription found to cancel');
-      }
-      throw fetchError;
-    }
-
-    console.log('📋 Current subscription:', currentSub);
-
-    // **ENHANCED**: Determine if this is a Stripe-managed subscription or payment link subscription
-    const hasRealStripeSubscription = currentSub.stripe_subscription_id && 
-      !currentSub.stripe_subscription_id.startsWith('pl_') && 
-      !currentSub.stripe_subscription_id.startsWith('manual_') &&
-      currentSub.stripe_subscription_id.startsWith('sub_');
-
-    let stripeResult = null;
-
-    if (hasRealStripeSubscription) {
-      // **REAL STRIPE SUBSCRIPTION**: Cancel via Stripe API
-      try {
-        console.log('🔄 Cancelling real Stripe subscription:', currentSub.stripe_subscription_id);
-        
-        const response = await fetch('/.netlify/functions/cancel-subscription', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            subscriptionId: currentSub.stripe_subscription_id,
-            cancelAtPeriodEnd: cancelAtPeriodEnd
-          })
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Stripe cancellation failed:', errorText);
-          throw new Error(`Stripe cancellation failed: ${errorText}`);
-        }
-
-        stripeResult = await response.json();
-        console.log('✅ Stripe cancellation successful:', stripeResult);
-        
-        // Log security event for successful Stripe cancellation
-        logSecurityEvent('STRIPE_SUBSCRIPTION_CANCELED', {
-          userEmail,
-          stripeSubscriptionId: currentSub.stripe_subscription_id,
-          cancelAtPeriodEnd,
-          stripeResponse: stripeResult
-        });
-
-      } catch (stripeError) {
-        console.error('❌ Critical error cancelling in Stripe:', stripeError);
-        
-        // Log the failed Stripe cancellation
-        logSecurityEvent('STRIPE_SUBSCRIPTION_CANCEL_FAILED', {
-          userEmail,
-          stripeSubscriptionId: currentSub.stripe_subscription_id,
-          error: stripeError.message
-        });
-        
-        // **IMPORTANT: Don't proceed with local cancellation if Stripe fails**
-        throw new Error(`Failed to cancel subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
-      }
-    } else {
-      // **PAYMENT LINK SUBSCRIPTION**: Handle locally only
-      console.log('💡 Handling payment link subscription cancellation locally');
-      
-      stripeResult = {
-        success: true,
-        subscription: {
-          id: currentSub.stripe_subscription_id || 'local',
-          status: cancelAtPeriodEnd ? 'active' : 'canceled',
-          cancel_at_period_end: cancelAtPeriodEnd,
-          canceled_at: Math.floor(Date.now() / 1000),
-          current_period_end: Math.floor(new Date(currentSub.current_period_end).getTime() / 1000)
-        },
-        localOnly: true
-      };
-      
-      // Log security event for local cancellation
-      logSecurityEvent('LOCAL_SUBSCRIPTION_CANCELED', {
-        userEmail,
-        subscriptionId: currentSub.id,
-        cancelAtPeriodEnd,
-        reason: 'payment_link_subscription'
-      });
-    }
-
-    // **Update local database after Stripe success OR for local-only subscriptions**
-    const updateData = {
-      updated_at: new Date().toISOString()
-    };
-
-    if (cancelAtPeriodEnd) {
-      // Cancel at period end - keep active until period ends
-      updateData.cancel_at_period_end = true;
-      updateData.canceled_at = new Date().toISOString();
-      // Status remains 'active' until period end
-    } else {
-      // Cancel immediately
-      updateData.status = 'canceled';
-      updateData.cancel_at_period_end = false;
-      updateData.canceled_at = new Date().toISOString();
-    }
-
-    const { data, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
-
-    if (error) {
-      console.error('❌ Database update failed after cancellation:', error);
-      throw new Error(`Database update failed: ${error.message}`);
-    }
-
-    console.log('✅ Successfully canceled subscription:', data);
-    
-    // Log successful complete cancellation
-    logSecurityEvent('SUBSCRIPTION_CANCELED_COMPLETE', {
-      userEmail,
-      subscriptionId: data.id,
-      cancelAtPeriodEnd,
-      immediateCancel: !cancelAtPeriodEnd,
-      stripeResult,
-      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link'
-    });
-
-    // Dispatch events to update UI immediately
-    window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-      detail: { 
-        userEmail, 
-        force: true, 
-        immediate: true, 
-        action: 'canceled',
-        cancelAtPeriodEnd
-      }
-    }));
-
-    window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-      detail: { userEmail, force: true, action: 'canceled' }
-    }));
+    console.log('📊 Plan limits:', limits);
 
     return {
-      ...data,
-      stripeResult,
-      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link',
-      message: cancelAtPeriodEnd 
-        ? 'Subscription will be cancelled at the end of your billing period' 
-        : 'Subscription cancelled immediately'
+      subscription,
+      planLimits: limits,
+      currentPlan: planId,
+      planName: plan.name
     };
 
   } catch (error) {
-    console.error('❌ Error in cancelSubscription:', error);
+    console.error('❌ Error getting plan limits:', error);
     
-    // Log the failed cancellation attempt
-    logSecurityEvent('SUBSCRIPTION_CANCEL_FAILED', {
-      userEmail,
-      error: error.message,
-      cancelAtPeriodEnd
-    });
-    
-    throw error;
-  }
-};
-
-/**
- * **FIXED**: Reactivate subscription with proper handling for payment link subscriptions
- */
-export const reactivateSubscription = async (userEmail, planId = 'price_professional') => {
-  if (!userEmail || !supabase) {
-    throw new Error('User email and database connection required');
-  }
-
-  try {
-    console.log('🔄 Starting subscription reactivation for user:', userEmail, { planId });
-
-    // Get current subscription first
-    const { data: currentSub, error: fetchError } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase())
-      .single();
-
-    if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
-        throw new Error('No subscription found to reactivate');
-      }
-      throw fetchError;
-    }
-
-    console.log('📋 Current subscription:', currentSub);
-
-    // **ENHANCED**: Determine if this is a Stripe-managed subscription or payment link subscription
-    const hasRealStripeSubscription = currentSub.stripe_subscription_id && 
-      !currentSub.stripe_subscription_id.startsWith('pl_') && 
-      !currentSub.stripe_subscription_id.startsWith('manual_') &&
-      currentSub.stripe_subscription_id.startsWith('sub_');
-
-    let stripeResult = null;
-
-    if (hasRealStripeSubscription) {
-      // **REAL STRIPE SUBSCRIPTION**: Reactivate via Stripe API
-      try {
-        console.log('🔄 Reactivating real Stripe subscription:', currentSub.stripe_subscription_id);
-        
-        const response = await fetch('/.netlify/functions/reactivate-subscription', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            subscriptionId: currentSub.stripe_subscription_id
-          })
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Stripe reactivation failed:', errorText);
-          throw new Error(`Stripe reactivation failed: ${errorText}`);
-        }
-
-        stripeResult = await response.json();
-        console.log('✅ Stripe reactivation successful:', stripeResult);
-        
-        // Log security event for successful Stripe reactivation
-        logSecurityEvent('STRIPE_SUBSCRIPTION_REACTIVATED', {
-          userEmail,
-          stripeSubscriptionId: currentSub.stripe_subscription_id,
-          stripeResponse: stripeResult
-        });
-
-      } catch (stripeError) {
-        console.error('❌ Critical error reactivating in Stripe:', stripeError);
-        
-        // Log the failed Stripe reactivation
-        logSecurityEvent('STRIPE_SUBSCRIPTION_REACTIVATE_FAILED', {
-          userEmail,
-          stripeSubscriptionId: currentSub.stripe_subscription_id,
-          error: stripeError.message
-        });
-        
-        // **IMPORTANT: Don't proceed with local reactivation if Stripe fails**
-        throw new Error(`Failed to reactivate subscription in Stripe: ${stripeError.message}. Please try again or contact support.`);
-      }
-    } else {
-      // **PAYMENT LINK SUBSCRIPTION**: Handle locally only
-      console.log('💡 Handling payment link subscription reactivation locally');
-      
-      stripeResult = {
-        success: true,
-        subscription: {
-          id: currentSub.stripe_subscription_id || 'local',
-          status: 'active',
-          cancel_at_period_end: false,
-          canceled_at: null,
-          current_period_end: Math.floor(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).getTime() / 1000)
-        },
-        localOnly: true
-      };
-      
-      // Log security event for local reactivation
-      logSecurityEvent('LOCAL_SUBSCRIPTION_REACTIVATED', {
-        userEmail,
-        subscriptionId: currentSub.id,
-        planId,
-        reason: 'payment_link_subscription'
-      });
-    }
-
-    // **Update local database after Stripe success OR for local-only subscriptions**
-    const updateData = {
-      status: 'active',
-      cancel_at_period_end: false,
-      canceled_at: null,
-      plan_id: planId.startsWith('price_') ? planId : `price_${planId}`,
-      current_period_start: new Date().toISOString(),
-      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
-      updated_at: new Date().toISOString()
-    };
-
-    const { data, error } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
-
-    if (error) {
-      console.error('❌ Database update failed after reactivation:', error);
-      throw new Error(`Database update failed: ${error.message}`);
-    }
-
-    console.log('✅ Successfully reactivated subscription:', data);
-    
-    // Log successful complete reactivation
-    logSecurityEvent('SUBSCRIPTION_REACTIVATED_COMPLETE', {
-      userEmail,
-      subscriptionId: data.id,
-      planId: updateData.plan_id,
-      stripeResult,
-      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link'
-    });
-
-    // Dispatch events to update UI immediately
-    window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
-      detail: { 
-        userEmail, 
-        force: true, 
-        immediate: true, 
-        action: 'reactivated'
-      }
-    }));
-
-    window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
-      detail: { userEmail, force: true, action: 'reactivated' }
-    }));
-
+    // Return free plan limits as fallback
     return {
-      ...data,
-      stripeResult,
-      subscriptionType: hasRealStripeSubscription ? 'stripe_managed' : 'payment_link',
-      message: 'Subscription successfully reactivated'
+      subscription: null,
+      planLimits: SUBSCRIPTION_PLANS.free.limits,
+      currentPlan: 'free',
+      planName: 'Free'
     };
-
-  } catch (error) {
-    console.error('❌ Error in reactivateSubscription:', error);
-    
-    // Log the failed reactivation attempt
-    logSecurityEvent('SUBSCRIPTION_REACTIVATE_FAILED', {
-      userEmail,
-      error: error.message,
-      planId
-    });
-    
-    throw error;
   }
 };
 
-/**
- * Update subscription status
- */
-export const updateSubscriptionStatus = async (userEmail, status, metadata = {}) => {
-  if (!userEmail || !supabase) {
-    throw new Error('User email and database connection required');
+// Check if user can perform action based on limits
+export const checkPlanLimit = async (userEmail, limitType, currentUsage) => {
+  try {
+    const { planLimits, currentPlan } = await getUserPlanLimits(userEmail);
+    
+    if (!planLimits) {
+      return { allowed: false, reason: 'Unable to determine plan limits' };
+    }
+
+    const limit = planLimits[limitType];
+    
+    // -1 means unlimited (professional plan)
+    if (limit === -1) {
+      return { 
+        allowed: true, 
+        limit: -1, 
+        remaining: Infinity,
+        plan: currentPlan
+      };
+    }
+    
+    // 0 means feature not available
+    if (limit === 0) {
+      return { 
+        allowed: false, 
+        reason: `${limitType} is not available on your current plan`,
+        limit: 0,
+        remaining: 0,
+        plan: currentPlan
+      };
+    }
+    
+    // Check against limit
+    const allowed = currentUsage < limit;
+    const remaining = Math.max(0, limit - currentUsage);
+    
+    return {
+      allowed,
+      limit,
+      used: currentUsage,
+      remaining,
+      plan: currentPlan,
+      reason: allowed ? null : `You have reached your ${limitType} limit of ${limit}. Upgrade to Professional for unlimited access.`
+    };
+
+  } catch (error) {
+    console.error('❌ Error checking plan limit:', error);
+    return { 
+      allowed: false, 
+      reason: 'Error checking plan limits',
+      plan: 'unknown'
+    };
+  }
+};
+
+// Update subscription in Supabase (called by webhooks) - Now uses stripe_subscription_id
+export const updateSubscriptionByStripeId = async (stripeSubscriptionId, subscriptionData) => {
+  if (!supabase) {
+    throw new Error('Supabase not available');
   }
 
   try {
-    console.log(`📊 Updating subscription status to ${status} for user:`, userEmail);
+    console.log('📝 Updating subscription in Supabase by Stripe ID:', stripeSubscriptionId, subscriptionData);
 
-    const updateData = {
-      status,
-      updated_at: new Date().toISOString(),
-      ...metadata
-    };
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('subscriptions_tb2k4x9p1m')
-      .update(updateData)
-      .eq('user_email', userEmail.toLowerCase())
-      .select()
-      .single();
+      .update({
+        ...subscriptionData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('stripe_subscription_id', stripeSubscriptionId);
 
     if (error) throw error;
 
-    console.log('✅ Updated subscription status:', data);
+    // Clear cache for this subscription
+    const subIdCacheKey = getCacheKey(stripeSubscriptionId, 'subscription_id');
+    subscriptionCache.delete(subIdCacheKey);
     
-    // Log security event
-    logSecurityEvent('SUBSCRIPTION_STATUS_UPDATED', {
-      userEmail,
-      subscriptionId: data.id,
-      status,
-      metadata
-    });
+    // Also clear email-based cache if we can determine the email
+    if (subscriptionData.user_email) {
+      clearUserCache(subscriptionData.user_email);
+    }
 
-    return data;
+    console.log('✅ Subscription updated successfully by Stripe ID');
+    return true;
 
   } catch (error) {
-    console.error('❌ Error updating subscription status:', error);
+    console.error('❌ Error updating subscription by Stripe ID:', error);
     throw error;
+  }
+};
+
+// Legacy update function for backward compatibility
+export const updateSubscription = async (subscriptionData) => {
+  if (!supabase) {
+    throw new Error('Supabase not available');
+  }
+
+  try {
+    console.log('📝 Updating subscription in Supabase (legacy method):', subscriptionData);
+
+    const { error } = await supabase
+      .from('subscriptions_tb2k4x9p1m')
+      .upsert(subscriptionData, {
+        onConflict: 'user_email'
+      });
+
+    if (error) throw error;
+
+    // Clear cache for this user
+    if (subscriptionData.user_email) {
+      clearUserCache(subscriptionData.user_email);
+    }
+
+    console.log('✅ Subscription updated successfully (legacy method)');
+    return true;
+
+  } catch (error) {
+    console.error('❌ Error updating subscription (legacy method):', error);
+    throw error;
+  }
+};
+
+// Cancel subscription using Stripe Subscription ID
+export const cancelSubscriptionByStripeId = async (stripeSubscriptionId) => {
+  if (!supabase) {
+    throw new Error('Supabase not available');
+  }
+
+  try {
+    console.log('🚫 Canceling subscription by Stripe ID:', stripeSubscriptionId);
+
+    // Call backend to cancel with Stripe
+    const response = await fetch('/.netlify/functions/cancel-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subscriptionId: stripeSubscriptionId
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to cancel subscription with Stripe');
+    }
+
+    // Clear cache
+    const subIdCacheKey = getCacheKey(stripeSubscriptionId, 'subscription_id');
+    subscriptionCache.delete(subIdCacheKey);
+
+    console.log('✅ Subscription cancellation initiated by Stripe ID');
+    return true;
+
+  } catch (error) {
+    console.error('❌ Error canceling subscription by Stripe ID:', error);
+    throw error;
+  }
+};
+
+// Cancel subscription (legacy method using email)
+export const cancelSubscription = async (userEmail) => {
+  if (!supabase) {
+    throw new Error('Supabase not available');
+  }
+
+  try {
+    const subscription = await getUserSubscription(userEmail);
+    
+    if (!subscription || !subscription.stripeSubscriptionId) {
+      throw new Error('No active subscription found');
+    }
+
+    // Use the new Stripe ID based method
+    return await cancelSubscriptionByStripeId(subscription.stripeSubscriptionId);
+
+  } catch (error) {
+    console.error('❌ Error canceling subscription (legacy method):', error);
+    throw error;
+  }
+};
+
+// Get subscription status for display
+export const getSubscriptionStatus = async (userEmail) => {
+  try {
+    const { subscription, currentPlan, planName } = await getUserPlanLimits(userEmail);
+    
+    if (!subscription) {
+      return {
+        isActive: true, // Free plan is always "active"
+        plan: 'free',
+        planName: 'Free Plan',
+        status: 'active',
+        nextBillingDate: null,
+        cancelAtPeriodEnd: false
+      };
+    }
+
+    return {
+      isActive: subscription.status === 'active',
+      plan: currentPlan,
+      planName: planName,
+      status: subscription.status,
+      nextBillingDate: subscription.currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+      stripeSubscriptionId: subscription.stripeSubscriptionId
+    };
+
+  } catch (error) {
+    console.error('❌ Error getting subscription status:', error);
+    return {
+      isActive: true,
+      plan: 'free',
+      planName: 'Free Plan',
+      status: 'active',
+      nextBillingDate: null,
+      cancelAtPeriodEnd: false
+    };
+  }
+};
+
+// Force refresh subscription data
+export const refreshSubscriptionData = async (userEmail) => {
+  console.log('🔄 Force refreshing subscription data for:', userEmail);
+  
+  // Clear all caches
+  clearUserCache(userEmail);
+  
+  // Fetch fresh data
+  const result = await getUserPlanLimits(userEmail);
+  
+  console.log('✅ Subscription data refreshed:', result);
+  return result;
+};
+
+// Listen for subscription updates
+export const setupSubscriptionListener = (userEmail, callback) => {
+  if (!supabase) {
+    console.warn('Supabase not available for real-time subscriptions');
+    return null;
+  }
+
+  console.log('👂 Setting up subscription listener for:', userEmail);
+
+  const subscription = supabase
+    .channel(`subscription:${userEmail}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'subscriptions_tb2k4x9p1m',
+        filter: `user_email=eq.${userEmail.toLowerCase()}`
+      },
+      (payload) => {
+        console.log('🔔 Subscription change detected:', payload);
+        
+        // Clear cache
+        clearUserCache(userEmail);
+        
+        // Call callback
+        if (callback) {
+          callback(payload);
+        }
+      }
+    )
+    .subscribe();
+
+  return subscription;
+};
+
+// New function: Verify subscription by Stripe webhook data
+export const verifySubscriptionUpdate = async (webhookData) => {
+  try {
+    console.log('🔍 Verifying subscription update from webhook:', webhookData);
+    
+    const { stripeSubscriptionId, userEmail, status } = webhookData;
+    
+    if (stripeSubscriptionId) {
+      // Primary method: Use Stripe Subscription ID
+      const subscription = await getSubscriptionByStripeId(stripeSubscriptionId);
+      console.log('✅ Subscription verification by Stripe ID:', subscription);
+      return subscription;
+    } else if (userEmail) {
+      // Fallback method: Use email
+      const subscription = await getUserSubscription(userEmail);
+      console.log('✅ Subscription verification by email:', subscription);
+      return subscription;
+    }
+    
+    console.warn('⚠️ No valid identifier provided for subscription verification');
+    return null;
+    
+  } catch (error) {
+    console.error('❌ Error verifying subscription update:', error);
+    return null;
   }
 };
 
 export default {
-  getUserPlanLimits,
-  getFreePlanLimits,
-  getProfessionalPlanLimits,
-  checkPlanLimit,
   getUserSubscription,
-  updateUserSubscription,
-  cleanupDuplicateSubscriptions,
-  createOrUpdateSubscription,
+  getSubscriptionByStripeId,
+  getUserPlanLimits,
+  checkPlanLimit,
+  updateSubscription,
+  updateSubscriptionByStripeId,
   cancelSubscription,
-  reactivateSubscription,
-  updateSubscriptionStatus
+  cancelSubscriptionByStripeId,
+  getSubscriptionStatus,
+  refreshSubscriptionData,
+  setupSubscriptionListener,
+  clearUserCache,
+  verifySubscriptionUpdate
 };

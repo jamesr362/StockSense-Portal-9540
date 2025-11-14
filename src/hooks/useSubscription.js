@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   getUserSubscription, 
-  createOrUpdateSubscription, 
-  cancelSubscription, 
-  reactivateSubscription, 
-  updateSubscriptionStatus, 
   getUserPlanLimits, 
-  checkPlanLimit 
+  checkPlanLimit,
+  cancelSubscription,
+  getSubscriptionStatus,
+  refreshSubscriptionData,
+  clearUserCache
 } from '../services/subscriptionService';
 import { useAuth } from '../context/AuthContext';
 import { logSecurityEvent } from '../utils/security';
@@ -28,112 +28,33 @@ export const useSubscription = () => {
     
     try {
       setError(null);
+      console.log('🔄 Loading subscription data for:', user.email);
       
-      // **ENHANCED**: Try to load directly from Supabase with retry logic
-      if (supabase) {
-        let attempts = 0;
-        const maxAttempts = 3;
+      // Use the updated service to get subscription and plan limits
+      const result = await getUserPlanLimits(user.email);
+      
+      if (result) {
+        setSubscription(result.subscription);
+        setPlanLimits(result.planLimits);
         
-        while (attempts < maxAttempts) {
-          try {
-            const { data, error } = await supabase
-              .from('subscriptions_tb2k4x9p1m')
-              .select('*')
-              .eq('user_email', user.email.toLowerCase())
-              .single();
-              
-            if (!error && data) {
-              const subscriptionData = {
-                id: data.id,
-                userEmail: data.user_email,
-                stripeCustomerId: data.stripe_customer_id,
-                stripeSubscriptionId: data.stripe_subscription_id,
-                stripeSessionId: data.stripe_session_id,
-                planId: data.plan_id,
-                status: data.status,
-                currentPeriodStart: data.current_period_start,
-                currentPeriodEnd: data.current_period_end,
-                cancelAtPeriodEnd: data.cancel_at_period_end,
-                canceledAt: data.canceled_at,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at
-              };
-              
-              console.log('✅ Subscription loaded from Supabase:', {
-                planId: subscriptionData.planId,
-                status: subscriptionData.status,
-                userEmail: subscriptionData.userEmail
-              });
-              
-              setSubscription(subscriptionData);
-              
-              // Get plan limits based on the subscription
-              const limits = await getUserPlanLimits(user.email);
-              setPlanLimits(limits);
-              setLoading(false);
-              return;
-            } else if (error && error.code !== 'PGRST116') {
-              console.warn(`⚠️ Subscription load attempt ${attempts + 1} failed:`, error);
-              attempts++;
-              if (attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-              }
-            } else {
-              // No subscription found (PGRST116 = no rows returned)
-              break;
-            }
-          } catch (err) {
-            console.warn(`⚠️ Subscription load attempt ${attempts + 1} error:`, err);
-            attempts++;
-            if (attempts < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-            }
-          }
-        }
-      }
-      
-      // Fallback to service method
-      console.log('🔄 Falling back to service method for subscription loading...');
-      const [subscriptionData, limits] = await Promise.all([
-        getUserSubscription(user.email),
-        getUserPlanLimits(user.email)
-      ]);
-      
-      if (subscriptionData) {
-        const formattedSubscription = {
-          id: subscriptionData.id,
-          userEmail: subscriptionData.user_email,
-          stripeCustomerId: subscriptionData.stripe_customer_id,
-          stripeSubscriptionId: subscriptionData.stripe_subscription_id,
-          stripeSessionId: subscriptionData.stripe_session_id,
-          planId: subscriptionData.plan_id,
-          status: subscriptionData.status,
-          currentPeriodStart: subscriptionData.current_period_start,
-          currentPeriodEnd: subscriptionData.current_period_end,
-          cancelAtPeriodEnd: subscriptionData.cancel_at_period_end,
-          canceledAt: subscriptionData.canceled_at,
-          createdAt: subscriptionData.created_at,
-          updatedAt: subscriptionData.updated_at
-        };
-        setSubscription(formattedSubscription);
-        
-        console.log('✅ Subscription loaded via service:', {
-          planId: formattedSubscription.planId,
-          status: formattedSubscription.status
+        console.log('✅ Subscription loaded:', {
+          currentPlan: result.currentPlan,
+          planName: result.planName,
+          hasSubscription: !!result.subscription
         });
       } else {
         setSubscription(null);
-        console.log('ℹ️ No subscription found, user is on free plan');
+        setPlanLimits(null);
+        console.log('ℹ️ No subscription data found');
       }
       
-      setPlanLimits(limits);
     } catch (err) {
       console.error('❌ Error loading subscription:', err);
       setError(err.message);
       
-      // Set default free plan limits on error
-      const freeLimits = await getUserPlanLimits(user.email);
-      setPlanLimits(freeLimits);
+      // Set default state on error
+      setSubscription(null);
+      setPlanLimits(null);
     } finally {
       setLoading(false);
     }
@@ -144,30 +65,37 @@ export const useSubscription = () => {
     loadSubscription();
   }, [loadSubscription]);
 
-  // **ENHANCED**: Listen for subscription updates with more event types
+  // Listen for subscription updates with enhanced event handling
   useEffect(() => {
+    if (!user?.email) return;
+
     const eventTypes = [
       'subscriptionUpdated',
       'refreshFeatureAccess',
       'planChanged',
       'userUpgraded',
-      'paymentSuccessful'
+      'paymentSuccessful',
+      'forceSubscriptionSync',
+      'globalDataRefresh'
     ];
 
     const handleSubscriptionUpdate = (event) => {
       const eventUserEmail = event.detail?.userEmail;
-      if (eventUserEmail === user?.email || event.detail?.force) {
+      const shouldUpdate = eventUserEmail === user.email || 
+                          event.detail?.force || 
+                          event.detail?.immediate;
+      
+      if (shouldUpdate) {
         console.log(`🔄 ${event.type} event detected, reloading subscription...`, event.detail);
         
-        // Clear caches
-        localStorage.removeItem(`featureCache_${user?.email}`);
-        localStorage.removeItem(`subscriptionCache_${user?.email}`);
-        localStorage.removeItem(`planLimits_${user?.email}`);
+        // Clear user cache
+        clearUserCache(user.email);
         
-        // Reload with slight delay to ensure database is updated
+        // Reload with appropriate delay
+        const delay = event.detail?.immediate ? 100 : 1000;
         setTimeout(() => {
           loadSubscription();
-        }, event.detail?.immediate ? 100 : 1000);
+        }, delay);
       }
     };
 
@@ -183,78 +111,54 @@ export const useSubscription = () => {
     };
   }, [user?.email, loadSubscription]);
 
-  // Create or update subscription
-  const updateSubscription = async (subscriptionData) => {
-    if (!user?.email) throw new Error('User not authenticated');
-    
-    try {
-      setError(null);
-      
-      const updatedSubscription = await createOrUpdateSubscription(user.email, subscriptionData);
-      
-      // Reload subscription and limits
-      await loadSubscription();
-      
-      return updatedSubscription;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    }
-  };
-
   // Cancel subscription
-  const cancelUserSubscription = async (cancelAtPeriodEnd = true) => {
+  const cancelUserSubscription = async () => {
     if (!user?.email) throw new Error('User not authenticated');
     
     try {
       setError(null);
+      console.log('🚫 Canceling subscription for:', user.email);
       
-      const canceledSubscription = await cancelSubscription(user.email, cancelAtPeriodEnd);
+      await cancelSubscription(user.email);
+      
+      // Log security event
+      await logSecurityEvent('subscription_canceled', {
+        userEmail: user.email,
+        timestamp: new Date().toISOString()
+      });
       
       // Reload subscription and limits
       await loadSubscription();
       
-      return canceledSubscription;
+      return true;
     } catch (err) {
+      console.error('❌ Error canceling subscription:', err);
       setError(err.message);
       throw err;
     }
   };
 
-  // Reactivate subscription
-  const reactivateUserSubscription = async (planId = 'professional') => {
-    if (!user?.email) throw new Error('User not authenticated');
+  // Force refresh subscription data
+  const forceRefresh = async () => {
+    if (!user?.email) return;
     
     try {
       setError(null);
+      setLoading(true);
+      console.log('🔄 Force refreshing subscription data...');
       
-      const reactivatedSubscription = await reactivateSubscription(user.email, planId);
+      const result = await refreshSubscriptionData(user.email);
       
-      // Reload subscription and limits
-      await loadSubscription();
+      if (result) {
+        setSubscription(result.subscription);
+        setPlanLimits(result.planLimits);
+      }
       
-      return reactivatedSubscription;
     } catch (err) {
+      console.error('❌ Error force refreshing subscription:', err);
       setError(err.message);
-      throw err;
-    }
-  };
-
-  // Update subscription status
-  const updateStatus = async (status, endDate = null) => {
-    if (!user?.email) throw new Error('User not authenticated');
-    
-    try {
-      setError(null);
-      const updatedSubscription = await updateSubscriptionStatus(user.email, status, endDate);
-      
-      // Reload subscription and limits
-      await loadSubscription();
-      
-      return updatedSubscription;
-    } catch (err) {
-      setError(err.message);
-      throw err;
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -273,37 +177,79 @@ export const useSubscription = () => {
   // Get current plan info
   const getCurrentPlan = () => {
     if (!subscription?.planId) return 'free';
-    const parts = subscription.planId.split('_');
-    return parts.length > 1 ? parts[1] : 'free';
+    
+    // Extract plan from planId (e.g., "price_professional" -> "professional")
+    if (subscription.planId.includes('professional')) {
+      return 'professional';
+    }
+    return 'free';
   };
 
-  // Check if subscription is active
+  // Get subscription status details
+  const getStatusDetails = async () => {
+    if (!user?.email) return null;
+    
+    try {
+      return await getSubscriptionStatus(user.email);
+    } catch (err) {
+      console.error('Error getting subscription status:', err);
+      return null;
+    }
+  };
+
+  // Computed properties
   const isActive = subscription?.status === 'active';
   const isCanceled = subscription?.status === 'canceled';
   const willCancelAtPeriodEnd = subscription?.cancelAtPeriodEnd && isActive;
-
-  // **NEW**: Enhanced subscription status
   const isProfessional = getCurrentPlan() === 'professional' && isActive;
   const hasActiveSubscription = isActive && subscription;
+  const currentPlan = getCurrentPlan();
+
+  // Plan limit helpers
+  const getPlanLimit = (limitType) => {
+    if (!planLimits) return 0;
+    return planLimits[limitType] || 0;
+  };
+
+  const isUnlimited = (limitType) => {
+    const limit = getPlanLimit(limitType);
+    return limit === -1;
+  };
+
+  const hasFeature = (featureName) => {
+    if (isProfessional) return true;
+    
+    // Check specific free plan features
+    const freeFeatures = ['purchaseEntries', 'receiptScans', 'excelImports', 'vatExports'];
+    return freeFeatures.includes(featureName);
+  };
 
   return {
+    // Data
     subscription,
     planLimits,
     loading,
     error,
+    
+    // Status
     isActive,
     isCanceled,
     willCancelAtPeriodEnd,
     isProfessional,
     hasActiveSubscription,
-    currentPlan: getCurrentPlan(),
+    currentPlan,
+    
     // Actions
     loadSubscription,
-    updateSubscription,
+    forceRefresh,
     cancelSubscription: cancelUserSubscription,
-    reactivateSubscription: reactivateUserSubscription,
-    updateStatus,
-    canPerformAction
+    canPerformAction,
+    getStatusDetails,
+    
+    // Helpers
+    getPlanLimit,
+    isUnlimited,
+    hasFeature
   };
 };
 
