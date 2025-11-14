@@ -6,27 +6,26 @@ import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../context/AuthContext';
 import { SUBSCRIPTION_PLANS, getPlanById } from '../lib/stripe';
 
-const { RiCheckboxCircleFill, RiArrowRightLine, RiHomeLine, RiErrorWarningLine } = RiIcons;
+const { RiCheckboxCircleFill, RiArrowRightLine, RiHomeLine, RiErrorWarningLine, RiTimeLine } = RiIcons;
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
-  const [isProcessing, setIsProcessing] = useState(true);
-  const [result, setResult] = useState(null);
+  const [isChecking, setIsChecking] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [error, setError] = useState(null);
-  const [subscriptionData, setSubscriptionData] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
   const { user, loading: authLoading } = useAuth();
 
-  // SECURE: Fetch subscription status from backend only
-  const fetchSubscriptionStatus = async (retryCount = 0) => {
+  // ENHANCED: Check subscription status from backend
+  const checkSubscriptionStatus = async (attempt = 1) => {
     if (!user?.email) {
       console.log('⚠️ No user email available for subscription check');
       return null;
     }
 
     try {
-      console.log(`🔍 Fetching subscription status (attempt ${retryCount + 1})...`);
+      console.log(`🔍 Checking subscription status (attempt ${attempt})...`);
       
-      // Call backend endpoint to get current subscription
       const response = await fetch('/.netlify/functions/get-customer-subscription', {
         method: 'POST',
         headers: {
@@ -44,139 +43,221 @@ export default function PaymentSuccess() {
       const data = await response.json();
       console.log('📊 Backend subscription data:', data);
 
-      if (data.subscription) {
+      if (data.subscription && data.subscription.status === 'active') {
+        // Map Stripe subscription to internal format
+        const internalPlan = mapStripeSubscriptionToPlan(data.subscription);
+        
         return {
           success: true,
           subscription: data.subscription,
           customer: data.customer,
+          planId: internalPlan,
           activated: true
         };
       }
 
-      // If no subscription yet, maybe webhook hasn't processed
-      if (retryCount < 6) { // Try for up to 60 seconds
-        console.log(`⏳ No subscription found yet, retrying in 10 seconds... (${retryCount + 1}/6)`);
+      // If no active subscription found, maybe webhook is still processing
+      if (attempt <= 12) { // Try for up to 2 minutes (12 attempts * 10 seconds)
+        console.log(`⏳ No active subscription found yet, retrying in 10 seconds... (${attempt}/12)`);
         await new Promise(resolve => setTimeout(resolve, 10000));
-        return fetchSubscriptionStatus(retryCount + 1);
+        return checkSubscriptionStatus(attempt + 1);
       }
 
       return {
         success: false,
-        message: 'Subscription not found after waiting. It may take a few more minutes to activate.',
+        message: 'Subscription activation is taking longer than expected. Please check your dashboard in a few minutes.',
         stillProcessing: true
       };
 
     } catch (err) {
-      console.error('❌ Error fetching subscription:', err);
+      console.error('❌ Error checking subscription:', err);
       
       // Retry on network errors
-      if (retryCount < 3 && (err.name === 'TypeError' || err.message.includes('fetch'))) {
-        console.log(`🔄 Network error, retrying in 5 seconds... (${retryCount + 1}/3)`);
+      if (attempt <= 3 && (err.name === 'TypeError' || err.message.includes('fetch'))) {
+        console.log(`🔄 Network error, retrying in 5 seconds... (${attempt}/3)`);
         await new Promise(resolve => setTimeout(resolve, 5000));
-        return fetchSubscriptionStatus(retryCount + 1);
+        return checkSubscriptionStatus(attempt + 1);
       }
 
       return {
         success: false,
         error: err.message,
-        stillProcessing: retryCount < 3
+        stillProcessing: attempt <= 3
       };
     }
   };
 
+  // Map Stripe subscription data to internal plan format
+  const mapStripeSubscriptionToPlan = (subscription) => {
+    if (!subscription || !subscription.items || !subscription.items.data || subscription.items.data.length === 0) {
+      return 'free';
+    }
+
+    const priceId = subscription.items.data[0].price?.id;
+    const lookupKey = subscription.items.data[0].price?.lookup_key;
+
+    // Use lookup key first if available
+    if (lookupKey) {
+      if (lookupKey.includes('professional') || lookupKey.includes('pro')) {
+        return 'professional';
+      }
+      if (lookupKey.includes('free') || lookupKey.includes('basic')) {
+        return 'free';
+      }
+    }
+
+    // Fallback to price ID mapping
+    if (priceId) {
+      // Map your actual Stripe price IDs here
+      const priceIdMap = {
+        'price_1RxEcJEw1FLYKy8h3FDMZ6QP': 'professional',
+        'price_professional': 'professional',
+        'price_free': 'free'
+      };
+
+      if (priceIdMap[priceId]) {
+        return priceIdMap[priceId];
+      }
+
+      // Pattern matching
+      if (priceId.includes('professional') || priceId.includes('pro')) {
+        return 'professional';
+      }
+    }
+
+    // Default for active subscriptions
+    return subscription.status === 'active' ? 'professional' : 'free';
+  };
+
   useEffect(() => {
-    const processPaymentReturn = async () => {
+    const processPaymentSuccess = async () => {
       try {
         console.log('🎉 Payment Success page loaded');
         
-        // Wait for auth to be checked
+        // Wait for auth to be ready
         if (authLoading) {
           console.log('⏳ Waiting for auth check...');
           return;
         }
 
-        // SECURE: Only use URL params for display purposes, not for activation
+        // Get URL parameters for display
         const urlParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
         
-        // Get display info from URL (informational only)
         const planId = hashParams.get('plan') || urlParams.get('plan') || 'professional';
         const sessionId = hashParams.get('session_id') || urlParams.get('session_id');
         
-        console.log('📋 URL parameters (display only):', { planId, sessionId });
+        console.log('📋 URL parameters:', { planId, sessionId });
 
         if (!user?.email) {
-          console.log('👤 User not logged in, showing login prompt');
-          setResult({
+          console.log('👤 User not logged in');
+          setSubscriptionStatus({
             success: true,
             planId,
             sessionId,
             activated: false,
             requiresLogin: true
           });
-          setIsProcessing(false);
+          setIsChecking(false);
           return;
         }
 
-        // SECURE: Fetch actual subscription status from backend
-        const subscriptionResult = await fetchSubscriptionStatus();
+        // Check subscription status from backend (with retries)
+        console.log('🔍 Checking subscription status from backend...');
+        const result = await checkSubscriptionStatus();
         
-        if (subscriptionResult?.success && subscriptionResult.subscription) {
-          console.log('✅ Subscription confirmed by backend');
-          setSubscriptionData(subscriptionResult.subscription);
-          setResult({
+        if (result?.success && result.activated) {
+          console.log('✅ Subscription confirmed active');
+          setSubscriptionStatus({
             success: true,
-            planId: subscriptionResult.subscription.price?.lookup_key || planId,
+            planId: result.planId,
             sessionId,
             activated: true,
-            subscription: subscriptionResult.subscription
+            subscription: result.subscription
           });
-        } else if (subscriptionResult?.stillProcessing) {
+
+          // Clear any cached subscription data to force refresh
+          const clearCaches = () => {
+            const cacheKeys = [
+              `featureCache_${user.email}`,
+              `subscriptionCache_${user.email}`,
+              `planLimits_${user.email}`,
+              `subscription_${user.email}`,
+              `userPlan_${user.email}`,
+              `planAccess_${user.email}`
+            ];
+            
+            cacheKeys.forEach(key => {
+              try {
+                localStorage.removeItem(key);
+                sessionStorage.removeItem(key);
+              } catch (error) {
+                console.warn('Error clearing cache key:', key);
+              }
+            });
+          };
+
+          clearCaches();
+
+          // Dispatch events to refresh UI
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('subscriptionUpdated', {
+              detail: { 
+                userEmail: user.email, 
+                force: true, 
+                immediate: true,
+                planId: result.planId,
+                status: 'active'
+              }
+            }));
+
+            window.dispatchEvent(new CustomEvent('refreshFeatureAccess', {
+              detail: { 
+                userEmail: user.email, 
+                force: true, 
+                immediate: true
+              }
+            }));
+          }, 1000);
+
+        } else if (result?.stillProcessing) {
           console.log('⏳ Subscription still processing');
-          setResult({
+          setSubscriptionStatus({
             success: true,
             planId,
             sessionId,
             activated: false,
             processing: true,
-            message: subscriptionResult.message || 'Your subscription is being activated...'
+            message: result.message || 'Your subscription is being activated...'
           });
         } else {
-          console.log('⚠️ Subscription not found, but payment was successful');
-          setResult({
+          console.log('⚠️ Subscription not found or error occurred');
+          setSubscriptionStatus({
             success: true,
             planId,
             sessionId,
             activated: false,
-            message: 'Payment successful! Your subscription will be activated within a few minutes.',
+            message: 'Payment successful! Your subscription will be activated shortly.',
             fallback: true
           });
         }
 
       } catch (err) {
         console.error('❌ Error processing payment success:', err);
-        // Show success anyway since we're on the success page
-        setResult({
-          success: true,
-          planId: searchParams.get('plan') || 'professional',
-          sessionId: searchParams.get('session_id'),
-          activated: false,
-          error: err.message,
-          fallback: true
-        });
+        setError(err.message);
       } finally {
-        setIsProcessing(false);
+        setIsChecking(false);
       }
     };
 
-    // Process payment when auth is ready
+    // Process when auth is ready
     if (!authLoading) {
-      const timer = setTimeout(processPaymentReturn, 500);
+      const timer = setTimeout(processPaymentSuccess, 1000);
       return () => clearTimeout(timer);
     }
-  }, [searchParams, user, authLoading]);
+  }, [user, authLoading, retryCount]);
 
-  // Force navigation using hash (the method that works)
+  // Navigation functions
   const goToDashboard = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -193,24 +274,27 @@ export default function PaymentSuccess() {
     window.location.reload();
   };
 
-  const planId = searchParams.get('plan') || result?.planId || 'professional';
+  const planId = subscriptionStatus?.planId || 'professional';
   const plan = getPlanById(planId) || SUBSCRIPTION_PLANS.professional;
 
-  // Show loading while auth is being checked
-  if (authLoading || isProcessing) {
+  // Show loading while checking
+  if (authLoading || isChecking) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-6"></div>
           <h2 className="text-2xl font-bold text-white mb-2">
-            {authLoading ? 'Checking Authentication...' : 'Verifying Your Subscription'}
+            {authLoading ? 'Checking Authentication...' : 'Activating Your Subscription'}
           </h2>
-          <p className="text-gray-400">
-            {authLoading ? 'Verifying your account...' : 'Confirming payment with our secure backend...'}
+          <p className="text-gray-400 mb-4">
+            {authLoading ? 'Verifying your account...' : 'Confirming your payment and setting up your account...'}
           </p>
-          <div className="mt-4 text-sm text-gray-500">
-            <p>🔒 Validating subscription status securely</p>
-            <p>⏳ This may take up to 60 seconds</p>
+          <div className="bg-gray-800 rounded-lg p-4 text-sm text-gray-400">
+            <p className="flex items-center justify-center mb-2">
+              <SafeIcon icon={RiTimeLine} className="h-4 w-4 mr-2" />
+              This usually takes 30-60 seconds
+            </p>
+            <p>🔒 Securely processing with Stripe webhooks</p>
           </div>
         </div>
       </div>
@@ -218,14 +302,14 @@ export default function PaymentSuccess() {
   }
 
   // Show error state
-  if (error && !result) {
+  if (error && !subscriptionStatus) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-red-900/50 border border-red-700 rounded-lg p-6 mb-6">
             <SafeIcon icon={RiErrorWarningLine} className="h-16 w-16 text-red-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-red-300 mb-2">
-              Verification Issue
+              Activation Issue
             </h2>
             <p className="text-red-200 mb-4">{error}</p>
             <button
@@ -273,11 +357,14 @@ export default function PaymentSuccess() {
             transition={{ delay: 0.4 }}
             className="text-xl text-gray-300 mb-8"
           >
-            Welcome to {plan.name}! {result?.activated ? 'Your subscription is now active.' : 'Your subscription is being activated.'}
+            {subscriptionStatus?.activated 
+              ? `Welcome to ${plan.name}! Your subscription is now active.`
+              : `Thank you for your payment! Your ${plan.name} subscription is being activated.`
+            }
           </motion.p>
 
-          {/* Show status messages */}
-          {result?.requiresLogin && (
+          {/* Status Messages */}
+          {subscriptionStatus?.requiresLogin && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -285,12 +372,12 @@ export default function PaymentSuccess() {
               className="bg-yellow-900/50 border border-yellow-700 rounded-lg p-4 mb-6"
             >
               <p className="text-yellow-200 text-sm">
-                Please log in to complete your subscription setup and access all features.
+                Please log in to access your subscription and start using all features.
               </p>
             </motion.div>
           )}
 
-          {result?.processing && (
+          {subscriptionStatus?.processing && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -302,12 +389,12 @@ export default function PaymentSuccess() {
                 <p className="text-blue-200 text-sm font-medium">Activating your subscription...</p>
               </div>
               <p className="text-blue-300 text-xs">
-                {result.message || 'This usually takes 30-60 seconds. Please wait...'}
+                {subscriptionStatus.message || 'Stripe webhooks are processing your payment. This usually takes 30-60 seconds.'}
               </p>
             </motion.div>
           )}
 
-          {result?.fallback && !result?.processing && (
+          {subscriptionStatus?.fallback && !subscriptionStatus?.processing && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -315,7 +402,7 @@ export default function PaymentSuccess() {
               className="bg-blue-900/50 border border-blue-700 rounded-lg p-4 mb-6"
             >
               <p className="text-blue-200 text-sm">
-                {result.message || 'Your payment was processed successfully. If you don\'t see your subscription immediately, it will be activated within a few minutes.'}
+                {subscriptionStatus.message || 'Your payment was processed successfully. Your subscription will be activated within a few minutes.'}
               </p>
             </motion.div>
           )}
@@ -355,31 +442,31 @@ export default function PaymentSuccess() {
             <div className="flex justify-between items-center">
               <span className="text-gray-300">Status:</span>
               <span className={`font-semibold flex items-center ${
-                result?.activated ? 'text-green-400' : 
-                result?.processing ? 'text-yellow-400' : 'text-blue-400'
+                subscriptionStatus?.activated ? 'text-green-400' : 
+                subscriptionStatus?.processing ? 'text-yellow-400' : 'text-blue-400'
               }`}>
-                {result?.processing && (
+                {subscriptionStatus?.processing && (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400 mr-2"></div>
                 )}
-                {result?.activated ? 'Active' : 
-                 result?.processing ? 'Activating...' : 'Pending Activation'}
+                {subscriptionStatus?.activated ? 'Active' : 
+                 subscriptionStatus?.processing ? 'Activating...' : 'Pending Activation'}
               </span>
             </div>
 
             {/* Show subscription details if available */}
-            {subscriptionData && (
+            {subscriptionStatus?.subscription && (
               <>
                 <div className="flex justify-between items-center pt-2 border-t border-gray-700">
                   <span className="text-gray-300">Subscription ID:</span>
                   <span className="text-gray-400 text-sm font-mono">
-                    {subscriptionData.id?.substring(0, 20)}...
+                    {subscriptionStatus.subscription.id?.substring(0, 20)}...
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-300">Next Billing:</span>
                   <span className="text-gray-300 text-sm">
-                    {subscriptionData.current_period_end ? 
-                      new Date(subscriptionData.current_period_end * 1000).toLocaleDateString() :
+                    {subscriptionStatus.subscription.current_period_end ? 
+                      new Date(subscriptionStatus.subscription.current_period_end * 1000).toLocaleDateString() :
                       'TBD'
                     }
                   </span>
@@ -396,7 +483,7 @@ export default function PaymentSuccess() {
           transition={{ delay: 0.6 }}
           className="text-center"
         >
-          {result?.requiresLogin ? (
+          {subscriptionStatus?.requiresLogin ? (
             <button
               type="button"
               onClick={goToLogin}
@@ -419,9 +506,11 @@ export default function PaymentSuccess() {
           )}
 
           <p className="text-gray-400 text-sm mt-4">
-            {result?.activated ? 
+            {subscriptionStatus?.activated ? 
               'Ready to start using your new subscription features!' :
-              'Your subscription will be ready shortly!'
+              subscriptionStatus?.processing ?
+              'Your subscription will be ready in just a moment!' :
+              'Your subscription will be activated shortly!'
             }
           </p>
         </motion.div>
@@ -435,10 +524,10 @@ export default function PaymentSuccess() {
         >
           <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
             <p className="text-gray-400 text-xs">
-              🔒 Your subscription status is verified securely with our backend systems
+              🔒 Your subscription is processed securely via Stripe webhooks
             </p>
             <p className="text-gray-500 text-xs mt-1">
-              All payment processing is handled by Stripe's secure infrastructure
+              No manual activation required - everything is automated and secure
             </p>
           </div>
         </motion.div>

@@ -48,7 +48,7 @@ export const createUserSupabase = async (userData) => {
 
     console.log('User created successfully:', {...data, password: '[HIDDEN]', salt: '[HIDDEN]'});
 
-    // Create a default subscription for new users - START WITH FREE
+    // Create a default FREE subscription for new users
     await createDefaultSubscription(userData.email.toLowerCase());
 
     // Then try to register with Supabase Auth (optional - don't fail if this doesn't work)
@@ -101,7 +101,7 @@ function determineUserRole(email) {
   return 'user';
 }
 
-// ENHANCED: Create a default subscription for new users with CORRECT ID format
+// FIXED: Create a default FREE subscription for new users
 export const createDefaultSubscription = async (userEmail) => {
   if (!supabaseAvailable()) {
     return;
@@ -110,14 +110,10 @@ export const createDefaultSubscription = async (userEmail) => {
   try {
     console.log('Creating default FREE subscription for:', userEmail);
 
-    // Generate REALISTIC fake IDs that follow Stripe format (for demo/development)
-    const fakeCustomerId = `cus_demo_${Math.random().toString(36).substring(2, 15)}`;
-    const fakeSubscriptionId = `sub_demo_${Math.random().toString(36).substring(2, 15)}`;
-
     const subscriptionData = {
       user_email: userEmail,
-      stripe_customer_id: fakeCustomerId, // CORRECT FORMAT: cus_xxx
-      stripe_subscription_id: fakeSubscriptionId, // CORRECT FORMAT: sub_xxx
+      stripe_customer_id: null, // No Stripe customer for free plan
+      stripe_subscription_id: null, // No Stripe subscription for free plan
       stripe_session_id: null, // No session for default subscription
       plan_id: 'free', // CORRECT: Use 'free' not 'price_free'
       stripe_price_id: null, // No Stripe price for free plan
@@ -130,9 +126,8 @@ export const createDefaultSubscription = async (userEmail) => {
       updated_at: new Date().toISOString()
     };
 
-    console.log('💾 Creating default subscription with correct IDs:', {
-      customerId: subscriptionData.stripe_customer_id,
-      subscriptionId: subscriptionData.stripe_subscription_id,
+    console.log('💾 Creating default FREE subscription:', {
+      userEmail: subscriptionData.user_email,
       planId: subscriptionData.plan_id,
       status: subscriptionData.status
     });
@@ -145,8 +140,6 @@ export const createDefaultSubscription = async (userEmail) => {
       console.error('Error creating default subscription:', error);
     } else {
       console.log('✅ Default FREE subscription created successfully');
-      console.log('🔍 Verification - Customer ID format:', fakeCustomerId.startsWith('cus_'));
-      console.log('🔍 Verification - Subscription ID format:', fakeSubscriptionId.startsWith('sub_'));
     }
   } catch (error) {
     console.error('Error creating default subscription:', error);
@@ -546,7 +539,7 @@ export const updateInventoryItemSupabase = updatePurchaseItemSupabase;
 export const deleteInventoryItemSupabase = deletePurchaseItemSupabase;
 export const searchInventoryItemsSupabase = searchPurchaseItemsSupabase;
 
-// ENHANCED: Subscription operations with better plan mapping
+// ENHANCED: Subscription operations with correct plan ID handling
 export const getUserSubscriptionSupabase = async (userEmail) => {
   if (!supabaseAvailable()) {
     throw new Error('Supabase not available');

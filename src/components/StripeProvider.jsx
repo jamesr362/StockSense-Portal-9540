@@ -1,10 +1,9 @@
 import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
-import { getStripeConfig } from '../lib/stripe';
+import { STRIPE_CONFIG } from '../lib/stripe';
 
 // Initialize Stripe
-const stripeConfig = getStripeConfig();
-const stripePromise = loadStripe(stripeConfig.publishableKey);
+const stripePromise = loadStripe(STRIPE_CONFIG.publishableKey);
 
 export default function StripeProvider({ children }) {
   const options = {

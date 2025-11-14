@@ -199,6 +199,13 @@ async function handleCheckoutSessionCompleted(session) {
       } else {
         console.log('✅ Subscription ID verification passed');
       }
+
+      // CRITICAL CHECK: Ensure plan ID is correct format
+      if (verificationData.plan_id !== 'professional' && verificationData.plan_id !== 'free') {
+        console.error('🚨 CRITICAL ERROR: Wrong plan ID format stored!', verificationData.plan_id);
+      } else {
+        console.log('✅ Plan ID verification passed');
+      }
     }
     
   } catch (error) {
@@ -267,7 +274,7 @@ async function handleSubscriptionCreated(subscription) {
     }
 
     console.log('✅ Subscription created for user:', customer.email);
-    console.log('📋 Final data - Customer ID:', subscription.customer, 'Subscription ID:', subscription.id);
+    console.log('📋 Final data - Customer ID:', subscription.customer, 'Subscription ID:', subscription.id, 'Plan:', planId);
     
   } catch (error) {
     console.error('❌ Error in handleSubscriptionCreated:', error);
@@ -441,5 +448,6 @@ function mapStripePriceToPlan(priceId, lookupKey) {
   }
 
   // Default to professional for paid subscriptions
+  console.log('⚠️ Could not map price to plan, defaulting to professional. Price ID:', priceId, 'Lookup Key:', lookupKey);
   return 'professional';
 }
