@@ -2,7 +2,7 @@ import { Elements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 import { STRIPE_CONFIG } from '../lib/stripe';
 
-// Initialize Stripe
+// Initialize Stripe with the correct config
 const stripePromise = loadStripe(STRIPE_CONFIG.publishableKey);
 
 export default function StripeProvider({ children }) {

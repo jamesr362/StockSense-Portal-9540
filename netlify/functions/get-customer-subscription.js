@@ -1,205 +1,203 @@
 import Stripe from 'stripe';
-import { createClient } from '@supabase/supabase-js';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-const supabase = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export const handler = async (event) => {
-  // Handle CORS
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Content-Type': 'application/json'
-  };
-
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS'
+      },
+    };
   }
 
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method not allowed' })
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
 
   try {
-    const { email } = JSON.parse(event.body);
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({
+          error: 'Stripe not configured',
+          message: 'STRIPE_SECRET_KEY environment variable not set'
+        }),
+      };
+    }
 
-    if (!email) {
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const { customerId } = JSON.parse(event.body);
+
+    if (!customerId) {
       return {
         statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Email is required' })
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({ 
+          error: 'Customer ID is required'
+        }),
       };
     }
 
-    console.log('🔍 Getting subscription for user:', email);
-
-    // Get subscription from database
-    const { data: subscriptionData, error: dbError } = await supabase
-      .from('subscriptions_tb2k4x9p1m')
-      .select('*')
-      .eq('user_email', email.toLowerCase())
-      .single();
-
-    if (dbError && dbError.code !== 'PGRST116') {
-      console.error('❌ Database error:', dbError);
-      throw dbError;
-    }
-
-    if (!subscriptionData) {
-      console.log('ℹ️ No subscription found in database for:', email);
+    let customer = null;
+    
+    // Try to find customer by ID first, then by email
+    try {
+      if (customerId.startsWith('cus_')) {
+        customer = await stripe.customers.retrieve(customerId);
+      } else {
+        const customers = await stripe.customers.list({
+          email: customerId,
+          limit: 1
+        });
+        customer = customers.data[0];
+      }
+    } catch (error) {
       return {
-        statusCode: 200,
-        headers,
+        statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
         body: JSON.stringify({
-          subscription: null,
-          customer: null,
-          message: 'No subscription found'
-        })
+          error: 'Customer not found',
+          message: 'Customer does not exist in Stripe'
+        }),
       };
     }
 
-    console.log('📊 Database subscription:', {
-      planId: subscriptionData.plan_id,
-      status: subscriptionData.status,
-      stripeSubscriptionId: subscriptionData.stripe_subscription_id,
-      stripeCustomerId: subscriptionData.stripe_customer_id
+    if (!customer) {
+      return {
+        statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({
+          error: 'Customer not found',
+          message: 'No customer found with the provided ID or email'
+        }),
+      };
+    }
+
+    // Get customer's subscriptions
+    const subscriptions = await stripe.subscriptions.list({
+      customer: customer.id,
+      status: 'all',
+      limit: 10
     });
 
-    // If it's a free plan or no Stripe IDs, return database data
-    if (subscriptionData.plan_id === 'free' || !subscriptionData.stripe_subscription_id) {
+    // Find the most recent active subscription
+    const activeSubscription = subscriptions.data.find(sub => 
+      sub.status === 'active' || sub.status === 'trialing'
+    );
+
+    if (!activeSubscription) {
       return {
-        statusCode: 200,
-        headers,
+        statusCode: 404,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
         body: JSON.stringify({
-          subscription: {
-            id: subscriptionData.stripe_subscription_id || `local_${subscriptionData.id}`,
-            status: subscriptionData.status,
-            items: {
-              data: [{
-                price: {
-                  id: subscriptionData.stripe_price_id || 'price_free',
-                  lookup_key: subscriptionData.plan_id
-                }
-              }]
-            },
-            current_period_start: subscriptionData.current_period_start ? 
-              Math.floor(new Date(subscriptionData.current_period_start).getTime() / 1000) : null,
-            current_period_end: subscriptionData.current_period_end ? 
-              Math.floor(new Date(subscriptionData.current_period_end).getTime() / 1000) : null,
-            cancel_at_period_end: subscriptionData.cancel_at_period_end,
-            canceled_at: subscriptionData.canceled_at ? 
-              Math.floor(new Date(subscriptionData.canceled_at).getTime() / 1000) : null
-          },
-          customer: {
-            id: subscriptionData.stripe_customer_id || `local_customer_${email}`,
-            email: email
-          },
-          source: 'database'
-        })
+          error: 'No active subscription found',
+          message: 'Customer has no active subscriptions'
+        }),
       };
     }
 
-    // For professional plans, verify with Stripe
+    // Get the latest invoice for PDF
+    let invoicePdf = null;
     try {
-      console.log('🔄 Verifying with Stripe - Subscription ID:', subscriptionData.stripe_subscription_id);
-      
-      const subscription = await stripe.subscriptions.retrieve(
-        subscriptionData.stripe_subscription_id,
-        { expand: ['customer', 'items.data.price'] }
-      );
-
-      console.log('✅ Stripe subscription retrieved:', {
-        id: subscription.id,
-        status: subscription.status,
-        customerId: subscription.customer.id,
-        priceId: subscription.items.data[0]?.price?.id
+      const invoices = await stripe.invoices.list({
+        customer: customer.id,
+        limit: 1
       });
-
-      // Update database if Stripe status differs
-      if (subscription.status !== subscriptionData.status) {
-        console.log('🔄 Updating database status from Stripe');
-        
-        await supabase
-          .from('subscriptions_tb2k4x9p1m')
-          .update({
-            status: subscription.status,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_email', email.toLowerCase());
+      if (invoices.data.length > 0 && invoices.data[0].invoice_pdf) {
+        invoicePdf = invoices.data[0].invoice_pdf;
       }
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          subscription: subscription,
-          customer: subscription.customer,
-          source: 'stripe'
-        })
-      };
-
-    } catch (stripeError) {
-      console.error('⚠️ Stripe API error:', stripeError.message);
-      
-      // If Stripe fails, return database data
-      console.log('📊 Falling back to database data');
-      
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          subscription: {
-            id: subscriptionData.stripe_subscription_id,
-            status: subscriptionData.status,
-            items: {
-              data: [{
-                price: {
-                  id: subscriptionData.stripe_price_id,
-                  lookup_key: subscriptionData.plan_id
-                }
-              }]
-            },
-            current_period_start: subscriptionData.current_period_start ? 
-              Math.floor(new Date(subscriptionData.current_period_start).getTime() / 1000) : null,
-            current_period_end: subscriptionData.current_period_end ? 
-              Math.floor(new Date(subscriptionData.current_period_end).getTime() / 1000) : null,
-            cancel_at_period_end: subscriptionData.cancel_at_period_end,
-            canceled_at: subscriptionData.canceled_at ? 
-              Math.floor(new Date(subscriptionData.canceled_at).getTime() / 1000) : null
-          },
-          customer: {
-            id: subscriptionData.stripe_customer_id,
-            email: email
-          },
-          source: 'database_fallback',
-          stripe_error: stripeError.message
-        })
-      };
+    } catch (invoiceError) {
+      console.log('Could not fetch invoice:', invoiceError);
     }
+
+    const subscription = {
+      id: activeSubscription.id,
+      status: activeSubscription.status,
+      customer: activeSubscription.customer,
+      price_id: activeSubscription.items.data[0]?.price?.id || 'price_unknown',
+      amount: activeSubscription.items.data[0]?.price?.unit_amount || 0,
+      currency: activeSubscription.items.data[0]?.price?.currency || 'gbp',
+      current_period_start: activeSubscription.current_period_start,
+      current_period_end: activeSubscription.current_period_end,
+      cancel_at_period_end: activeSubscription.cancel_at_period_end,
+      canceled_at: activeSubscription.canceled_at,
+      trial_start: activeSubscription.trial_start,
+      trial_end: activeSubscription.trial_end,
+      invoice_pdf: invoicePdf
+    };
+
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
+      body: JSON.stringify({
+        success: true,
+        subscription: subscription,
+        customer: {
+          id: customer.id,
+          email: customer.email,
+          name: customer.name
+        }
+      }),
+    };
 
   } catch (error) {
-    console.error('❌ Error in get-customer-subscription:', error);
+    console.error('Stripe API error:', error);
+    
+    let errorMessage = 'Failed to get customer subscription';
+    let statusCode = 500;
+    
+    if (error.type === 'StripeInvalidRequestError') {
+      if (error.code === 'resource_missing') {
+        errorMessage = 'Customer not found in Stripe';
+        statusCode = 404;
+      }
+    } else if (error.type === 'StripeAuthenticationError') {
+      errorMessage = 'Stripe authentication failed';
+      statusCode = 401;
+    } else if (error.type === 'StripeConnectionError') {
+      errorMessage = 'Unable to connect to Stripe';
+      statusCode = 503;
+    }
     
     return {
-      statusCode: 500,
-      headers,
+      statusCode: statusCode,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      },
       body: JSON.stringify({
-        error: 'Failed to retrieve subscription',
-        details: error.message
-      })
+        error: errorMessage,
+        message: error.message,
+        type: error.type || 'unknown_error'
+      }),
     };
   }
 };
