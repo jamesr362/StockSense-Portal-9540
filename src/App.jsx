@@ -25,62 +25,8 @@ import WebhookListener from './components/WebhookListener';
 function AppRoutes() {
   const location = useLocation();
 
-  // **ENHANCED**: Better payment return detection and handling
+  // SECURE: Simplified initialization without client-side payment detection
   useEffect(() => {
-    const handlePaymentReturns = async () => {
-      try {
-        // Import Stripe utilities
-        const { detectPaymentReturn, handlePaymentLinkReturn } = await import('./lib/stripe');
-        
-        // Detect if this is a payment return
-        const detection = detectPaymentReturn();
-        
-        if (detection.isPaymentReturn) {
-          console.log('🎉 Payment return detected!', detection);
-          
-          // Handle different types of returns
-          if (!window.location.href.includes('payment-success')) {
-            console.log('🔄 Redirecting to payment success page...');
-            
-            // Try automatic redirect first
-            const handled = handlePaymentLinkReturn();
-            
-            if (!handled) {
-              // Manual redirect as fallback
-              const sessionId = detection.sessionId || `cs_fallback_${Date.now()}`;
-              const planId = detection.planId || 'professional';
-              const userEmail = sessionStorage.getItem('paymentUserEmail') || '';
-              
-              const successUrl = `/#/payment-success?payment_status=success&plan=${planId}&session_id=${sessionId}&user_email=${encodeURIComponent(userEmail)}&source=app_router&timestamp=${Date.now()}`;
-              
-              console.log('🎯 Manual redirect to:', successUrl);
-              setTimeout(() => {
-                window.location.href = successUrl;
-              }, 1000);
-            }
-          }
-          
-          // Trigger webhook simulation for successful payments
-          setTimeout(() => {
-            window.dispatchEvent(new CustomEvent('paymentReturnDetected', {
-              detail: {
-                ...detection,
-                source: 'app_router',
-                timestamp: Date.now()
-              }
-            }));
-          }, 500);
-        }
-        
-      } catch (error) {
-        console.warn('⚠️ Error handling payment returns:', error);
-      }
-    };
-
-    // Run payment return detection
-    handlePaymentReturns();
-
-    // Initialize database on app load
     const initializeApp = async () => {
       try {
         console.log('🚀 Initializing application...');
@@ -110,32 +56,6 @@ function AppRoutes() {
     }
 
   }, [location]);
-
-  // **NEW**: Enhanced hash change detection for Payment Link returns
-  useEffect(() => {
-    const handleHashChange = async () => {
-      try {
-        const { detectPaymentReturn, handlePaymentLinkReturn } = await import('./lib/stripe');
-        
-        // Check for payment returns on hash changes
-        const detection = detectPaymentReturn();
-        
-        if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
-          console.log('🔗 Payment return detected on hash change');
-          handlePaymentLinkReturn();
-        }
-      } catch (error) {
-        console.warn('⚠️ Error in hash change handler:', error);
-      }
-    };
-
-    // Listen for hash changes
-    window.addEventListener('hashchange', handleHashChange);
-    
-    return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-    };
-  }, []);
 
   return (
     <>
@@ -204,67 +124,9 @@ function AppRoutes() {
 }
 
 export default function App() {
-  // **ENHANCED**: Better Stripe redirect detection
-  useEffect(() => {
-    // Set up global payment return detection
-    const setupGlobalDetection = () => {
-      // Listen for page visibility changes (when user returns from Stripe)
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-          console.log('📱 Page became visible - checking for payment returns...');
-          
-          setTimeout(async () => {
-            try {
-              const { detectPaymentReturn } = await import('./lib/stripe');
-              const detection = detectPaymentReturn();
-              
-              if (detection.isPaymentReturn) {
-                console.log('🎉 Payment return detected on visibility change!');
-                // The main detection logic will handle the redirect
-              }
-            } catch (error) {
-              console.warn('⚠️ Error in visibility change handler:', error);
-            }
-          }, 1000);
-        }
-      };
-      
-      // Listen for window focus (alternative detection method)
-      const handleWindowFocus = () => {
-        console.log('🔍 Window focused - checking payment status...');
-        
-        setTimeout(async () => {
-          try {
-            const { detectPaymentReturn } = await import('./lib/stripe');
-            const detection = detectPaymentReturn();
-            
-            if (detection.isPaymentReturn && !window.location.href.includes('payment-success')) {
-              console.log('🎯 Payment return detected on focus!');
-              // Let the main handler deal with it
-            }
-          } catch (error) {
-            console.warn('⚠️ Error in focus handler:', error);
-          }
-        }, 500);
-      };
-      
-      // Add event listeners
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('focus', handleWindowFocus);
-      
-      // Cleanup function
-      return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('focus', handleWindowFocus);
-      };
-    };
-    
-    // Set up detection
-    const cleanup = setupGlobalDetection();
-    
-    return cleanup;
-  }, []);
-
+  // SECURE: Removed client-side payment detection logic
+  // All subscription state changes are now handled by the backend webhook
+  
   return (
     <div className="min-h-screen bg-gray-900">
       <StripeProvider>

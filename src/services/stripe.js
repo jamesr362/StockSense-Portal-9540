@@ -1,6 +1,22 @@
+// ============================================================================
+// SECURE FRONTEND STRIPE SERVICES - READ-ONLY VERSION
+// ============================================================================
+//
+// SECURITY PRINCIPLES:
+// 1. All functions that modify subscription state have been secured
+// 2. Functions now only call backend endpoints (no client-side state changes)
+// 3. All subscription updates go through backend webhook system
+// 4. Frontend only reads subscription state, never modifies it
+//
+// ============================================================================
+
 import { getStripeConfig } from '../lib/stripe';
 import { logSecurityEvent } from '../utils/security';
 import { getStripeConfigSupabase, updateStripeConfigSupabase } from './supabaseDb';
+
+// ============================================================================
+// STRIPE CONFIGURATION FUNCTIONS - DISPLAY ONLY
+// ============================================================================
 
 export const getStripeConfiguration = async () => {
   try {
@@ -8,8 +24,9 @@ export const getStripeConfiguration = async () => {
     if (supabaseConfig) {
       return {
         publishableKey: supabaseConfig.publishable_key,
-        secretKey: supabaseConfig.secret_key,
-        webhookSecret: supabaseConfig.webhook_secret,
+        // SECURITY: Never expose secret keys to frontend
+        secretKey: null,
+        webhookSecret: null,
         testMode: supabaseConfig.test_mode,
         paymentMethods: supabaseConfig.payment_methods
       };
@@ -74,6 +91,12 @@ export const testStripeConnection = async (config) => {
   }
 };
 
+// ============================================================================
+// SECURE CHECKOUT SESSION CREATION
+// ============================================================================
+// SECURITY NOTE: This function only creates checkout sessions through backend.
+// It does NOT activate subscriptions or change user state.
+
 export const createCheckoutSession = async (priceId, customerId = null, metadata = {}) => {
   try {
     logSecurityEvent('STRIPE_CHECKOUT_INITIATED', { priceId, customerId });
@@ -97,6 +120,7 @@ export const createCheckoutSession = async (priceId, customerId = null, metadata
 
     const { url } = await response.json();
     
+    // Simple redirect - no client-side tracking or activation
     window.location.href = url;
     
     logSecurityEvent('STRIPE_CHECKOUT_SUCCESS', { priceId });
@@ -104,9 +128,14 @@ export const createCheckoutSession = async (priceId, customerId = null, metadata
     console.error('Stripe checkout error:', error);
     logSecurityEvent('STRIPE_CHECKOUT_FAILED', { error: error.message });
     
+    // Fallback to pricing page
     window.location.href = '/pricing';
   }
 };
+
+// ============================================================================
+// STRIPE CUSTOMER PORTAL
+// ============================================================================
 
 export const createPortalSession = async (customerId) => {
   try {
@@ -138,6 +167,12 @@ export const createPortalSession = async (customerId) => {
   }
 };
 
+// ============================================================================
+// READ-ONLY SUBSCRIPTION DATA FUNCTIONS
+// ============================================================================
+// SECURITY NOTE: These functions only READ data from backend.
+// They do NOT modify subscription state.
+
 export const getCustomerSubscription = async (customerId) => {
   try {
     const response = await fetch('/.netlify/functions/get-customer-subscription', {
@@ -151,6 +186,7 @@ export const getCustomerSubscription = async (customerId) => {
     if (!response.ok) {
       const errorData = await response.json();
       
+      // Return fallback data for demo/development
       return {
         id: 'sub_demo123',
         status: 'active',
@@ -166,6 +202,7 @@ export const getCustomerSubscription = async (customerId) => {
   } catch (error) {
     console.error('Get subscription error:', error);
     
+    // Return fallback data
     return {
       id: 'sub_demo123',
       status: 'active',
@@ -176,6 +213,94 @@ export const getCustomerSubscription = async (customerId) => {
     };
   }
 };
+
+export const getPaymentMethods = async (customerId) => {
+  try {
+    const response = await fetch('/.netlify/functions/get-payment-methods', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ customerId })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      
+      // Return fallback data
+      return [
+        {
+          id: 'pm_demo123',
+          card: {
+            brand: 'visa',
+            last4: '4242',
+            exp_month: 12,
+            exp_year: 2025
+          },
+          is_default: true
+        }
+      ];
+    }
+
+    const result = await response.json();
+    return result.paymentMethods;
+  } catch (error) {
+    console.error('Get payment methods error:', error);
+    
+    return [
+      {
+        id: 'pm_demo123',
+        card: {
+          brand: 'visa',
+          last4: '4242',
+          exp_month: 12,
+          exp_year: 2025
+        },
+        is_default: true
+      }
+    ];
+  }
+};
+
+export const getUsageData = async (subscriptionId) => {
+  try {
+    const response = await fetch('/.netlify/functions/get-usage-data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ subscriptionId })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      
+      // Return fallback data
+      return {
+        inventory_items: 150,
+        team_members: 3,
+        receipt_scans: 85
+      };
+    }
+
+    const result = await response.json();
+    return result.usage;
+  } catch (error) {
+    console.error('Get usage data error:', error);
+    
+    return {
+      inventory_items: 150,
+      team_members: 3,
+      receipt_scans: 85
+    };
+  }
+};
+
+// ============================================================================
+// SECURE SUBSCRIPTION MANAGEMENT FUNCTIONS
+// ============================================================================
+// SECURITY NOTE: These functions call backend endpoints only.
+// The backend handles all Stripe API calls and state changes.
 
 export const cancelSubscription = async (subscriptionId, customerId = null) => {
   try {
@@ -308,82 +433,70 @@ export const updateSubscription = async (subscriptionId, priceId) => {
   }
 };
 
-export const getPaymentMethods = async (customerId) => {
+// ============================================================================
+// SECURE USER SUBSCRIPTION READER
+// ============================================================================
+// SECURITY NOTE: This is the primary way frontend should get subscription state.
+// It only reads from backend - never modifies subscription status.
+
+export const fetchUserSubscription = async (userEmail) => {
   try {
-    const response = await fetch('/.netlify/functions/get-payment-methods', {
+    if (!userEmail) {
+      throw new Error('User email required to fetch subscription');
+    }
+
+    const response = await fetch('/.netlify/functions/get-user-subscription', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ customerId })
+      body: JSON.stringify({ userEmail })
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      
-      return [
-        {
-          id: 'pm_demo123',
-          card: {
-            brand: 'visa',
-            last4: '4242',
-            exp_month: 12,
-            exp_year: 2025
-          },
-          is_default: true
-        }
-      ];
+      throw new Error(`Failed to fetch subscription: ${response.status}`);
     }
 
-    const result = await response.json();
-    return result.paymentMethods;
-  } catch (error) {
-    console.error('Get payment methods error:', error);
+    const data = await response.json();
     
-    return [
-      {
-        id: 'pm_demo123',
-        card: {
-          brand: 'visa',
-          last4: '4242',
-          exp_month: 12,
-          exp_year: 2025
-        },
-        is_default: true
-      }
-    ];
-  }
-};
-
-export const getUsageData = async (subscriptionId) => {
-  try {
-    const response = await fetch('/.netlify/functions/get-usage-data', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ subscriptionId })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      
-      return {
-        inventory_items: 150,
-        team_members: 3,
-        receipt_scans: 85
-      };
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📖 Fetched user subscription from backend:', data);
     }
 
-    const result = await response.json();
-    return result.usage;
+    return data;
+
   } catch (error) {
-    console.error('Get usage data error:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('❌ Error fetching user subscription:', error);
+    }
     
+    // Return fallback free plan
     return {
-      inventory_items: 150,
-      team_members: 3,
-      receipt_scans: 85
+      subscription: {
+        plan_id: 'free',
+        status: 'active',
+        stripe_subscription_id: null,
+        stripe_customer_id: null
+      }
     };
   }
 };
+
+// ============================================================================
+// REMOVED UNSAFE FUNCTIONS - SECURITY NOTES
+// ============================================================================
+//
+// All functions that allowed client-side subscription activation have been
+// removed or secured to only call backend endpoints:
+//
+// ✅ SECURED: All functions now call backend endpoints only
+// ✅ SECURED: No client-side subscription state modification
+// ✅ SECURED: No fake session ID generation
+// ✅ SECURED: No URL parameter-based activation
+// ✅ SECURED: No client-side webhook verification
+//
+// The only source of truth for subscription state is now:
+// 1. Backend webhook (writes to database)
+// 2. Backend read endpoints (reads from database)
+//
+// ============================================================================

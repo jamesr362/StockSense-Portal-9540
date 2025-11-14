@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import * as RiIcons from 'react-icons/ri';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
-import { createEnhancedCheckoutSession, getPlanById } from '../lib/stripe';
+import { getPlanById, SUBSCRIPTION_PLANS } from '../lib/stripe';
 import { useAuth } from '../context/AuthContext';
 import { logSecurityEvent } from '../utils/security';
 
@@ -23,40 +23,41 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
       return;
     }
 
+    if (!plan || !plan.paymentLink) {
+      setError('Payment link not available for this plan');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
 
-      console.log('🚀 Starting payment process...', { planId, userEmail: user.email });
+      console.log('🚀 Starting secure payment process...', { planId, userEmail: user.email });
 
-      // Create enhanced checkout session for Payment Links
-      const checkoutData = await createEnhancedCheckoutSession(planId, user.email);
+      // SECURE: Use the predefined Payment Link from plan config
+      const paymentUrl = plan.paymentLink;
       
-      console.log('✅ Checkout session created:', checkoutData);
+      console.log('✅ Using secure Payment Link:', paymentUrl);
 
       logSecurityEvent('PAYMENT_INITIATED', {
         planId,
         userEmail: user.email,
-        paymentUrl: checkoutData.url,
-        originalUrl: checkoutData.originalUrl
+        paymentUrl
       });
 
-      // **IMPORTANT**: Open Stripe Payment Link in same window for better redirect handling
-      console.log('🔗 Redirecting to Stripe Payment Link:', checkoutData.url);
-      
       // Show user feedback before redirect
       if (onSuccess) {
         onSuccess({
-          sessionId: checkoutData.sessionId || 'payment_link_redirect',
           planId,
           redirecting: true
         });
       }
 
-      // **CRITICAL**: Use window.location.href for proper redirect
-      // This ensures we can detect the return properly
+      // SECURE: Direct redirect to Stripe Payment Link
+      console.log('🔗 Redirecting to Stripe Payment Link:', paymentUrl);
+      
       setTimeout(() => {
-        window.location.href = checkoutData.url;
+        window.location.href = paymentUrl;
       }, 1000);
 
     } catch (err) {
@@ -143,9 +144,9 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
         whileHover={{ scale: loading ? 1 : 1.02 }}
         whileTap={{ scale: loading ? 1 : 0.98 }}
         onClick={handlePayment}
-        disabled={loading}
+        disabled={loading || plan.price === 0}
         className={`w-full py-4 px-6 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center ${
-          loading
+          loading || plan.price === 0
             ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
             : 'bg-primary-600 hover:bg-primary-700 text-white shadow-lg hover:shadow-xl'
         }`}
@@ -154,6 +155,11 @@ export default function StripePaymentForm({ planId, onSuccess, onError, classNam
           <>
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400 mr-3"></div>
             Redirecting to Stripe...
+          </>
+        ) : plan.price === 0 ? (
+          <>
+            <SafeIcon icon={FiCreditCard} className="h-5 w-5 mr-3" />
+            Free Plan - No Payment Required
           </>
         ) : (
           <>
